@@ -2,15 +2,38 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0d1452">
   <title>ProQuiz</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
 </head>
-<body>
-  <h1>ProQuiz – index</h1>
-  <p id="status">Connecting…</p>
-  <script type="module">
-    const ws = new WebSocket(`ws://${location.host}/ws`);
-    ws.onmessage = (e) => (document.getElementById('status').textContent = 'Connected: ' + e.data);
-  </script>
+<body class="phone">
+  <form id="join" class="phone-join" hidden>
+    <span class="wordmark">ProQuiz</span>
+    <h1 data-t="joinTitle">Join the quiz</h1>
+    <label class="field">
+      <span data-t="teamName">Team name</span>
+      <input id="name" type="text" maxlength="20" autocomplete="off" autocapitalize="words" enterkeyhint="done" data-t-placeholder="teamNamePlaceholder" required>
+    </label>
+    <fieldset>
+      <legend data-t="pickColor">Pick your colour</legend>
+      <div id="swatches" class="swatches"></div>
+    </fieldset>
+    <p id="join-error" class="error" role="alert"></p>
+    <button id="join-btn" class="btn btn-gold" type="submit" data-t="joinButton">Join the game</button>
+  </form>
+
+  <main id="team" class="phone-team" hidden>
+    <header>
+      <div id="me" class="me"></div>
+      <div id="score" class="score"></div>
+    </header>
+    <div id="stage" class="stage"></div>
+  </main>
+
+  <div id="offline" class="offline-banner" data-t="reconnecting" hidden>Reconnecting…</div>
+
+  <script type="module" src="/js/phone.js"></script>
 </body>
 </html>

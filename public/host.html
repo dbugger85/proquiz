@@ -3,14 +3,75 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ProQuiz</title>
+  <title>ProQuiz – Host</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <h1>ProQuiz – host</h1>
-  <p id="status">Connecting…</p>
-  <script type="module">
-    const ws = new WebSocket(`ws://${location.host}/ws`);
-    ws.onmessage = (e) => (document.getElementById('status').textContent = 'Connected: ' + e.data);
-  </script>
+  <div class="host">
+    <header class="host-bar">
+      <span class="wordmark">ProQuiz</span>
+      <span id="set-title" class="set-title"></span>
+      <span class="spacer"></span>
+      <a class="btn" href="/display" target="proquiz-display" data-t="openDisplay">Open TV screen</a>
+    </header>
+
+    <p id="host-error" class="error" role="alert" hidden></p>
+
+    <section id="lobby" class="lobby" hidden>
+      <div class="join-card">
+        <h2 data-t="scanToJoin">Scan to join</h2>
+        <div id="qr" class="qr"></div>
+        <p id="url" class="url"></p>
+        <p class="hint" data-t="hostOnLaptopHint"></p>
+      </div>
+
+      <div>
+        <h2><span data-t="teams">Teams</span> <span id="team-count"></span></h2>
+        <ul id="teams" class="team-list"></ul>
+        <p id="no-teams" class="empty" data-t="noTeamsYet"></p>
+        <div class="start-row">
+          <button id="start" class="btn btn-gold" type="button" data-t="startGame">Start game</button>
+          <p id="start-why" class="why" data-t="needTeam"></p>
+        </div>
+      </div>
+
+      <form id="settings" class="settings">
+        <h2 data-t="settings">Settings</h2>
+        <label class="field">
+          <span data-t="language">Language</span>
+          <select name="lang">
+            <option value="en">English</option>
+            <option value="no">Norsk</option>
+          </select>
+        </label>
+        <label class="field">
+          <span data-t="wrongAnswer">Wrong answer costs</span>
+          <select name="penalty">
+            <option value="none" data-t="penaltyNone"></option>
+            <option value="half" data-t="penaltyHalf"></option>
+            <option value="full" data-t="penaltyFull"></option>
+          </select>
+        </label>
+        <label class="check"><input type="checkbox" name="allowNegative"> <span data-t="allowNegative"></span></label>
+        <label class="field">
+          <span data-t="buzzSeconds"></span>
+          <span class="row"><input type="number" name="buzzSeconds" min="0" max="120" step="1"> <small data-t="zeroOff"></small></span>
+        </label>
+        <label class="field">
+          <span data-t="answerSeconds"></span>
+          <span class="row"><input type="number" name="answerSeconds" min="0" max="120" step="1"> <small data-t="zeroOff"></small></span>
+        </label>
+        <label class="check"><input type="checkbox" name="finalRound"> <span data-t="finalRound"></span></label>
+        <label class="field">
+          <span data-t="finalSeconds"></span>
+          <span class="row"><input type="number" name="finalSeconds" min="0" max="300" step="1"> <small data-t="zeroOff"></small></span>
+        </label>
+      </form>
+    </section>
+
+    <section id="game" hidden></section>
+  </div>
+  <script type="module" src="/js/host.js"></script>
 </body>
 </html>

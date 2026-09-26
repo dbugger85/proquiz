@@ -3,14 +3,24 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ProQuiz</title>
+  <title>ProQuiz – TV</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
 </head>
-<body>
-  <h1>ProQuiz – display</h1>
-  <p id="status">Connecting…</p>
-  <script type="module">
-    const ws = new WebSocket(`ws://${location.host}/ws`);
-    ws.onmessage = (e) => (document.getElementById('status').textContent = 'Connected: ' + e.data);
-  </script>
+<body class="display">
+  <span class="wordmark">ProQuiz</span>
+
+  <section id="lobby" class="tv-lobby" hidden>
+    <div>
+      <h1 class="call" data-t="scanToJoin">Scan to join</h1>
+      <p class="call-url"><span data-t="orOpen">or open</span> <b id="url"></b></p>
+    </div>
+    <div id="qr" class="qr"></div>
+    <ul id="teams" class="tv-teams"></ul>
+  </section>
+
+  <section id="game" hidden></section>
+
+  <script type="module" src="/js/display.js"></script>
 </body>
 </html>

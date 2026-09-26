@@ -1,0 +1,1 @@
+The fonts are Big Shoulders Display and Atkinson Hyperlegible, both under the SIL Open Font License 1.1 (https://openfontlicense.org). They're bundled here (Latin subset, from Google Fonts) so the game works without internet.

@@ -1,0 +1,590 @@
+/* ProQuiz: a TV game-show studio. Deep studio blue, gold board values, and team colours as the loudest thing on screen.
+   One dark theme on purpose: it is made for a TV in a living room. All colours are variables here. */
+
+@font-face {
+  font-family: 'Big Shoulders';
+  src: url('./fonts/big-shoulders-display.woff2') format('woff2');
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Atkinson';
+  src: url('./fonts/atkinson-hyperlegible-400.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Atkinson';
+  src: url('./fonts/atkinson-hyperlegible-700.woff2') format('woff2');
+  font-weight: 700;
+  font-display: swap;
+}
+
+:root {
+  --studio: #0d1452; /* page background */
+  --studio-deep: #070b33; /* behind panels, and shadows */
+  --tile: #1a2a94; /* board tiles, panels */
+  --tile-edge: #3148d4; /* tile highlight edge */
+  --gold: #ffc93c; /* board values, main buttons */
+  --gold-ink: #2b1d00; /* text on gold */
+  --ink: #f3f5ff; /* main text */
+  --muted: #a3acde; /* secondary text */
+  --good: #34d67b;
+  --bad: #ff5c62;
+  --focus: #7fe1ff;
+
+  --display: 'Big Shoulders', 'Arial Narrow', sans-serif-condensed, sans-serif;
+  --text: 'Atkinson', system-ui, sans-serif;
+
+  --radius-s: 6px;
+  --radius-m: 12px;
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  background: var(--studio);
+  color: var(--ink);
+  font-family: var(--text);
+  font-size: 1rem;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--display);
+  font-weight: 800;
+  line-height: 1;
+  margin: 0;
+  letter-spacing: 0.01em;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5em;
+  min-height: 48px;
+  padding: 0 1.25em;
+  border: 2px solid var(--tile-edge);
+  border-radius: var(--radius-s);
+  background: var(--tile);
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: none;
+}
+.btn:hover {
+  border-color: var(--ink);
+}
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.btn-gold {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: var(--gold-ink);
+}
+.btn-gold:hover {
+  border-color: var(--ink);
+}
+.btn-quiet {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.btn-quiet:hover {
+  color: var(--ink);
+  border-color: transparent;
+}
+
+input[type='text'],
+input[type='number'],
+select {
+  min-height: 48px;
+  width: 100%;
+  padding: 0 0.75em;
+  border: 2px solid var(--tile-edge);
+  border-radius: var(--radius-s);
+  background: var(--studio-deep);
+}
+input[type='number'] {
+  width: 6em;
+}
+input[type='checkbox'] {
+  width: 22px;
+  height: 22px;
+  accent-color: var(--gold);
+}
+
+.wordmark {
+  font-family: var(--display);
+  font-weight: 900;
+  font-size: 1.75rem;
+  letter-spacing: 0.02em;
+  color: var(--gold);
+}
+
+.error {
+  color: var(--bad);
+  font-weight: 700;
+  min-height: 1.45em;
+  margin: 0;
+}
+
+/* A team's colour as a solid plate. Set --team (and --team-ink) on the element. */
+.plate {
+  background: var(--team);
+  color: var(--team-ink, #fff);
+  border-radius: var(--radius-s);
+}
+
+.dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--bad);
+  flex: none;
+}
+.dot.on {
+  background: var(--good);
+}
+
+.qr {
+  background: #fff;
+  padding: 0;
+  border-radius: var(--radius-m);
+  line-height: 0;
+}
+.qr svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: var(--radius-m);
+}
+
+/* ---------- host laptop ---------- */
+
+.host {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+.host-bar {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 0.75rem 1.5rem;
+  background: var(--studio-deep);
+}
+.host-bar .set-title {
+  color: var(--muted);
+}
+.host-bar .spacer {
+  flex: 1;
+}
+
+.lobby {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(220px, 300px) minmax(280px, 1fr) minmax(280px, 360px);
+  gap: 2rem;
+  padding: 2rem 1.5rem;
+  align-items: start;
+}
+.lobby h2 {
+  font-size: 2rem;
+  margin-bottom: 1rem;
+}
+.join-card .url {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 1.6rem;
+  margin: 0.75rem 0 0;
+  word-break: break-all;
+}
+.join-card .hint {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin-top: 1rem;
+}
+
+.team-list {
+  list-style: none;
+  margin: 0 0 1.5rem;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+.team-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.25rem 0.25rem 0.25rem 1rem;
+  min-height: 56px;
+}
+.team-list .name {
+  flex: 1;
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 1.6rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.team-list .conn {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 99px;
+  background: rgb(0 0 0 / 0.35);
+  color: #fff;
+}
+.team-list .remove {
+  width: 48px;
+  min-height: 48px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font-size: 1.5rem;
+  cursor: pointer;
+  border-radius: var(--radius-s);
+}
+.team-list .remove:hover {
+  background: rgb(0 0 0 / 0.25);
+}
+.empty {
+  color: var(--muted);
+  max-width: 34ch;
+}
+.start-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+.start-row .btn {
+  font-size: 1.3rem;
+  min-height: 60px;
+  padding: 0 2rem;
+}
+.start-row .why {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.settings {
+  display: grid;
+  gap: 1rem;
+  padding: 1.25rem;
+  background: var(--tile);
+  border-radius: var(--radius-m);
+}
+.settings h2 {
+  margin-bottom: 0;
+}
+.field {
+  display: grid;
+  gap: 0.35rem;
+}
+.field > span {
+  font-weight: 700;
+}
+.field small {
+  color: var(--muted);
+}
+.check {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 48px;
+  cursor: pointer;
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+@media (max-width: 900px) {
+  .lobby {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---------- TV screen ---------- */
+
+.display {
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  cursor: none;
+}
+.display .wordmark {
+  position: absolute;
+  top: 3vh;
+  left: 4vw;
+  font-size: 4vh;
+}
+
+.tv-lobby {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  grid-template-rows: 1fr auto;
+  align-items: center;
+  gap: 2vh 5vw;
+  padding: 11vh 5vw 5vh;
+}
+.tv-lobby .call {
+  font-size: 15vh;
+  font-weight: 900;
+  line-height: 0.88;
+  color: var(--gold);
+  text-transform: none;
+}
+.tv-lobby .call-url {
+  font-size: 3.2vh;
+  color: var(--muted);
+  margin-top: 3vh;
+}
+.tv-lobby .call-url b {
+  display: block;
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 6.5vh;
+  color: var(--ink);
+  line-height: 1.1;
+}
+.tv-lobby .qr {
+  justify-self: center;
+  width: min(58vh, 40vw);
+}
+.tv-teams {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5vh 1.2vw;
+  min-height: 9vh;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.tv-teams li {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 4.4vh;
+  padding: 1.4vh 2.2vw;
+}
+.tv-teams li.new {
+  animation: plate-in 450ms cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+.tv-teams li.away {
+  opacity: 0.45;
+}
+@keyframes plate-in {
+  from {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+}
+.tv-note {
+  font-size: 3vh;
+  color: var(--muted);
+  margin: auto;
+  text-align: center;
+  max-width: 40ch;
+}
+
+/* ---------- phone ---------- */
+
+.phone {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overscroll-behavior: none;
+}
+.phone-join {
+  padding: 1.25rem 1rem 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  max-width: 480px;
+  width: 100%;
+  margin: 0 auto;
+}
+.phone-join h1 {
+  font-size: 3.2rem;
+  font-weight: 900;
+}
+.phone-join .field > span,
+.phone-join legend {
+  font-weight: 700;
+  margin-bottom: 0.35rem;
+}
+.phone-join fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+.swatches {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.6rem;
+}
+.swatch {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: var(--radius-m);
+  border: 4px solid transparent;
+  background: var(--team);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+.swatch input {
+  position: absolute;
+  opacity: 0;
+  inset: 0;
+  margin: 0;
+  cursor: pointer;
+}
+.swatch:has(input:checked) {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 3px var(--studio), 0 0 0 6px var(--team);
+}
+.swatch:has(input:checked)::after {
+  content: '✓';
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--team-ink);
+}
+.swatch:has(input:focus-visible) {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+}
+.swatch.taken {
+  opacity: 0.25;
+  cursor: not-allowed;
+}
+.swatch.taken::after {
+  content: attr(data-taken);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--team-ink);
+}
+.phone-join .btn-gold {
+  min-height: 60px;
+  font-size: 1.25rem;
+}
+
+/* After joining the whole phone is the team colour. */
+.phone-team {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--team);
+  color: var(--team-ink);
+  padding: 1rem;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+.phone-team header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+}
+.phone-team .me {
+  font-family: var(--display);
+  font-weight: 900;
+  font-size: 2.2rem;
+  line-height: 1;
+  overflow-wrap: anywhere;
+}
+.phone-team .score {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 1.6rem;
+  white-space: nowrap;
+}
+.phone-team .stage {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  gap: 1rem;
+}
+.phone-team .big {
+  font-family: var(--display);
+  font-weight: 900;
+  font-size: 4rem;
+  line-height: 0.95;
+}
+.phone-team .small {
+  font-size: 1.15rem;
+  max-width: 26ch;
+}
+.phone-team .btn-quiet {
+  color: inherit;
+  opacity: 0.8;
+}
+.offline-banner {
+  position: fixed;
+  inset: auto 0 0 0;
+  padding: 0.75rem 1rem;
+  background: var(--studio-deep);
+  color: var(--ink);
+  font-weight: 700;
+  text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
+}
