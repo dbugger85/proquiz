@@ -1,13 +1,14 @@
 {
   "name": "proquiz",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "description": "Jeopardy-style team quiz with phones as buzzers",
   "scripts": {
     "start": "node server.js",
     "test": "node --test test/*.test.js",
-    "e2e": "node test/e2e.mjs"
+    "e2e": "node test/e2e.mjs",
+    "build": "node scripts/build.mjs"
   },
   "dependencies": {
     "ws": "^8.18.0"

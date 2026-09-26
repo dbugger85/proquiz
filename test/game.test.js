@@ -35,8 +35,9 @@ function started(settings = {}, set = small) {
 const score = (s, id) => s.teams.find((t) => t.id === id).score;
 const armedAt = (s, c = 0, i = 1, now = 1000) => run(s, { type: 'pick', c, i }, { type: 'arm', now });
 
-test('the sample set is valid', () => {
+test('the sample sets are valid', () => {
   assert.deepEqual(validateSet(sample), []);
+  assert.deepEqual(validateSet(JSON.parse(readFileSync(new URL('../sets/eksempel.json', import.meta.url)))), []);
   assert.deepEqual(validateSet(small), []);
 });
 

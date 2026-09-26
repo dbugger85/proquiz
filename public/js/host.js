@@ -5,7 +5,7 @@
 import { ranking, COLORS } from '/lib/game.js';
 import { connect } from './net.js';
 import { t, setLang, translatePage } from './i18n.js';
-import { $, h, qrSvg, shortUrl, countdown, runCountdowns, teamStyle } from './ui.js';
+import { $, h, fill, qrSvg, shortUrl, countdown, runCountdowns, teamStyle } from './ui.js';
 import { unlockAudio, audioReady, playEvent, playSound, startTicks } from './sounds.js';
 import { syncClip, stopClip } from './clip.js';
 
@@ -214,9 +214,42 @@ function controls() {
 const run = (action) => (typeof action === 'function' ? action() : cmd(action));
 const keyLabel = (key) => ({ ' ': 'Space', Escape: 'Esc' })[key] ?? key.toUpperCase();
 
+// The keyboard help (? or the Keys button).
+const HELP = [
+  ['Space', 'helpSpace'],
+  ['Y', 'helpY'],
+  ['N', 'helpN'],
+  ['R', 'helpR'],
+  ['Esc', 'helpEsc'],
+  ['U', 'helpU'],
+  ['P', 'helpP'],
+  ['0', 'help0'],
+  ['M', 'helpM'],
+  ['E', 'helpE'],
+  ['?', 'helpHelp'],
+];
+function toggleHelp(show = $('#help').hidden) {
+  fill(
+    $('#help'),
+    h(
+      'div',
+      { class: 'help-card', role: 'dialog', 'aria-label': t('helpTitle') },
+      h('h2', {}, t('helpTitle')),
+      h('dl', {}, HELP.map(([key, text]) => [h('dt', {}, h('kbd', {}, key)), h('dd', {}, t(text))])),
+      h('p', { class: 'help-foot' }, t('helpTv')),
+      h('button', { class: 'btn btn-primary', type: 'button', onclick: () => toggleHelp(false) }, t('helpClose')),
+    ),
+  );
+  $('#help').hidden = !show;
+}
+$('#help-btn').addEventListener('click', () => toggleHelp());
+$('#help').addEventListener('click', (e) => e.target === $('#help') && toggleHelp(false));
+
 document.addEventListener('keydown', (e) => {
-  if (!view || view.phase === 'lobby' || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
   if (e.target.closest('input, select, textarea')) return;
+  if (e.key === '?') return toggleHelp();
+  if (e.key === 'Escape' && !$('#help').hidden) return toggleHelp(false);
+  if (!view || view.phase === 'lobby' || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
   const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
   const c = controls().find((x) => x.key === key);
   if (!c) return;
@@ -227,7 +260,7 @@ document.addEventListener('keydown', (e) => {
 function renderControls() {
   return h(
     'nav',
-    { class: 'controls', 'aria-label': 'Controls' },
+    { class: 'controls', 'aria-label': t('controlsLabel') },
     controls().map((c) =>
       h(
         'button',

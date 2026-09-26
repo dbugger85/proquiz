@@ -5,6 +5,7 @@
 //   PORT=3000 node server.js
 
 import http from 'node:http';
+import { spawn } from 'node:child_process';
 import os from 'node:os';
 import { readFile, writeFile, mkdir, rename } from 'node:fs/promises';
 import path from 'node:path';
@@ -417,7 +418,7 @@ export async function startServer({ port = START_PORT, quiet = false, dataDir = 
     console.log(`  TV screen:           ${info.displayUrl}`);
     console.log(`  Phones:              ${info.phoneUrl ?? '(no Wi-Fi network found — connect to Wi-Fi and restart)'}`);
     console.log(`  Game is saved in:    ${store.file}`);
-    console.log('\n  Press Ctrl+C to stop.\n');
+    console.log('\n  Keep this window open while you play. Close it (or press Ctrl+C) to stop.\n');
   }
   const close = () =>
     new Promise(async (resolve) => {
@@ -432,5 +433,20 @@ export async function startServer({ port = START_PORT, quiet = false, dataDir = 
   return { server, info, hub, close };
 }
 
+// Opens a page in the default web browser (so a double-click is all it takes).
+function openBrowser(url) {
+  const [cmd, args] =
+    process.platform === 'win32' ? ['cmd', ['/c', 'start', '""', url]] : process.platform === 'darwin' ? ['open', [url]] : ['xdg-open', [url]];
+  try {
+    const child = spawn(cmd, args, { stdio: 'ignore', detached: true });
+    child.on('error', () => {});
+    child.unref();
+  } catch {}
+}
+
 // Start only when run directly (not when a test imports this file). Works in Node and Deno.
-if (import.meta.main) await startServer();
+// PROQUIZ_NO_OPEN=1 stops it opening the browser.
+if (import.meta.main) {
+  const { info } = await startServer();
+  if (!process.env.PROQUIZ_NO_OPEN) openBrowser(info.hostUrl);
+}

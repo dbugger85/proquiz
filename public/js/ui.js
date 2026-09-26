@@ -12,7 +12,7 @@ export function h(tag, attrs = {}, ...children) {
     else if (k === 'class') el.className = v;
     else el.setAttribute(k, v === true ? '' : v);
   }
-  el.append(...children.flat().filter((c) => c != null && c !== false));
+  el.append(...children.flat(Infinity).filter((c) => c != null && c !== false));
   return el;
 }
 
@@ -79,5 +79,5 @@ export const teamStyle = (team) => `--team: ${team.color}; --team-ink: ${inkFor(
 
 // Like el.replaceChildren(), but skips null/false (which replaceChildren would show as the text "null").
 export function fill(el, ...children) {
-  el.replaceChildren(...children.flat().filter((c) => c != null && c !== false));
+  el.replaceChildren(...children.flat(Infinity).filter((c) => c != null && c !== false));
 }

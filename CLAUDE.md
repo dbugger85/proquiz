@@ -9,10 +9,11 @@ A Jeopardy-style team quiz. The host laptop runs a small server, a TV shows the 
 
 ```sh
 npm install      # once (installs `ws`)
-npm start        # starts the server; prints the host, TV and phone addresses (port 3000, or the next free one)
+npm start        # starts the server, prints the host, TV and phone addresses (port 3000, or the next free one), opens the host page (PROQUIZ_NO_OPEN=1 to skip)
 npm test         # unit tests + server tests (node --test)
 npm run e2e      # browser test: host, TV and 3 phones in headless Chromium (/usr/bin/chromium); screenshots in test/screenshots/
-deno compile -A --include public --include lib --include sets -o dist/proquiz server.js   # single-file program (packaging step)
+npm run build    # dist/ProQuiz-<version>-<system>.zip for Windows, Mac (arm64 + Intel), Linux (x64 + arm64), via deno compile
+gh release create v<version> dist/*.zip   # publish (only when the user asks)
 ```
 
 Run `npm test` and `npm run e2e` after any change, and look at the screenshots after UI changes.
@@ -34,7 +35,8 @@ Run `npm test` and `npm run e2e` after any change, and look at the screenshots a
 - **Host is laptop-only:** the server accepts `role: 'host'` only from loopback addresses, because the host view contains the answers. The TV (`/display`) and phones can connect from anywhere.
 - **Protocol:** client → `hello {role, teamId?}`. Phones then send `join {name, color, teamId?}`, `buzz`, `wager {amount}` and `finalAnswer {text}`. The host sends `cmd {action}` (allowed list: `HOST_ACTIONS` in server.js). The host can also send `resume`, `discardSave`, `testSound` and `chooseSet {id}`. A phone's `buzz` in the lobby just plays its tone. The server → `welcome` (with `info.phoneUrl` for host/display, `teamId` for phones), `joined {teamId}`, `error {code}`, `sound {name, teamId?}` (sounds outside the game, sent to the TV or else the host), and `state {view, connected, displays, serverNow, resume?}` after every change. Error codes are translated as `err-<code>` in i18n.
 - **Look:** a modern game-show stage: deep ink-violet, one soft stage light from above, glassy rounded tiles, pill buttons, and team colours as the loudest thing on screen. One dark theme on purpose (it is made for a TV). Colours are CSS variables in `:root` in `public/style.css`. Fonts are Unbounded (wide display face for headings and numbers) and Atkinson Hyperlegible (text), bundled in `public/fonts/` so the game works offline. Never load anything from the internet. Tap targets are at least 48px.
-- **Text:** all visible text goes through `t()` in `public/js/i18n.js` (both `en` and `no`), or `data-t` attributes in the HTML.
+- **Text:** all visible text goes through `t()` in `public/js/i18n.js` (both `en` and `no`), or `data-t` attributes in the HTML. `test/i18n.test.js` fails if a key is missing in either language.
+- **Packaging:** the Linux build is tested here. Windows and Mac builds can't be run on this laptop, so ask the user to try them. The programs are unsigned: Windows shows SmartScreen ("More info → Run anyway"), and Mac needs right-click → Open. Both ask to allow network access.
 - **Pages:** phones use `http://<LAN IP>:port`, which isn't a secure context. That means no Wake Lock, no service worker and no `crypto.randomUUID`, so use the fallbacks.
 
 ## Files
@@ -44,10 +46,12 @@ Run `npm test` and `npm run e2e` after any change, and look at the screenshots a
 | `server.js` | Static files (`/` phone, `/host`, `/display`, `/editor`, `/lib/*`, `/files/*`), the WebSocket at `/ws`, and printing the LAN address |
 | `lib/game.js` | Game rules, phases, scoring, undo, final round, and the per-screen views |
 | `lib/validate.js` | Question set checks, shared by the server and the editor |
-| `store.js` | Quizzes and files on disk, plus the editor's `/api/` |
+| `store.js` | Quizzes and files on disk, plus the editor's `/api/`. Built-in quizzes are listed in `BUILT_IN` (`sample` in English, `eksempel` in Norwegian) |
+| `scripts/build.mjs` | Packaging: `deno compile` per system, plus a START HERE note, zipped into `dist/` |
+| `test/i18n.test.js` | Every text key exists in both languages with the same `{placeholders}`, every key used in the pages exists, and every server error code is translated |
 | `public/editor.html`, `js/editor.js` | Question editor |
 | `public/js/clip.js` | Sound clip player that follows `state.media` |
-| `sets/sample.json`, `sets/files/` | Sample quiz (5×5 plus a final), with two sample pictures and a generated sample tune |
+| `sets/sample.json`, `sets/eksempel.json`, `sets/files/` | The English and Norwegian sample quizzes (5×5 plus a final), with two sample pictures and a generated sample tune |
 | `public/index.html`, `js/phone.js` | Phone: join form (name + colour), then the team-coloured buzzer screen. The team id is kept in localStorage (`proquiz.team`) |
 | `public/host.html`, `js/host.js` | Host laptop: lobby (QR, teams, settings), then the board, the question with its answer, the scores (Let them pick, Change score) and the controls. `controls()` lists the buttons for the current phase and also drives the keys: Space arms or goes back to the board, Y correct, N wrong, R show answer, Esc put back, U undo, E end the board. `body[data-phase]` is set for the e2e test |
 | `public/display.html`, `js/display.js` | TV screen: lobby, board, question (zooms in once per question), the score strip, and the "buzz takeover" (the frame floods in the colour of the team that buzzed). F toggles full screen |

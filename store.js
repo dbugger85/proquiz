@@ -2,7 +2,7 @@
 //
 //   <data dir>/sets/<id>.json   the user's quizzes
 //   <data dir>/files/<name>     pictures and clips, named after their content ("3fa9c0d1e2b4a6f8.jpg")
-//   sets/sample.json            the built-in sample (read-only, id "sample"), with its files in sets/files/
+//   sets/*.json                 the built-in quizzes (read-only, id = file name: "sample", "eksempel"), files in sets/files/
 
 import { readFile, writeFile, readdir, mkdir, rename, unlink, stat } from 'node:fs/promises';
 import { createHash, randomBytes } from 'node:crypto';
@@ -12,6 +12,7 @@ import { validateSet, FILE_NAME, IMAGE_NAME, AUDIO_NAME } from './lib/validate.j
 
 const ROOT = new URL('./', import.meta.url);
 export const SAMPLE_ID = 'sample';
+export const BUILT_IN = ['sample', 'eksempel']; // English and Norwegian samples
 const ID = /^[a-z0-9-]{1,60}$/;
 const MAX_FILE = 25 * 1024 * 1024; // one picture or clip
 const MAX_JSON = 80 * 1024 * 1024; // an imported quiz with its files
@@ -27,12 +28,10 @@ export function createStore(dataDir) {
     await rename(file + '.tmp', file);
   }
 
-  async function readSample() {
-    return JSON.parse(await readFile(new URL('sets/sample.json', ROOT), 'utf8'));
-  }
+  const readBuiltIn = async (id) => JSON.parse(await readFile(new URL(`sets/${id}.json`, ROOT), 'utf8'));
 
   async function get(id) {
-    if (id === SAMPLE_ID) return { set: await readSample(), builtIn: true };
+    if (BUILT_IN.includes(id)) return { set: await readBuiltIn(id), builtIn: true };
     if (!ID.test(id)) return null;
     try {
       return { set: JSON.parse(await readFile(setFile(id), 'utf8')), builtIn: false };
@@ -43,8 +42,7 @@ export function createStore(dataDir) {
 
   async function list() {
     const out = [];
-    const sample = await readSample();
-    out.push(summary(SAMPLE_ID, sample, true, 0));
+    for (const id of BUILT_IN) out.push(summary(id, await readBuiltIn(id), true, 0));
     let names = [];
     try {
       names = await readdir(setsDir);
@@ -52,18 +50,20 @@ export function createStore(dataDir) {
     for (const n of names) {
       if (!n.endsWith('.json')) continue;
       const id = n.slice(0, -5);
-      if (!ID.test(id)) continue;
+      if (!ID.test(id) || BUILT_IN.includes(id)) continue;
       try {
         const file = setFile(id);
         const [set, info] = await Promise.all([readFile(file, 'utf8').then(JSON.parse), stat(file)]);
         out.push(summary(id, set, false, info.mtimeMs));
       } catch {}
     }
-    return out.sort((a, b) => (a.builtIn ? -1 : b.builtIn ? 1 : b.updated - a.updated));
+    const own = out.filter((q) => !q.builtIn).sort((a, b) => b.updated - a.updated);
+    return [...out.filter((q) => q.builtIn), ...own];
+
   }
 
   async function save(id, set) {
-    if (id === SAMPLE_ID || !ID.test(id)) throw httpError(400, 'read-only');
+    if (BUILT_IN.includes(id) || !ID.test(id)) throw httpError(400, 'read-only');
     await writeAtomic(setFile(id), JSON.stringify(clean(set), null, 2));
     return validateSet(set);
   }
@@ -75,7 +75,7 @@ export function createStore(dataDir) {
   }
 
   async function remove(id) {
-    if (id === SAMPLE_ID || !ID.test(id)) throw httpError(400, 'read-only');
+    if (BUILT_IN.includes(id) || !ID.test(id)) throw httpError(400, 'read-only');
     await unlink(setFile(id)).catch(() => {});
   }
 

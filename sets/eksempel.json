@@ -1,0 +1,61 @@
+{
+  "v": 1,
+  "title": "Eksempelquiz",
+  "categories": [
+    {
+      "name": "Norge",
+      "questions": [
+        { "value": 100, "question": "Hva heter Norges hovedstad?", "answer": "Oslo" },
+        { "value": 200, "question": "Hvilken by kalles «regnbyen»?", "answer": "Bergen" },
+        { "value": 300, "question": "Hva heter Norges høyeste fjell?", "answer": "Galdhøpiggen (2469 moh.)" },
+        { "value": 400, "question": "Hvor mange fylker har Norge fra 2024?", "answer": "15" },
+        { "value": 500, "question": "Hvilket år ble unionen med Sverige oppløst?", "answer": "1905" }
+      ]
+    },
+    {
+      "name": "Mat og drikke",
+      "questions": [
+        { "value": 100, "question": "Hva heter den søte, brune norske osten?", "answer": "Brunost (geitost)" },
+        { "value": 200, "question": "Hvilken fisk lages lutefisk vanligvis av?", "answer": "Torsk (tørrfisk)" },
+        { "value": 300, "question": "Hva er pinnekjøtt laget av?", "answer": "Saue- eller lammeribbe" },
+        { "value": 400, "question": "Taco-fredag! Hvilket land kommer tacoen fra?", "answer": "Mexico" },
+        { "value": 500, "question": "Hvilken norsk oppfinnelse fra 1925 bruker vi til å skjære ost?", "answer": "Ostehøvelen (Thor Bjørklund)" }
+      ]
+    },
+    {
+      "name": "Film og TV",
+      "questions": [
+        { "value": 100, "question": "Hva heter snømannen i «Frost» (Frozen)?", "answer": "Olaf" },
+        { "value": 200, "question": "I hvilken film fra 1975 bygger Reodor Felgen racerbilen Il Tempo Gigante?", "answer": "Flåklypa Grand Prix" },
+        { "value": 300, "question": "Hvem ledet Kon-Tiki-ekspedisjonen over Stillehavet i 1947?", "answer": "Thor Heyerdahl" },
+        { "value": 400, "question": "I hvilken by foregår TV-serien «Skam»?", "answer": "Oslo" },
+        { "value": 500, "question": "Hvem regisserte filmen «Verdens verste menneske» (2021)?", "answer": "Joachim Trier" }
+      ]
+    },
+    {
+      "name": "Musikk",
+      "questions": [
+        { "value": 100, "question": "Hvilket norsk band hadde en verdenshit med «Take On Me»?", "answer": "a-ha" },
+        { "value": 200, "question": "Hvilken barnesang er dette?", "audio": "sample-twinkle.mp3", "answer": "«Twinkle, Twinkle, Little Star» (samme melodi som alfabetsangen)" },
+        { "value": 300, "question": "Hvem komponerte «I Dovregubbens hall»?", "answer": "Edvard Grieg" },
+        { "value": 400, "question": "Hvilket år vant Alexander Rybak Eurovision med «Fairytale»?", "answer": "2009" },
+        { "value": 500, "question": "Hvem skrev teksten til «Ja, vi elsker»?", "answer": "Bjørnstjerne Bjørnson" }
+      ]
+    },
+    {
+      "name": "Sport",
+      "questions": [
+        { "value": 100, "question": "Hvor mange spillere har et fotballag på banen?", "answer": "Elleve" },
+        { "value": 200, "question": "I hvilken sport har Magnus Carlsen vært verdensmester?", "answer": "Sjakk" },
+        { "value": 300, "question": "Hvilken norsk by arrangerte vinter-OL i 1994?", "answer": "Lillehammer" },
+        { "value": 400, "question": "Hvilken norsk utøver har flest medaljer fra vinter-OL?", "answer": "Marit Bjørgen (15)" },
+        { "value": 500, "question": "Sommer-OL 2020 ble holdt i hovedstaden i landet med dette flagget. Hvilken by?", "image": "sample-flag-japan.svg", "answer": "Tokyo" }
+      ]
+    }
+  ],
+  "final": {
+    "category": "Norsk natur",
+    "question": "Hva heter Norges lengste fjord?",
+    "answer": "Sognefjorden"
+  }
+}

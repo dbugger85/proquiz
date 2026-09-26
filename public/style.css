@@ -2057,3 +2057,59 @@ select option {
   padding: 1rem 1.75rem;
   background: linear-gradient(180deg, transparent, #14123a 30%);
 }
+
+/* ---------- keyboard help ---------- */
+
+.help {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  background: rgb(7 6 26 / 0.7);
+  backdrop-filter: blur(4px);
+}
+.help-card {
+  width: min(560px, calc(100vw - 2rem));
+  padding: 1.75rem;
+  border-radius: var(--r-l);
+  border: 1px solid var(--edge);
+  background: #14123a;
+  box-shadow: 0 30px 90px rgb(0 0 0 / 0.6);
+  display: grid;
+  gap: 1rem;
+}
+.help-card dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.55rem 1rem;
+  margin: 0;
+  align-items: center;
+}
+.help-card dd {
+  margin: 0;
+}
+.help-card .btn {
+  justify-self: end;
+}
+.help-foot {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+kbd {
+  display: inline-block;
+  min-width: 2rem;
+  text-align: center;
+  font-family: var(--text);
+  font-weight: 700;
+  font-size: 0.85rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid var(--edge);
+  background: var(--glass-hi);
+}
+.host-bar .btn kbd {
+  min-width: 0;
+  padding: 0 0.4rem;
+}

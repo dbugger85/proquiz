@@ -39,7 +39,8 @@ async function waitFor(check, ms = 3000) {
 // Every screenshot also checks that no "null"/"undefined" leaked onto the screen.
 async function shot(page, name) {
   const text = await page.evaluate(() => document.body.innerText);
-  assert.doesNotMatch(text, /\b(null|undefined|NaN)\b/, `${name} shows a broken value: ${JSON.stringify(text.match(/[^\n]*\b(null|undefined|NaN)\b[^\n]*/)?.[0])}`);
+  const bad = text.match(/[^\n]*(\b(null|undefined|NaN)\b|\[object \w+\])[^\n]*/);
+  assert.equal(bad, null, `${name} shows a broken value: ${JSON.stringify(bad?.[0])}`);
   await page.screenshot({ path: `${shots}/${name}.png` });
 }
 
@@ -346,6 +347,38 @@ try {
   await host.evaluate(() => window.dispatchEvent(new Event('focus')));
   await host.waitForFunction(() => [...document.querySelectorAll('#set-picker option')].some((o) => o.textContent.includes('needs fixing') && o.disabled));
   await shot(host, 'host-12-lobby-quizzes');
+
+  // Keyboard help.
+  await host.keyboard.press('?');
+  await host.waitForSelector('#help:not([hidden]) .help-card');
+  await shot(host, 'host-13-help');
+  await host.keyboard.press('Escape');
+  await host.waitForSelector('#help[hidden]', { state: 'attached' });
+
+  // ----- The same game in Norwegian -----
+  await host.selectOption('select[name=lang]', 'no');
+  await tv.waitForFunction(() => document.body.textContent.includes('Skann for å bli med'));
+  await host.click('#start');
+  await host.waitForSelector('body[data-phase=board]');
+  await host.click('.host-board .col:nth-child(2) .tile:nth-of-type(2)');
+  await host.waitForSelector('body[data-phase=reading]');
+  await host.keyboard.press('Space');
+  await tv.waitForFunction(() => document.body.textContent.includes('Buzz nå!'));
+  await shot(tv, 'no-tv-1-armed');
+  await shot(red, 'no-phone-1-armed');
+  await blue.click('.buzzer');
+  await blue.waitForFunction(() => document.body.textContent.includes('Du er først!'));
+  await red.waitForFunction(() => document.body.textContent.includes('Blue Steel var først'));
+  await host.waitForSelector('body[data-phase=answering]');
+  await shot(host, 'no-host-1-answering');
+  await shot(red, 'no-phone-2-other');
+  await host.keyboard.press('n');
+  await tv.waitForFunction(() => document.body.textContent.includes('De andre kan buzze'));
+  await shot(tv, 'no-tv-2-wrong');
+  await host.keyboard.press('?');
+  await host.waitForSelector('#help:not([hidden])');
+  assert.match(await host.textContent('#help'), /Tastatur/);
+  await shot(host, 'no-host-2-help');
 
   assert.deepEqual(errors, []);
   console.log('e2e: all good. Screenshots in test/screenshots/');

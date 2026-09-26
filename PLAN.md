@@ -28,8 +28,8 @@ A Jeopardy-style quiz for teams in one room. The host laptop runs the game, a TV
 6. ✅ Sounds, vibration, keep-awake, reconnecting, autosave and resume
 7. ✅ Final round screens (wager, answer, judging)
 8. ✅ Question editor with checks, import and export, picture and sound uploads, and choosing a quiz in the lobby
-9. Polish and a browser test with one host and 3 phones; English and Norwegian text
-10. Packaging: program files for Windows, Mac and Linux, published as GitHub releases
+9. ✅ Polish: keyboard help (?), a game-night guide in the README, a Norwegian sample quiz, and tests that both languages have every text
+10. ✅ Packaging: `npm run build` makes zips for Windows, Mac (Apple Silicon and Intel) and Linux (x64 and arm64), published as GitHub releases
 
 ## Also done
 - Sound clips in questions (asked for by the user), e.g. "Which song is this?". A clip plays on the TV when the question opens, pauses on a buzz, plays on when others may buzz again and at the reveal. The host has P (play/pause) and 0 (from the start). Each clip can have a start time.

@@ -1,7 +1,7 @@
 // Every piece of text the players and the host see, in English and Norwegian (bokmål).
 // t('key', { name: 'Red' }) fills in {name}.
 
-const STRINGS = {
+export const STRINGS = {
   en: {
     // phone
     joinTitle: 'Join the quiz',
@@ -109,6 +109,22 @@ const STRINGS = {
     stopAnswers: 'Stop answering',
     showScores: 'Show final scores',
     confirmUnjudged: '{n} team(s) not judged yet. They keep their points. Show the final scores anyway?',
+    controlsLabel: 'Game controls',
+    helpBtn: 'Keys',
+    helpTitle: 'Keyboard',
+    helpSpace: 'Turn the buzzers on, or go back to the board',
+    helpY: 'The answer is correct',
+    helpN: 'The answer is wrong',
+    helpR: 'Show the answer (nobody got it)',
+    helpEsc: 'Put the question back (picked by mistake)',
+    helpU: 'Undo the last judgement or score change',
+    helpP: 'Play or pause the sound clip',
+    help0: 'Play the sound clip from the start',
+    helpM: 'Sound effects on or off',
+    helpE: 'End the board early',
+    helpHelp: 'Show or hide this help',
+    helpTv: 'On the TV screen: F for full screen. Click it once so it can play sound.',
+    helpClose: 'Close',
     // editor
     edTitle: 'Questions',
     edBack: 'Back to the game',
@@ -316,6 +332,22 @@ const STRINGS = {
     stopAnswers: 'Stopp svaringen',
     showScores: 'Vis resultatene',
     confirmUnjudged: '{n} lag er ikke bedømt ennå. De beholder poengene sine. Vise resultatene likevel?',
+    controlsLabel: 'Spillkontroller',
+    helpBtn: 'Taster',
+    helpTitle: 'Tastatur',
+    helpSpace: 'Slå på buzzerne, eller gå tilbake til brettet',
+    helpY: 'Svaret er riktig',
+    helpN: 'Svaret er feil',
+    helpR: 'Vis svaret (ingen klarte det)',
+    helpEsc: 'Legg spørsmålet tilbake (valgt ved en feil)',
+    helpU: 'Angre siste bedømming eller poengendring',
+    helpP: 'Spill av eller sett lydklippet på pause',
+    help0: 'Spill lydklippet fra starten',
+    helpM: 'Lydeffekter på eller av',
+    helpE: 'Avslutt brettet tidlig',
+    helpHelp: 'Vis eller skjul denne hjelpen',
+    helpTv: 'På TV-skjermen: F for fullskjerm. Klikk på den én gang så den kan spille lyd.',
+    helpClose: 'Lukk',
     edTitle: 'Spørsmål',
     edBack: 'Tilbake til spillet',
     edYourQuizzes: 'Quizene dine',
