@@ -23,8 +23,8 @@ A Jeopardy-style quiz for teams in one room. The host laptop runs the game, a TV
 1. ✅ Basic setup: server, placeholder pages, notes
 2. ✅ Game rules (`lib/game.js`) with unit tests
 3. ✅ Lobby and joining: phone join page, host lobby with QR code and team list, server wiring, server tests
-4. Board and questions on `/host` and `/display`, keyboard controls
-5. Buzzers end to end: phone button, who was first, correct/wrong/lock-out, timers
+4. ✅ Board and questions on `/host` and `/display`, keyboard controls
+5. ✅ Buzzers end to end: phone button, who was first, correct/wrong/lock-out, timers
 6. Sounds, vibration, keep-awake, reconnecting, autosave and resume
 7. Final round screens (wager, answer, judging)
 8. Question editor with checks, import and export, and choosing a set in the lobby

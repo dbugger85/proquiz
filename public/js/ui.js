@@ -45,3 +45,34 @@ export function qrSvg(text) {
 
 // The phone address without "http://" and the trailing slash, for reading off the TV.
 export const shortUrl = (url) => url.replace(/^https?:\/\//, '').replace(/\/$/, '');
+
+// How long the running timer lasts in total (ms), for drawing the countdown bar.
+export function timerTotal(view) {
+  const s = view.settings;
+  const secs = { armed: s.buzzSeconds, answering: s.answerSeconds, finalQuestion: s.finalSeconds }[view.phase] ?? 0;
+  return secs * 1000;
+}
+
+// A countdown bar for the current deadline (nothing if there is no timer running).
+export function countdown(view) {
+  if (view.deadline == null) return null;
+  return h('div', { class: 'countdown', 'data-deadline': view.deadline, 'data-total': timerTotal(view), role: 'timer' });
+}
+
+// Keeps every countdown bar and [data-seconds] number on the page moving. `now` is the server clock.
+export function runCountdowns(now) {
+  const tick = () => {
+    const t = now();
+    for (const el of document.querySelectorAll('[data-deadline]')) {
+      const left = Math.max(0, Number(el.dataset.deadline) - t);
+      const total = Number(el.dataset.total) || 1;
+      el.style.setProperty('--left', Math.min(1, left / total).toFixed(4));
+      el.classList.toggle('low', left < 3000);
+      if (el.hasAttribute('data-seconds')) el.textContent = String(Math.ceil(left / 1000));
+    }
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
+export const teamStyle = (team) => `--team: ${team.color}; --team-ink: ${inkFor(team.color)}`;

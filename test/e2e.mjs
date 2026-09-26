@@ -27,6 +27,13 @@ async function open(path, viewport, label) {
   await page.goto(base + path);
   return page;
 }
+async function waitFor(check, ms = 3000) {
+  const end = Date.now() + ms;
+  while (!check()) {
+    if (Date.now() > end) throw new Error('waitFor timed out');
+    await new Promise((r) => setTimeout(r, 25));
+  }
+}
 const shot = (page, name) => page.screenshot({ path: `${shots}/${name}.png` });
 
 try {
@@ -76,15 +83,112 @@ try {
 
   // A setting changed on the host reaches the game.
   await host.selectOption('select[name=penalty]', 'full');
-  await host.waitForFunction(() => true);
-  await new Promise((r) => setTimeout(r, 200));
-  assert.equal(srv.hub.getState().settings.penalty, 'full');
+  await waitFor(() => srv.hub.getState().settings.penalty === 'full');
+  await host.selectOption('select[name=penalty]', 'half');
+
+  host.on('dialog', (d) => d.accept());
+  const score = (name) => srv.hub.getState().teams.find((tm) => tm.name === name).score;
+  const [red, blue, yellow] = phones;
 
   await host.click('#start');
-  await host.waitForSelector('#game:not([hidden])');
+  await host.waitForSelector('.host-board');
+  await tv.waitForSelector('.tv-board');
+  await shot(host, 'host-3-board');
+  await shot(tv, 'tv-3-board');
+
+  // Pick "Capitals 200". The host sees the answer, the TV doesn't.
+  await host.click('.host-board .col:nth-child(1) .tile:nth-of-type(2)');
+  await tv.waitForSelector('.tv-q');
+  assert.match(await host.textContent('.host-q .answer'), /Rome/);
+  assert.doesNotMatch(await tv.textContent('body'), /Rome/);
+  await red.waitForSelector('.buzzer:not(.live)');
+
+  // Buzzing while the host reads is too early.
+  await yellow.click('.buzzer');
+  await yellow.waitForFunction(() => document.body.textContent.includes('Too early!'));
+  await tv.waitForTimeout(450);
+  await shot(tv, 'tv-4-question');
+  await shot(yellow, 'phone-4-too-early');
+
+  // Space turns the buzzers on.
+  await host.keyboard.press('Space');
+  await red.waitForSelector('.buzzer.live');
+  await shot(red, 'phone-5-armed');
+  await shot(host, 'host-4-armed');
+
+  await blue.click('.buzzer');
+  await blue.waitForFunction(() => document.body.textContent.includes('You’re first!'));
+  await red.waitForFunction(() => document.body.textContent.includes('Blue Steel was first'));
+  await tv.waitForSelector('.tv-takeover');
+  await shot(blue, 'phone-6-first');
+  await shot(red, 'phone-7-other');
+  await tv.waitForTimeout(700);
+  await shot(tv, 'tv-5-buzzed');
+  await shot(host, 'host-5-answering');
+
+  // N = wrong: Blue loses half (100) and is out; the others can buzz again.
+  await host.keyboard.press('n');
+  await blue.waitForFunction(() => document.body.textContent.includes('Sit this one out'));
+  assert.equal(score('Blue Steel'), -100);
+  await red.waitForSelector('.buzzer.live');
+  await shot(tv, 'tv-6-wrong-reopen');
+
+  await red.click('.buzzer');
+  await host.waitForSelector('.btn-good');
+  await host.keyboard.press('y');
+  await tv.waitForSelector('.tv-q .answer');
+  assert.equal(score('Quizzy Rascals'), 200);
+  assert.match(await tv.textContent('.tv-q .answer'), /Rome/);
+  await tv.waitForTimeout(500);
+  await shot(tv, 'tv-7-revealed');
+  await shot(red, 'phone-8-correct');
+
+  // U = undo, then judge again.
+  await host.keyboard.press('u');
+  await host.waitForSelector('.btn-good');
+  assert.equal(score('Quizzy Rascals'), 0);
+  await host.keyboard.press('y');
+  await waitFor(() => score('Quizzy Rascals') === 200);
+  await host.waitForSelector('.controls button:has-text("Back to the board")');
+
+  // Space back to the board: the tile is used and Red picks.
+  await host.keyboard.press('Space');
+  await tv.waitForSelector('.tv-board');
+  assert.equal(await tv.locator('.tv-board .tile.used').count(), 1);
+  assert.match(await tv.textContent('.tv-picks'), /Quizzy Rascals picks/);
+  await shot(tv, 'tv-8-board-after');
+
+  // The host gives up on a question: R shows the answer.
+  await host.click('.host-board .col:nth-child(2) .tile:nth-of-type(1)');
+  await host.waitForSelector('.host-q');
+  await host.keyboard.press('r');
+  await tv.waitForSelector('.tv-q .answer');
+  assert.match(await tv.textContent('.tv-q .band'), /Nobody got it/);
+  await host.waitForSelector('.controls button:has-text("Back to the board")');
+  await host.keyboard.press('Space');
+  await host.waitForSelector('.host-board');
+
+  // End the board (there's a final question, whose screens come later), then finish.
+  await host.waitForSelector('.controls button:has-text("End the board")');
+  await host.keyboard.press('e');
+  await host.waitForSelector('body[data-phase=finalWager]');
+  for (const phase of ['finalQuestion', 'finalJudge', 'over']) {
+    await host.keyboard.press('Space');
+    await host.waitForSelector(`body[data-phase=${phase}]`);
+  }
+  await tv.waitForSelector('.tv-over');
+  await red.waitForFunction(() => document.body.textContent.includes('Place 1 of 3'));
+  await shot(tv, 'tv-9-over');
+  await shot(host, 'host-6-over');
+  await shot(red, 'phone-9-over');
 
   assert.deepEqual(errors, []);
   console.log('e2e: all good. Screenshots in test/screenshots/');
+} catch (err) {
+  // Show what every screen said when it went wrong.
+  for (const ctx of browser.contexts()) for (const pg of ctx.pages()) console.log(pg.url(), '→', (await pg.textContent('body')).replace(/\s+/g, ' ').slice(0, 300));
+  console.log(errors);
+  throw err;
 } finally {
   await browser.close();
   await srv.close();

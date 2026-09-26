@@ -39,12 +39,12 @@ Run `npm test` and `npm run e2e` after any change, and look at the screenshots a
 | `lib/validate.js` | Question set checks, shared by the server and the editor |
 | `sets/sample.json` | Sample question set (5×5 plus a final) |
 | `public/index.html`, `js/phone.js` | Phone: join form (name + colour), then the team-coloured buzzer screen. The team id is kept in localStorage (`proquiz.team`) |
-| `public/host.html`, `js/host.js` | Host laptop: lobby (QR, teams, settings), then game controls |
-| `public/display.html`, `js/display.js` | TV screen. F toggles full screen |
+| `public/host.html`, `js/host.js` | Host laptop: lobby (QR, teams, settings), then the board, the question with its answer, the scores (Let them pick, Change score) and the controls. `controls()` lists the buttons for the current phase and also drives the keys: Space arms or goes back to the board, Y correct, N wrong, R show answer, Esc put back, U undo, E end the board. `body[data-phase]` is set for the e2e test |
+| `public/display.html`, `js/display.js` | TV screen: lobby, board, question (zooms in once per question), the score strip, and the "buzz takeover" (the frame floods in the colour of the team that buzzed). F toggles full screen |
 | `public/js/net.js` | Reconnecting WebSocket client and the server clock offset |
 | `public/js/i18n.js` | English and Norwegian text |
-| `public/js/ui.js` | `h()` element builder, `inkFor()` (text colour on a team colour), `qrSvg()` |
+| `public/js/ui.js` | `h()` element builder, `inkFor()` and `teamStyle()` (team colour and text colour), `qrSvg()`, `countdown()` and `runCountdowns()` (timer bars that follow `[data-deadline]` on the server clock) |
 | `public/vendor/qrcode.js` | QR encoder (qrcode-generator, MIT) |
 | `test/game.test.js` | Rule tests |
 | `test/server.test.js` | Real server plus WebSocket clients: join, buzz order, reconnect, timers |
-| `test/e2e.mjs` | Browser test with host, TV and 3 phones |
+| `test/e2e.mjs` | Browser test with host, TV and 3 phones: join, too-early, buzz, wrong then re-open, correct, undo, show answer, end. Wait for the page's `body[data-phase]` before pressing keys, or the test races the screen |

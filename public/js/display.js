@@ -1,14 +1,17 @@
 // The TV screen. Shows the game to the room; never gets an answer before the host reveals it.
+import { ranking } from '/lib/game.js';
 import { connect } from './net.js';
 import { t, setLang, translatePage } from './i18n.js';
-import { $, h, inkFor, qrSvg, shortUrl } from './ui.js';
+import { $, h, qrSvg, shortUrl, countdown, runCountdowns, teamStyle } from './ui.js';
 
 let view = null;
 let connected = new Set();
 let info = null;
+let lastSeq = 0; // the last event we reacted to
+let lastScreen = ''; // so the question only zooms in once, not on every update
 const seen = new Set(); // teams already on screen, so only new ones pop in
 
-connect({
+const net = connect({
   role: 'display',
   onMessage(msg) {
     if (msg.type === 'welcome') info = msg.info;
@@ -19,6 +22,7 @@ connect({
     if (view) render();
   },
 });
+runCountdowns(net.now);
 
 // F for full screen (the TV window has no controls).
 document.addEventListener('keydown', (e) => {
@@ -27,6 +31,10 @@ document.addEventListener('keydown', (e) => {
     else document.documentElement.requestFullscreen().catch(() => {});
   }
 });
+
+const teamById = (id) => view.teams.find((tm) => tm.id === id);
+
+// ----- lobby -----
 
 function renderLobby() {
   if (info?.phoneUrl) {
@@ -42,15 +50,118 @@ function renderLobby() {
     ...view.teams.map((team) => {
       const isNew = !seen.has(team.id);
       seen.add(team.id);
-      return h(
+      return h('li', { class: `plate${isNew ? ' new' : ''}${connected.has(team.id) ? '' : ' away'}`, style: teamStyle(team) }, team.name);
+    }),
+  );
+}
+
+// ----- game -----
+
+function renderBoard() {
+  const rows = Math.max(...view.set.categories.map((c) => c.questions.length));
+  return [
+    h(
+      'div',
+      { class: 'tv-board', style: `--rows: ${rows}` },
+      view.set.categories.map((cat, c) =>
+        h(
+          'div',
+          { class: 'col' },
+          h('div', { class: 'cat' }, cat.name),
+          cat.questions.map((q, i) => h('div', { class: `tile${view.used[c][i] ? ' used' : ''}` }, String(q.value))),
+        ),
+      ),
+    ),
+    view.picker ? h('p', { class: 'tv-picks' }, h('b', {}, t('picks', { name: teamById(view.picker)?.name ?? '' }))) : null,
+  ];
+}
+
+function band() {
+  const q = view.q;
+  const p = view.phase;
+  if (p === 'reading') return [h('span', { class: 'muted' }, t('getReady'))];
+  if (p === 'armed') {
+    const wrong = view.event?.reopened ? teamById(view.event.teamId) : null;
+    return [h('span', {}, wrong ? t('wrongReopen', { name: wrong.name }) : t('buzzNow')), countdown(view)];
+  }
+  if (p === 'answering') {
+    const team = teamById(q.buzzedTeam);
+    return [h('span', { class: 'plate buzzed-name', style: teamStyle(team) }, team.name), countdown(view)];
+  }
+  if (p === 'revealed') {
+    const r = q.result;
+    if (r.type === 'correct') return [h('span', { class: 'plate buzzed-name', style: teamStyle(teamById(r.teamId)) }, `${teamById(r.teamId)?.name} +${q.value}`)];
+    return [h('span', { class: 'muted' }, r.type === 'timeout' ? t('resultTimeout') : t('resultNobody'))];
+  }
+  return [];
+}
+
+function renderQuestion() {
+  const q = view.q;
+  const zoom = lastScreen !== `q${q.c}-${q.i}`;
+  lastScreen = `q${q.c}-${q.i}`;
+  return h(
+    'div',
+    { class: 'tv-q', style: zoom ? '' : 'animation: none' },
+    h('div', { class: 'where' }, h('span', {}, view.set.categories[q.c].name), h('b', {}, String(q.value))),
+    h('p', { class: 'question' }, q.question),
+    q.answer ? h('p', { class: 'answer' }, q.answer) : null,
+    h('div', { class: 'band' }, band()),
+  );
+}
+
+function renderOver() {
+  const ranked = ranking(view.teams);
+  const tie = ranked.length > 1 && ranked[0].score === ranked[1].score;
+  return h(
+    'div',
+    { class: 'tv-over' },
+    h('h1', {}, ranked.length ? (tie ? t('tie') : t('winner', { name: ranked[0].name })) : t('gameOver')),
+    h('ol', {}, ranked.map((tm) => h('li', { class: 'plate', style: teamStyle(tm) }, h('span', {}, tm.name), h('span', {}, String(tm.score))))),
+  );
+}
+
+// The score strip along the bottom. A team's score bumps when it changes.
+function renderScores(bumped) {
+  const q = view.q;
+  return h(
+    'ul',
+    { class: 'tv-scores' },
+    view.teams.map((team) =>
+      h(
         'li',
         {
-          class: `plate${isNew ? ' new' : ''}${connected.has(team.id) ? '' : ' away'}`,
-          style: `--team: ${team.color}; --team-ink: ${inkFor(team.color)}`,
+          class: `plate${view.picker === team.id && view.phase === 'board' ? ' picker' : ''}${q?.lockedOut.includes(team.id) ? ' out' : ''}${bumped === team.id ? ' bump' : ''}`,
+          style: teamStyle(team),
         },
-        team.name,
-      );
-    }),
+        h('span', { class: 'name' }, team.name),
+        h('span', { class: 'pts' }, String(team.score)),
+      ),
+    ),
+  );
+}
+
+function renderGame() {
+  const p = view.phase;
+  const ev = view.event;
+  const fresh = ev && ev.seq !== lastSeq;
+  if (ev) lastSeq = ev.seq;
+
+  let stage;
+  if (p === 'board') {
+    lastScreen = 'board';
+    stage = renderBoard();
+  } else if (view.q) stage = renderQuestion();
+  else if (p === 'over') stage = renderOver();
+  else stage = h('div', { class: 'tv-over' }, h('h1', {}, `${t('finalComing')}: ${view.final?.category ?? ''}`));
+
+  // The buzz takeover: the frame floods in the colour of the team that buzzed.
+  const buzzed = p === 'answering' ? teamById(view.q.buzzedTeam) : null;
+  const takeover = buzzed ? h('div', { class: `tv-takeover${fresh && ev.type === 'buzz' ? ' flash' : ''}`, style: teamStyle(buzzed) }) : null;
+  const bumped = fresh && ['correct', 'wrong', 'timeup'].includes(ev.type) ? ev.teamId : null;
+
+  $('#game').replaceChildren(
+    h('div', { class: 'tv-game' }, takeover, h('div', { class: 'tv-stage' }, stage), p === 'over' ? null : renderScores(bumped)),
   );
 }
 
@@ -60,6 +171,7 @@ function render() {
   const inLobby = view.phase === 'lobby';
   $('#lobby').hidden = !inLobby;
   $('#game').hidden = inLobby;
+  document.querySelector('.display > .wordmark').hidden = !inLobby;
   if (inLobby) renderLobby();
-  else $('#game').replaceChildren(h('p', { class: 'tv-note' }, view.set.title));
+  else renderGame();
 }
