@@ -119,7 +119,7 @@ function controls() {
   const list = [];
   const add = (key, label, action, cls = '') => list.push({ key, label, action, cls });
   if (p === 'reading') {
-    add(' ', t('armBtn'), { type: 'arm' }, 'btn-gold');
+    add(' ', t('armBtn'), { type: 'arm' }, 'btn-primary');
     add('r', t('revealBtn'), { type: 'reveal' });
     add('Escape', t('cancelBtn'), { type: 'cancel' });
   } else if (p === 'armed') {
@@ -129,11 +129,11 @@ function controls() {
     add('y', t('correctBtn'), { type: 'correct' }, 'btn-good');
     add('n', t('wrongBtn'), { type: 'wrong' }, 'btn-bad');
   } else if (p === 'revealed') {
-    add(' ', t('nextBtn'), { type: 'next' }, 'btn-gold');
+    add(' ', t('nextBtn'), { type: 'next' }, 'btn-primary');
   } else if (p === 'board') {
     add('e', t('endBoardBtn'), () => confirm(t('confirmEnd')) && cmd({ type: 'end' }));
   } else if (p === 'finalWager' || p === 'finalQuestion' || p === 'finalJudge') {
-    add(' ', t('nextBtn'), { type: 'next' }, 'btn-gold'); // the final round screens arrive in a later step
+    add(' ', t('nextBtn'), { type: 'next' }, 'btn-primary'); // the final round screens arrive in a later step
   } else if (p === 'over') {
     add('', t('restartBtn'), () => confirm(t('confirmRestart')) && cmd({ type: 'restart' }));
   }
