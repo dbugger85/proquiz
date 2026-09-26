@@ -1,5 +1,7 @@
 # ProQuiz
 
+![ProQuiz: the TV shows the question with the team that buzzed first, and each team's phone says who was first](docs/screenshots/hero.jpg)
+
 A Jeopardy-style quiz for teams in the same room. A laptop runs the game, a TV shows the board, and every team uses a phone as a buzzer. No internet is needed: everything runs over the room's Wi-Fi.
 
 - A board of categories and questions (100–500 points). The team that answers right picks the next question.
@@ -8,6 +10,31 @@ A Jeopardy-style quiz for teams in the same room. A laptop runs the game, a TV s
 - Pictures and sound clips in questions ("Which song is this?").
 - A final round: teams bet, type their answers on their phones, and you judge each one.
 - A question editor, English and Norwegian, and an autosave that survives a crash.
+
+## Screenshots
+
+**On the TV**
+
+| | |
+|---|---|
+| ![The board: five categories with 100 to 500 points, and the scores along the bottom](docs/screenshots/tv-board.jpg) | ![A picture question: a flag, with "This flag flies over which capital city?"](docs/screenshots/tv-picture.jpg) |
+| The board | A picture question |
+| ![A sound clip question, with moving sound bars while the clip plays](docs/screenshots/tv-sound-clip.jpg) | ![The final round: each team's answer and bet, marked right or wrong, and the correct answer](docs/screenshots/tv-final.jpg) |
+| A sound clip question | The final round, judged |
+
+**On the phones**
+
+| | | | |
+|---|---|---|---|
+| ![Joining: a team name and a colour](docs/screenshots/phone-join.jpg) | ![The buzzer](docs/screenshots/phone-buzzer.jpg) | ![Betting in the final round](docs/screenshots/phone-bet.jpg) | ![Typing the final answer](docs/screenshots/phone-answer.jpg) |
+| Join with a name and colour | The buzzer | Bet in the final | Type the final answer |
+
+**On the host laptop**
+
+| | |
+|---|---|
+| ![The host screen: the question with its answer, who buzzed first, Correct and Wrong buttons, and the scores](docs/screenshots/host-question.jpg) | ![The question editor: points, question, answer, pictures and a sound clip](docs/screenshots/editor.jpg) |
+| Only you see the answer | The question editor |
 
 ## Get it
 
