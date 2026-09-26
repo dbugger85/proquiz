@@ -394,3 +394,45 @@ test('pictures must be plain file names; a picture can stand in for the question
   set.categories[1].questions[1].image = '../../etc/passwd';
   assert.deepEqual(validateSet(set), [{ code: 'bad-image', c: 1, i: 1 }]);
 });
+
+test('sound clips: play when the question opens, pause on a buzz, play on after a wrong answer and at the reveal', () => {
+  const set = structuredClone(small);
+  set.categories[0].questions[1].audio = 'song.mp3';
+  set.categories[0].questions[1].audioStart = 42.5;
+  set.final.audio = 'final.ogg';
+  assert.deepEqual(validateSet(set), []);
+
+  let s = run(started({}, set), { type: 'pick', c: 0, i: 1 });
+  assert.deepEqual(s.media, { playing: true, seq: 0 });
+  assert.deepEqual(displayView(s).clip, { file: 'song.mp3', start: 42.5 });
+  assert.ok(!JSON.stringify(phoneView(s, 'r')).includes('song.mp3'));
+  s = apply(s, { type: 'arm', now: 0 });
+  assert.equal(s.media.playing, true);
+  s = apply(s, { type: 'buzz', teamId: 'r', now: 1 });
+  assert.equal(s.media.playing, false);
+  s = apply(s, { type: 'wrong', now: 2 });
+  assert.equal(s.media.playing, true); // the others listen on
+  s = apply(s, { type: 'mediaToggle' });
+  assert.equal(s.media.playing, false);
+  s = apply(s, { type: 'mediaRestart' });
+  assert.deepEqual(s.media, { playing: true, seq: 1 });
+  s = run(s, { type: 'buzz', teamId: 'b', now: 3 }, { type: 'correct' });
+  assert.equal(s.phase, 'revealed');
+  assert.equal(s.media.playing, true); // the song plays on at the reveal
+  s = apply(s, { type: 'next', now: 4 });
+  assert.equal(s.media, null);
+
+  // Questions without a clip have no media, and the buttons do nothing.
+  s = apply(s, { type: 'pick', c: 1, i: 0 });
+  assert.equal(s.media, null);
+  assert.equal(apply(s, { type: 'mediaToggle' }), s);
+
+  // The final question's clip plays while teams type, and stops for the judging.
+  s = run(s, { type: 'cancel' }, { type: 'end' }, { type: 'next', now: 5 });
+  assert.deepEqual(s.media, { playing: true, seq: 0 });
+  s = apply(s, { type: 'next', now: 6 });
+  assert.equal(s.media.playing, false);
+
+  set.categories[1].questions[0].audio = '../x.mp3';
+  assert.deepEqual(validateSet(set), [{ code: 'bad-audio', c: 1, i: 0 }]);
+});

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ProQuiz – Questions</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="host editor">
+    <header class="host-bar">
+      <span class="wordmark">ProQuiz</span>
+      <span class="set-title" data-t="edTitle"></span>
+      <span class="spacer"></span>
+      <a class="btn" href="/host" data-t="edBack"></a>
+    </header>
+
+    <div class="ed-layout">
+      <aside class="ed-side">
+        <h2 data-t="edYourQuizzes"></h2>
+        <div class="ed-side-actions">
+          <button id="new-quiz" class="btn btn-primary" type="button" data-t="edNew"></button>
+          <label class="btn">
+            <span data-t="edImport"></span>
+            <input id="import-file" type="file" accept=".json,application/json" hidden>
+          </label>
+        </div>
+        <ul id="quiz-list" class="ed-list"></ul>
+      </aside>
+
+      <main id="ed-main" class="ed-main">
+        <p class="empty" data-t="edPick"></p>
+      </main>
+    </div>
+  </div>
+
+  <dialog id="q-dialog" class="ed-dialog">
+    <form method="dialog" id="q-form"></form>
+  </dialog>
+
+  <script type="module" src="/js/editor.js"></script>
+</body>
+</html>

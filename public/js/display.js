@@ -4,6 +4,7 @@ import { connect } from './net.js';
 import { t, setLang, translatePage } from './i18n.js';
 import { $, h, qrSvg, shortUrl, countdown, runCountdowns, teamStyle } from './ui.js';
 import { unlockAudio, audioReady, playEvent, playSound, startTicks } from './sounds.js';
+import { syncClip, preloadClips } from './clip.js';
 
 let view = null;
 let connected = new Set();
@@ -114,7 +115,7 @@ function band() {
   return [];
 }
 
-const img = (name, cls) => (name ? h('img', { class: cls, src: `/images/${encodeURIComponent(name)}`, alt: '' }) : null);
+const img = (name, cls) => (name ? h('img', { class: cls, src: `/files/${encodeURIComponent(name)}`, alt: '' }) : null);
 
 // Load every question picture while the board is showing, so a picture never pops in late.
 const preloaded = new Set();
@@ -123,8 +124,15 @@ function preloadImages() {
     for (const q of cat.questions)
       if (q.image && !preloaded.has(q.image)) {
         preloaded.add(q.image);
-        new Image().src = `/images/${encodeURIComponent(q.image)}`;
+        new Image().src = `/files/${encodeURIComponent(q.image)}`;
       }
+  preloadClips(view.set.categories.flatMap((cat) => cat.questions.filter((q) => q.audio).map((q) => q.audio)));
+}
+
+// Moving bars while a sound clip plays: "listen!"
+function clipViz() {
+  if (!view.clip) return null;
+  return h('div', { class: `clip-viz${view.media?.playing ? ' on' : ''}`, 'aria-hidden': 'true' }, [1, 2, 3, 4, 5, 6, 7].map(() => h('span')));
 }
 
 function renderQuestion() {
@@ -138,7 +146,9 @@ function renderQuestion() {
     { class: `tv-q${picture ? ' has-image' : ''}`, style: zoom ? '' : 'animation: none' },
     h('div', { class: 'where' }, h('span', {}, view.set.categories[q.c].name), h('b', {}, String(q.value))),
     img(picture, `q-img${q.answerImage ? ' reveal-img' : ''}`),
+    picture ? null : clipViz(),
     q.question ? h('p', { class: 'question' }, q.question) : h('div', { class: 'spacer' }),
+    picture ? clipViz() : null,
     q.answer ? h('p', { class: 'answer' }, q.answer) : null,
     h('div', { class: 'band' }, band()),
   );
@@ -180,6 +190,7 @@ function renderFinal() {
       { class: `tv-q${f.image ? ' has-image' : ''}`, style: zoom ? '' : 'animation: none' },
       h('div', { class: 'where' }, h('span', {}, `${t('finalRound')}: ${f.category}`)),
       img(f.image, 'q-img'),
+      f.image ? null : clipViz(),
       f.question ? h('p', { class: 'question' }, f.question) : h('div', { class: 'spacer' }),
       h('div', { class: 'band' }, h('span', {}, t('typeAnswers')), countdown(view)),
       finalTeams((id) => f.answered.includes(id)),
@@ -275,5 +286,6 @@ function render() {
   document.querySelector('.display > .wordmark').hidden = !inLobby;
   if (inLobby) renderLobby();
   else renderGame();
+  syncClip(view, view.q ? `q${view.q.c}-${view.q.i}` : 'final');
   showUnlock();
 }

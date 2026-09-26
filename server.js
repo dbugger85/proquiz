@@ -8,8 +8,8 @@ import http from 'node:http';
 import os from 'node:os';
 import { readFile, writeFile, mkdir, rename } from 'node:fs/promises';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
-import { IMAGE_NAME } from './lib/validate.js';
+import { FILE_NAME, validateSet } from './lib/validate.js';
+import { createStore, apiHandler, SAMPLE_ID } from './store.js';
 import { randomUUID } from 'node:crypto';
 import { WebSocketServer } from 'ws';
 import { apply, newGame, hostView, displayView, phoneView, GameError, DEFAULT_SETTINGS } from './lib/game.js';
@@ -34,28 +34,62 @@ const TYPES = {
   '.wav': 'audio/wav',
   '.mp4': 'video/mp4',
   '.webm': 'video/webm',
+  '.m4a': 'audio/mp4',
+  '.aac': 'audio/aac',
+  '.ogg': 'audio/ogg',
+  '.oga': 'audio/ogg',
+  '.opus': 'audio/ogg',
   '.woff2': 'font/woff2',
 };
 
 // Short addresses for the pages. Everything else is looked up in public/ (or lib/ for shared code).
-const PAGES = { '/favicon.ico': 'public/icon.svg', '/': 'public/index.html', '/host': 'public/host.html', '/display': 'public/display.html' };
+const PAGES = {
+  '/favicon.ico': 'public/icon.svg',
+  '/': 'public/index.html',
+  '/host': 'public/host.html',
+  '/display': 'public/display.html',
+  '/editor': 'public/editor.html',
+};
 
-// Question pictures: the user's own (in the data folder) first, then the ones that come with ProQuiz.
-async function serveImage(res, name, dataDir) {
-  if (!IMAGE_NAME.test(name)) return send(res, 400, 'Bad image name');
-  for (const dir of [pathToFileURL(path.join(dataDir, 'images') + path.sep), new URL('sets/images/', ROOT)]) {
-    try {
-      const body = await readFile(new URL(name, dir));
-      res.writeHead(200, { 'Content-Type': TYPES[name.slice(name.lastIndexOf('.')).toLowerCase()], 'Cache-Control': 'max-age=3600' });
-      return res.end(body);
-    } catch {}
+// Question pictures and sound clips: the user's own (in the data folder) first, then the ones that come with
+// ProQuiz. Supports "Range" requests, which browsers use to jump around in audio.
+async function serveUserFile(req, res, name, store) {
+  if (!FILE_NAME.test(name)) return send(res, 400, 'Bad file name');
+  const body = await store.readUserFile(name);
+  if (body) {
+    const headers = {
+      'Content-Type': TYPES[name.slice(name.lastIndexOf('.')).toLowerCase()] || 'application/octet-stream',
+      'Cache-Control': 'max-age=3600',
+      'Accept-Ranges': 'bytes',
+    };
+    const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
+    if (range && (range[1] || range[2])) {
+      let start = range[1] ? Number(range[1]) : body.length - Number(range[2]);
+      let end = range[1] && range[2] ? Number(range[2]) : body.length - 1;
+      start = Math.max(0, start);
+      end = Math.min(end, body.length - 1);
+      if (start > end) {
+        res.writeHead(416, { 'Content-Range': `bytes */${body.length}` });
+        return res.end();
+      }
+      res.writeHead(206, { ...headers, 'Content-Range': `bytes ${start}-${end}/${body.length}`, 'Content-Length': end - start + 1 });
+      return res.end(body.subarray(start, end + 1));
+    }
+    res.writeHead(200, { ...headers, 'Content-Length': body.length });
+    return res.end(body);
   }
   send(res, 404, 'Not found');
 }
 
-async function serveFile(req, res, dataDir) {
-  const path = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-  if (path.startsWith('/images/')) return serveImage(res, path.slice('/images/'.length), dataDir);
+async function serveFile(req, res, { store, api }) {
+  const url = new URL(req.url, 'http://x');
+  const path = decodeURIComponent(url.pathname);
+  if (path.startsWith('/files/')) return serveUserFile(req, res, path.slice('/files/'.length), store);
+  if (path.startsWith('/api/')) {
+    // The editor's API changes files on this laptop, so only the laptop itself may use it.
+    if (!isLocal(req.socket.remoteAddress)) return send(res, 403, 'Only on the laptop running ProQuiz');
+    return api(req, res, url);
+  }
   let file = PAGES[path];
   if (!file) {
     if (path.includes('..') || path.includes('\0')) return send(res, 400, 'Bad path');
@@ -101,7 +135,7 @@ function listen(server, port, tries = 10) {
 // What the host laptop may do, and what a phone may do (always for its own team).
 const HOST_ACTIONS = new Set([
   'settings', 'loadSet', 'start', 'setPicker', 'pick', 'arm', 'correct', 'wrong', 'reveal', 'cancel',
-  'next', 'end', 'judgeFinal', 'adjust', 'undo', 'restart', 'removeTeam',
+  'next', 'end', 'judgeFinal', 'adjust', 'undo', 'restart', 'removeTeam', 'mediaToggle', 'mediaRestart',
 ]);
 const PHONE_ACTIONS = new Set(['buzz', 'wager', 'finalAnswer']);
 
@@ -168,9 +202,10 @@ function autosaver(dir) {
 }
 
 // Holds the one game and everyone connected to it.
-export function createHub({ set, info, saved = null, save = () => {} }) {
-  // A new game keeps the settings from last time. A saved game with teams can be resumed from the lobby.
-  let state = newGame(set, pickSettings(saved?.state?.settings));
+export function createHub({ set, info, saved = null, save = () => {}, store = null }) {
+  // A new game keeps the settings and the quiz from last time. A saved game with teams can be resumed from the lobby.
+  const lastSet = saved?.state?.set && validateSet(saved.state.set).length === 0 ? saved.state : null;
+  let state = newGame(lastSet ? lastSet.set : set, pickSettings(saved?.state?.settings), lastSet ? lastSet.setId : SAMPLE_ID);
   let resumable = saved?.state?.teams?.length ? saved : null;
   const clients = new Set(); // { ws, role: 'host' | 'display' | 'phone', local, teamId, askedTeamId, alive }
   let timer = null;
@@ -207,6 +242,20 @@ export function createHub({ set, info, saved = null, save = () => {} }) {
     const tvs = [...clients].filter((c) => c.role === 'display');
     const targets = tvs.length ? tvs : [...clients].filter((c) => c.role === 'host');
     for (const c of targets) send(c.ws, { type: 'sound', ...sound });
+  }
+
+  // The host picks which quiz to play (lobby only). Quizzes with problems can't be played.
+  async function chooseSet(c, id) {
+    const found = await store.get(String(id));
+    if (!found) return send(c.ws, { type: 'error', code: 'set-missing' });
+    if (validateSet(found.set).length) return send(c.ws, { type: 'error', code: 'set-has-problems' });
+    dispatch({ type: 'loadSet', set: found.set, setId: String(id) });
+  }
+
+  // When the quiz on show in the lobby is edited, the lobby gets the new version.
+  function setSaved(id, set, problems) {
+    if (state.phase === 'lobby' && state.setId === id && problems.length === 0) dispatch({ type: 'loadSet', set, setId: id });
+    broadcast(); // the host's list of quizzes may have changed
   }
 
   // Continue the saved game. Phones that are already back get their team again.
@@ -279,6 +328,7 @@ export function createHub({ set, info, saved = null, save = () => {} }) {
       return soundToRoom({ name: 'buzz', teamId: c.teamId });
     }
     if (c.role === 'host' && msg.type === 'testSound') return soundToRoom({ name: 'fanfare' });
+    if (c.role === 'host' && msg.type === 'chooseSet' && store) return chooseSet(c, msg.id);
     if (c.role === 'phone' && PHONE_ACTIONS.has(msg.type) && c.teamId) {
       return dispatch({ ...msg, teamId: c.teamId });
     }
@@ -333,6 +383,7 @@ export function createHub({ set, info, saved = null, save = () => {} }) {
 
   return {
     connect,
+    setSaved,
     getState: () => state,
     stop() {
       clearTimeout(timer);
@@ -342,10 +393,13 @@ export function createHub({ set, info, saved = null, save = () => {} }) {
 }
 
 export async function startServer({ port = START_PORT, quiet = false, dataDir = DATA_DIR } = {}) {
-  const set = JSON.parse(await readFile(new URL('sets/sample.json', ROOT), 'utf8'));
+  const sets = createStore(dataDir);
+  const set = (await sets.get(SAMPLE_ID)).set;
   const store = autosaver(dataDir);
   const saved = await store.load();
-  const server = http.createServer((req, res) => serveFile(req, res, dataDir));
+  let hub = null;
+  const api = apiHandler(sets, { onSetSaved: (...a) => hub?.setSaved(...a), getLang: () => hub?.getState().settings.lang ?? 'en' });
+  const server = http.createServer((req, res) => serveFile(req, res, { store: sets, api }));
   const wss = new WebSocketServer({ server, path: '/ws' });
   const actual = await listen(server, port);
   const ip = lanAddresses()[0];
@@ -355,7 +409,7 @@ export async function startServer({ port = START_PORT, quiet = false, dataDir = 
     displayUrl: `http://localhost:${actual}/display`,
     phoneUrl: ip ? `http://${ip}:${actual}/` : null,
   };
-  const hub = createHub({ set, info, saved, save: store.save });
+  hub = createHub({ set, info, saved, save: store.save, store: sets });
   wss.on('connection', (ws, req) => hub.connect(ws, req));
   if (!quiet) {
     console.log('\n  ProQuiz is running!\n');

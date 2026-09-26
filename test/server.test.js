@@ -179,9 +179,81 @@ test('the host can turn down the saved game', async () => {
 
 test('question pictures are served, and only plain file names are allowed', async () => {
   const base = `http://127.0.0.1:${srv.info.port}`;
-  const ok = await fetch(`${base}/images/sample-flag-japan.svg`);
+  const ok = await fetch(`${base}/files/sample-flag-japan.svg`);
   assert.equal(ok.status, 200);
   assert.equal(ok.headers.get('content-type'), 'image/svg+xml');
-  assert.equal((await fetch(`${base}/images/..%2Fserver.js`)).status, 400);
-  assert.equal((await fetch(`${base}/images/missing.png`)).status, 404);
+  assert.equal((await fetch(`${base}/files/..%2Fserver.js`)).status, 400);
+  assert.equal((await fetch(`${base}/files/missing.png`)).status, 404);
+});
+
+test('editor API: create, save, list, upload a file, export and import, choose in the lobby', async () => {
+  const base = `http://127.0.0.1:${srv.info.port}`;
+  const call = async (method, path, body, raw) => {
+    const r = await fetch(base + path, { method, body: raw ?? (body && JSON.stringify(body)) });
+    return { status: r.status, data: await r.json() };
+  };
+
+  // The built-in sample is listed and can't be overwritten.
+  let list = (await call('GET', '/api/sets')).data;
+  assert.equal(list[0].id, 'sample');
+  assert.equal(list[0].builtIn, true);
+  assert.equal((await call('PUT', '/api/sets/sample', { set: {} })).status, 400);
+
+  // A new quiz (a copy of the sample) is saved in the data folder.
+  const sample = (await call('GET', '/api/sets/sample')).data.set;
+  const created = await call('POST', '/api/sets', { set: { ...sample, title: 'Quiz på fjellet' } });
+  assert.equal(created.status, 201);
+  const id = created.data.id;
+  assert.match(id, /^quiz-pa-fjellet-[0-9a-f]{6}$/);
+
+  // Upload a sound clip: it gets a name made from its content.
+  const clip = await call('POST', '/api/files?name=My%20Song.MP3', null, Buffer.from('fake mp3 bytes'));
+  assert.equal(clip.status, 201);
+  assert.match(clip.data.name, /^[0-9a-f]{16}\.mp3$/);
+  assert.equal(clip.data.kind, 'audio');
+  assert.equal((await call('POST', '/api/files?name=virus.exe', null, Buffer.from('x'))).status, 400);
+  const served = await fetch(`${base}/files/${clip.data.name}`, { headers: { Range: 'bytes=5-7' } });
+  assert.equal(served.status, 206);
+  assert.equal(await served.text(), 'mp3');
+
+  // Save with the clip on a question; a missing answer is reported but still saved (as a draft).
+  const set = structuredClone(sample);
+  set.title = 'Quiz på fjellet';
+  set.categories[0].questions[0].audio = clip.data.name;
+  set.categories[0].questions[0].audioStart = 3;
+  set.categories[0].questions[1].answer = '';
+  let saved = await call('PUT', `/api/sets/${id}`, { set });
+  assert.deepEqual(saved.data.problems, [{ code: 'no-answer', c: 0, i: 1 }]);
+  const back = (await call('GET', `/api/sets/${id}`)).data.set;
+  assert.equal(back.categories[0].questions[0].audioStart, 3);
+  list = (await call('GET', '/api/sets')).data;
+  assert.equal(list.find((x) => x.id === id).problems, 1);
+
+  // A quiz with problems can't be chosen in the lobby; once fixed it can, and edits show up straight away.
+  const host = await client('host');
+  host.send({ type: 'cmd', action: { type: 'restart' } });
+  host.send({ type: 'chooseSet', id });
+  assert.equal((await host.wait((m) => m.type === 'error')).code, 'set-has-problems');
+  set.categories[0].questions[1].answer = 'Rome';
+  saved = await call('PUT', `/api/sets/${id}`, { set });
+  assert.deepEqual(saved.data.problems, []);
+  host.send({ type: 'chooseSet', id });
+  await host.wait((m) => m.type === 'state' && m.view.setId === id);
+  set.title = 'Quiz på fjellet 2';
+  await call('PUT', `/api/sets/${id}`, { set });
+  await host.wait((m) => m.type === 'state' && m.view.set.title === 'Quiz på fjellet 2');
+
+  // Export packs the clip inside; importing it gives a new quiz with the same files.
+  const pkg = await (await fetch(`${base}/api/export/${id}`)).json();
+  assert.equal(pkg.proquiz, 1);
+  assert.equal(Buffer.from(pkg.files[clip.data.name], 'base64').toString(), 'fake mp3 bytes');
+  const imported = await call('POST', '/api/import', null, JSON.stringify(pkg));
+  assert.equal(imported.status, 201);
+  assert.notEqual(imported.data.id, id);
+  assert.equal((await call('POST', '/api/import', null, 'not json')).status, 400);
+
+  // Delete.
+  await call('DELETE', `/api/sets/${imported.data.id}`);
+  assert.equal((await call('GET', `/api/sets/${imported.data.id}`)).status, 404);
+  host.close();
 });

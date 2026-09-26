@@ -39,7 +39,7 @@ async function waitFor(check, ms = 3000) {
 // Every screenshot also checks that no "null"/"undefined" leaked onto the screen.
 async function shot(page, name) {
   const text = await page.evaluate(() => document.body.innerText);
-  assert.doesNotMatch(text, /\b(null|undefined|NaN)\b/, `${name} shows a broken value`);
+  assert.doesNotMatch(text, /\b(null|undefined|NaN)\b/, `${name} shows a broken value: ${JSON.stringify(text.match(/[^\n]*\b(null|undefined|NaN)\b[^\n]*/)?.[0])}`);
   await page.screenshot({ path: `${shots}/${name}.png` });
 }
 
@@ -202,18 +202,49 @@ try {
   await host.keyboard.press('Space');
   await host.waitForSelector('body[data-phase=board]');
 
+  // A sound clip question: it plays when the question opens; P pauses, 0 starts it again.
+  await host.click('.host-board .col:nth-child(4) .tile:nth-of-type(2)');
+  await host.waitForSelector('body[data-phase=reading]');
+  await tv.waitForSelector('.clip-viz.on');
+  assert.equal(srv.hub.getState().media.playing, true);
+  await tv.waitForTimeout(500);
+  await shot(tv, 'tv-15-sound-clip');
+  await shot(host, 'host-11-sound-clip');
+  await host.keyboard.press('p');
+  await tv.waitForSelector('.clip-viz:not(.on)');
+  await host.keyboard.press('0');
+  await tv.waitForSelector('.clip-viz.on');
+  assert.equal(srv.hub.getState().media.seq, 1);
+  // A buzz pauses the clip; it plays on at the reveal.
+  await host.keyboard.press('Space');
+  await yellow.waitForSelector('.buzzer.live');
+  await yellow.click('.buzzer');
+  await tv.waitForSelector('.clip-viz:not(.on)');
+  await host.waitForSelector('body[data-phase=answering]');
+  assert.equal(srv.hub.getState().media.playing, false);
+  await host.keyboard.press('y');
+  await host.waitForSelector('body[data-phase=revealed]');
+  await tv.waitForSelector('.clip-viz.on');
+  assert.equal(score('Lemon Heads'), 200);
+  await host.keyboard.press('Space');
+  await host.waitForSelector('body[data-phase=board]');
+  assert.equal(srv.hub.getState().media, null);
+
   // End the board: on to the final round.
   await host.waitForSelector('.controls button:has-text("End the board")');
   await host.keyboard.press('e');
   await host.waitForSelector('body[data-phase=finalWager]');
   await tv.waitForSelector('.tv-final');
   await red.waitForSelector('#bet');
-  // Blue (−100) and Yellow (0) have nothing to bet: they're told so and bet 0 by themselves.
+  // Blue (−100) has nothing to bet: it is told so and bets 0 by itself.
   await blue.waitForFunction(() => document.body.textContent.includes('no points to bet'));
   await shot(red, 'phone-10-wager');
   await red.click('.chip:has-text("Half")');
   await red.click('.final-form button[type=submit]');
   await red.waitForFunction(() => document.body.textContent.includes('Bet placed: 100'));
+  await yellow.click('.chip:has-text("Nothing")');
+  await yellow.click('.final-form button[type=submit]');
+  await yellow.waitForFunction(() => document.body.textContent.includes('Bet placed: 0'));
   await waitFor(() => Object.keys(srv.hub.getState().final.wagers).length === 3);
   await tv.waitForFunction(() => document.querySelectorAll('.final-teams li.waiting').length === 0);
   await shot(tv, 'tv-12-final-wager');
@@ -262,6 +293,59 @@ try {
   await shot(tv, 'tv-9-over');
   await shot(host, 'host-6-over');
   await shot(red, 'phone-9-over');
+
+  // ----- The question editor -----
+  const ed = await host.context().newPage();
+  ed.on('pageerror', (e) => errors.push(`editor: ${e.message}`));
+  // (The refused .txt upload below makes the browser log one "400 Bad Request"; that one is expected.)
+  ed.on('console', (m) => m.type() === 'error' && !/status of 400/.test(m.text()) && errors.push(`editor: ${m.text()}`));
+  ed.on('dialog', (d) => d.accept());
+  await ed.goto(`${base}/editor`);
+  await ed.waitForSelector('.ed-note'); // only the built-in sample so far: it's read-only
+  await shot(ed, 'editor-1-sample');
+
+  await ed.click('#new-quiz');
+  await ed.waitForSelector('.ed-name input:not([disabled])');
+  await ed.fill('.ed-name input', 'Musikkquiz');
+  await ed.fill('.ed-col:nth-child(1) .ed-cat input', 'Songs');
+  // Write one question, with a picture and a sound clip.
+  await ed.click('.ed-col:nth-child(1) .ed-tile:nth-of-type(1)');
+  await ed.waitForSelector('#q-dialog[open]');
+  await ed.fill('#q-form textarea', 'Name this tune');
+  await ed.fill('#q-form .field:nth-of-type(3) input', 'Twinkle, Twinkle');
+  const root = new URL('..', import.meta.url).pathname;
+  const pickers = ed.locator('#q-form input[type=file]');
+  await pickers.nth(0).setInputFiles(join(root, 'sets/files/sample-flag-japan.svg'));
+  await ed.waitForSelector('#q-form .ed-media img');
+  await pickers.nth(2).setInputFiles(join(root, 'sets/files/sample-twinkle.mp3'));
+  await ed.waitForSelector('#q-form .ed-media audio');
+  await ed.fill('#q-form input[type=number][step="0.5"]', '1.5');
+  // A wrong kind of file is refused with a clear message.
+  await pickers.nth(1).setInputFiles({ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('hello') });
+  await ed.waitForSelector('#q-form .ed-media-status.bad');
+  await shot(ed, 'editor-2-question');
+  await ed.click('#q-form button[value=done]');
+  await ed.waitForSelector('#q-dialog:not([open])', { state: 'attached' });
+  await ed.waitForFunction(() => document.querySelector('#ed-status').textContent === 'Saved');
+  await shot(ed, 'editor-3-board');
+  assert.match(await ed.textContent('.ed-problems'), /Fix these/);
+
+  // It's saved on the laptop, with the clip and its start time.
+  const list = await (await fetch(`${base}/api/sets`)).json();
+  const mine = list.find((x) => x.title === 'Musikkquiz');
+  const saved = (await (await fetch(`${base}/api/sets/${mine.id}`)).json()).set;
+  assert.equal(saved.categories[0].name, 'Songs');
+  assert.equal(saved.categories[0].questions[0].question, 'Name this tune');
+  assert.match(saved.categories[0].questions[0].audio, /^[0-9a-f]{16}\.mp3$/);
+  assert.match(saved.categories[0].questions[0].image, /^[0-9a-f]{16}\.svg$/);
+  assert.equal(saved.categories[0].questions[0].audioStart, 1.5);
+
+  // In the lobby it shows as "needs fixing" and can't be picked yet.
+  await host.click('.controls button:has-text("New game, same teams")');
+  await host.waitForSelector('body[data-phase=lobby]');
+  await host.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await host.waitForFunction(() => [...document.querySelectorAll('#set-picker option')].some((o) => o.textContent.includes('needs fixing') && o.disabled));
+  await shot(host, 'host-12-lobby-quizzes');
 
   assert.deepEqual(errors, []);
   console.log('e2e: all good. Screenshots in test/screenshots/');

@@ -104,8 +104,9 @@
         },
         {
           "value": 200,
-          "question": "How many strings does a normal guitar have?",
-          "answer": "Six"
+          "question": "Which children's song is this?",
+          "audio": "sample-twinkle.mp3",
+          "answer": "Twinkle, Twinkle, Little Star"
         },
         {
           "value": 300,

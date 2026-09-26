@@ -27,11 +27,12 @@ A Jeopardy-style quiz for teams in one room. The host laptop runs the game, a TV
 5. ✅ Buzzers end to end: phone button, who was first, correct/wrong/lock-out, timers
 6. ✅ Sounds, vibration, keep-awake, reconnecting, autosave and resume
 7. ✅ Final round screens (wager, answer, judging)
-8. Question editor with checks, import and export, picture upload, and choosing a set in the lobby
+8. ✅ Question editor with checks, import and export, picture and sound uploads, and choosing a quiz in the lobby
 9. Polish and a browser test with one host and 3 phones; English and Norwegian text
 10. Packaging: program files for Windows, Mac and Linux, published as GitHub releases
 
 ## Also done
+- Sound clips in questions (asked for by the user), e.g. "Which song is this?". A clip plays on the TV when the question opens, pauses on a buzz, plays on when others may buzz again and at the reveal. The host has P (play/pause) and 0 (from the start). Each clip can have a start time.
 - Pictures in questions (asked for by the user): `image` shows with the question, `answerImage` only when the answer is revealed. This works for the final question too, and a picture can replace the question text.
 - A modern redesign (2026-09-26, asked for by the user): ink-violet stage, glass tiles, the Unbounded font.
 

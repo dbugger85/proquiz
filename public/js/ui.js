@@ -76,3 +76,8 @@ export function runCountdowns(now) {
 }
 
 export const teamStyle = (team) => `--team: ${team.color}; --team-ink: ${inkFor(team.color)}`;
+
+// Like el.replaceChildren(), but skips null/false (which replaceChildren would show as the text "null").
+export function fill(el, ...children) {
+  el.replaceChildren(...children.flat().filter((c) => c != null && c !== false));
+}

@@ -7,6 +7,7 @@ import { connect } from './net.js';
 import { t, setLang, translatePage } from './i18n.js';
 import { $, h, qrSvg, shortUrl, countdown, runCountdowns, teamStyle } from './ui.js';
 import { unlockAudio, audioReady, playEvent, playSound, startTicks } from './sounds.js';
+import { syncClip, stopClip } from './clip.js';
 
 let view = null;
 let connected = new Set();
@@ -132,6 +133,30 @@ $('#settings').addEventListener('change', (e) => {
 });
 
 $('#start').addEventListener('click', () => cmd({ type: 'start' }));
+
+// The list of quizzes to choose from (fetched when the lobby shows, and when the window gets focus again).
+let quizList = [];
+async function loadQuizzes() {
+  try {
+    quizList = await (await fetch('/api/sets')).json();
+  } catch {
+    return;
+  }
+  renderSetPicker();
+}
+function renderSetPicker() {
+  const sel = $('#set-picker');
+  if (!view || sel === document.activeElement) return;
+  const opts = quizList.map((q) =>
+    h('option', { value: q.id, disabled: q.problems > 0 }, q.problems ? `${q.title} (${t('needsFixing')})` : q.title),
+  );
+  if (!quizList.some((q) => q.id === view.setId)) opts.unshift(h('option', { value: view.setId ?? '' }, view.set.title));
+  sel.replaceChildren(...opts);
+  sel.value = view.setId ?? '';
+}
+$('#set-picker').addEventListener('change', (e) => net.send({ type: 'chooseSet', id: e.target.value }));
+window.addEventListener('focus', loadQuizzes);
+loadQuizzes();
 $('#test-sound').addEventListener('click', () => net.send({ type: 'testSound' }));
 $('#resume-yes').addEventListener('click', () => net.send({ type: 'resume' }));
 $('#resume-no').addEventListener('click', () => net.send({ type: 'discardSave' }));
@@ -176,6 +201,10 @@ function controls() {
     add(' ', t('showScores'), () => (left === 0 || confirm(t('confirmUnjudged', { n: left }))) && cmd({ type: 'next' }), 'btn-primary');
   } else if (p === 'over') {
     add('', t('restartBtn'), () => confirm(t('confirmRestart')) && cmd({ type: 'restart' }));
+  }
+  if (view.media) {
+    add('p', view.media.playing ? t('clipPause') : t('clipPlay'), { type: 'mediaToggle' });
+    add('0', t('clipRestart'), { type: 'mediaRestart' });
   }
   if (view.canUndo && p !== 'over') add('u', t('undoBtn'), { type: 'undo' }, 'push');
   add('m', view.settings.sound ? t('soundIsOn') : t('soundIsOff'), { type: 'settings', settings: { sound: !view.settings.sound } }, view.canUndo && p !== 'over' ? '' : 'push');
@@ -262,7 +291,7 @@ function buzzOrder() {
 }
 
 const img = (name, cls, label) =>
-  name ? h('figure', { class: cls }, h('img', { src: `/images/${encodeURIComponent(name)}`, alt: '' }), label ? h('figcaption', {}, label) : null) : null;
+  name ? h('figure', { class: cls }, h('img', { src: `/files/${encodeURIComponent(name)}`, alt: '' }), label ? h('figcaption', {}, label) : null) : null;
 
 function renderQuestion() {
   const q = view.q;
@@ -276,10 +305,18 @@ function renderQuestion() {
       : null,
     src.question ? h('p', { class: 'question' }, src.question) : null,
     h('p', { class: 'answer' }, h('span', {}, `${t('answerLabel')}:`), src.answer),
+    clipLine(src),
     statusLine(),
     countdown(view),
     buzzOrder(),
   );
+}
+
+// "Sound clip: playing" / "paused", so the host knows what the room hears.
+function clipLine(src) {
+  if (!src.audio) return null;
+  const on = view.media?.playing;
+  return h('p', { class: `clip-line${on ? ' on' : ''}` }, h('span', { class: 'clip-dot' }), on ? t('clipPlaying') : t('clipPaused'), src.audioStart ? ` (${t('clipFrom', { s: src.audioStart })})` : '');
 }
 
 // ----- final round -----
@@ -295,6 +332,7 @@ function renderFinal() {
       : null,
     h('p', { class: 'question' }, p === 'finalWager' ? t('hostWagerHint') : src.question),
     h('p', { class: 'answer' }, h('span', {}, `${t('answerLabel')}:`), src.answer),
+    p !== 'finalWager' ? clipLine(src) : null,
   ];
   if (p === 'finalQuestion') head.push(countdown(view));
   const rows = view.teams.map((tm) => {
@@ -395,8 +433,12 @@ function render() {
     renderResume();
     renderTeams();
     renderSettings();
+    renderSetPicker();
   } else {
     renderGame();
   }
+  // With no TV screen open, this laptop plays the question's sound clip.
+  if (displays === 0) syncClip(view, view.q ? `q${view.q.c}-${view.q.i}` : 'final');
+  else stopClip();
   showUnlock();
 }
