@@ -2,14 +2,18 @@
 //
 // Keys: Space = turn buzzers on / back to the board, Y = correct, N = wrong, R = show answer,
 // Esc = put the question back, U = undo.
-import { ranking } from '/lib/game.js';
+import { ranking, COLORS } from '/lib/game.js';
 import { connect } from './net.js';
 import { t, setLang, translatePage } from './i18n.js';
 import { $, h, qrSvg, shortUrl, countdown, runCountdowns, teamStyle } from './ui.js';
+import { unlockAudio, audioReady, playEvent, playSound, startTicks } from './sounds.js';
 
 let view = null;
 let connected = new Set();
 let info = null;
+let displays = 0; // TV screens open; when there are none, this laptop plays the sounds
+let soundSeq = null;
+let resume = null; // a saved game the host can continue
 
 const net = connect({
   role: 'host',
@@ -20,13 +24,31 @@ const net = connect({
     } else if (msg.type === 'state') {
       view = msg.view;
       connected = new Set(msg.connected);
+      displays = msg.displays;
+      resume = msg.resume ?? null;
+      const ev = view.event;
+      if (ev && soundSeq !== null && ev.seq !== soundSeq && displays === 0) playEvent(view, ev, COLORS);
+      soundSeq = ev?.seq ?? 0;
       render();
+    } else if (msg.type === 'sound') {
+      playSound(view, msg, COLORS);
     } else if (msg.type === 'error') {
       showError(t(`err-${msg.code}`));
     }
   },
 });
 runCountdowns(net.now);
+startTicks(() => (displays === 0 ? view : null), net.now);
+
+function showUnlock() {
+  $('#sound-unlock').hidden = !view?.settings.sound || displays > 0 || audioReady();
+}
+for (const type of ['pointerdown', 'keydown']) {
+  document.addEventListener(type, () => {
+    unlockAudio();
+    setTimeout(showUnlock, 100);
+  });
+}
 
 const cmd = (action) => net.send({ type: 'cmd', action });
 
@@ -110,6 +132,19 @@ $('#settings').addEventListener('change', (e) => {
 });
 
 $('#start').addEventListener('click', () => cmd({ type: 'start' }));
+$('#test-sound').addEventListener('click', () => net.send({ type: 'testSound' }));
+$('#resume-yes').addEventListener('click', () => net.send({ type: 'resume' }));
+$('#resume-no').addEventListener('click', () => net.send({ type: 'discardSave' }));
+
+function renderResume() {
+  $('#resume').hidden = !resume;
+  if (!resume) return;
+  const time = new Date(resume.savedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  $('#resume-text').textContent = t('resumeText', { title: resume.title, time, played: resume.played, total: resume.total });
+  $('#resume-teams').replaceChildren(
+    ...resume.teams.map((tm) => h('li', { class: 'plate', style: teamStyle(tm) }, h('span', {}, tm.name), h('b', {}, String(tm.score)))),
+  );
+}
 
 // ----- game -----
 
@@ -138,6 +173,7 @@ function controls() {
     add('', t('restartBtn'), () => confirm(t('confirmRestart')) && cmd({ type: 'restart' }));
   }
   if (view.canUndo && p !== 'over') add('u', t('undoBtn'), { type: 'undo' }, 'push');
+  add('m', view.settings.sound ? t('soundIsOn') : t('soundIsOff'), { type: 'settings', settings: { sound: !view.settings.sound } }, view.canUndo && p !== 'over' ? '' : 'push');
   return list;
 }
 
@@ -308,9 +344,11 @@ function render() {
   $('#lobby').hidden = !inLobby;
   $('#game').hidden = inLobby;
   if (inLobby) {
+    renderResume();
     renderTeams();
     renderSettings();
   } else {
     renderGame();
   }
+  showUnlock();
 }

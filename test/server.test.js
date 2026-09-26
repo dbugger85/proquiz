@@ -1,13 +1,17 @@
 // Starts the real server on a free port and talks to it like phones and the host laptop would.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, readFileSync, existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { startServer } from '../server.js';
 import { COLORS } from '../lib/game.js';
 
+const dataDir = mkdtempSync(join(tmpdir(), 'proquiz-test-'));
 let srv;
 let url;
 before(async () => {
-  srv = await startServer({ port: 3470, quiet: true });
+  srv = await startServer({ port: 3470, quiet: true, dataDir });
   url = `ws://127.0.0.1:${srv.info.port}/ws`;
 });
 after(() => srv.close());
@@ -119,5 +123,56 @@ test('the server runs the timers', async () => {
   await host.wait((m) => m.type === 'state' && m.view.phase === 'armed');
   const t = await host.wait((m) => m.type === 'state' && m.view.phase === 'revealed', 3000);
   assert.deepEqual(t.view.q.result, { type: 'timeout' });
+  host.close();
+});
+
+test('the game is saved, and after a restart the host can continue it', async () => {
+  const host = await client('host');
+  host.send({ type: 'cmd', action: { type: 'adjust', teamId: srv.hub.getState().teams[0].id, delta: 700 } });
+  host.send({ type: 'cmd', action: { type: 'settings', settings: { penalty: 'full' } } });
+  await new Promise((r) => setTimeout(r, 400));
+  host.close();
+  const file = join(dataDir, 'autosave.json');
+  assert.ok(existsSync(file));
+  const teamId = srv.hub.getState().teams[0].id;
+  const before = srv.hub.getState().teams[0].score;
+  assert.equal(JSON.parse(readFileSync(file, 'utf8')).state.teams[0].score, before);
+
+  // "Restart" ProQuiz: a new server reading the same folder.
+  await srv.close();
+  srv = await startServer({ port: 3470, quiet: true, dataDir });
+  url = `ws://127.0.0.1:${srv.info.port}/ws`;
+  assert.equal(srv.hub.getState().phase, 'lobby');
+  assert.equal(srv.hub.getState().teams.length, 0);
+  assert.equal(srv.hub.getState().settings.penalty, 'full'); // settings carry over to a new game
+
+  // A phone comes back before the host decides: it doesn't know its team yet.
+  const p = await client('phone', teamId);
+  assert.equal(p.msgs.find((m) => m.type === 'welcome').teamId, null);
+
+  const host2 = await client('host');
+  const offer = await host2.wait((m) => m.type === 'state' && m.resume);
+  assert.equal(offer.resume.teams[0].score, before);
+  host2.send({ type: 'resume' });
+  await host2.wait((m) => m.type === 'state' && !m.resume && m.view.teams.length > 0);
+  assert.equal(srv.hub.getState().teams[0].score, before);
+
+  // The waiting phone is put back in its team.
+  await p.wait((m) => m.type === 'welcome' && m.teamId === teamId);
+  const back = await p.wait((m) => m.type === 'state' && m.view.you);
+  assert.equal(back.view.you.id, teamId);
+  p.close();
+  host2.close();
+});
+
+test('the host can turn down the saved game', async () => {
+  await srv.close();
+  srv = await startServer({ port: 3470, quiet: true, dataDir });
+  url = `ws://127.0.0.1:${srv.info.port}/ws`;
+  const host = await client('host');
+  await host.wait((m) => m.type === 'state' && m.resume);
+  host.send({ type: 'discardSave' });
+  const s = await host.wait((m) => m.type === 'state' && !m.resume);
+  assert.equal(s.view.teams.length, 0);
   host.close();
 });

@@ -1,13 +1,15 @@
 // The TV screen. Shows the game to the room; never gets an answer before the host reveals it.
-import { ranking } from '/lib/game.js';
+import { ranking, COLORS } from '/lib/game.js';
 import { connect } from './net.js';
 import { t, setLang, translatePage } from './i18n.js';
 import { $, h, qrSvg, shortUrl, countdown, runCountdowns, teamStyle } from './ui.js';
+import { unlockAudio, audioReady, playEvent, playSound, startTicks } from './sounds.js';
 
 let view = null;
 let connected = new Set();
 let info = null;
 let lastSeq = 0; // the last event we reacted to
+let soundSeq = null; // the last event we played a sound for (null until the first state arrives)
 let lastScreen = ''; // so the question only zooms in once, not on every update
 const seen = new Set(); // teams already on screen, so only new ones pop in
 
@@ -15,14 +17,30 @@ const net = connect({
   role: 'display',
   onMessage(msg) {
     if (msg.type === 'welcome') info = msg.info;
+    if (msg.type === 'sound') playSound(view, msg, COLORS);
     if (msg.type === 'state') {
       view = msg.view;
       connected = new Set(msg.connected);
+      const ev = view.event;
+      if (ev && soundSeq !== null && ev.seq !== soundSeq) playEvent(view, ev, COLORS);
+      soundSeq = ev?.seq ?? 0;
     }
     if (view) render();
   },
 });
 runCountdowns(net.now);
+startTicks(() => view, net.now);
+
+// The TV plays the sounds. Browsers need one click or key press first.
+function showUnlock() {
+  $('#sound-unlock').hidden = !view?.settings.sound || audioReady();
+}
+for (const type of ['pointerdown', 'keydown']) {
+  document.addEventListener(type, () => {
+    unlockAudio();
+    setTimeout(showUnlock, 100);
+  });
+}
 
 // F for full screen (the TV window has no controls).
 document.addEventListener('keydown', (e) => {
@@ -174,4 +192,5 @@ function render() {
   document.querySelector('.display > .wordmark').hidden = !inLobby;
   if (inLobby) renderLobby();
   else renderGame();
+  showUnlock();
 }

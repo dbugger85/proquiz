@@ -5,7 +5,9 @@
 // Needs Chromium (CHROMIUM=/path/to/chromium if not /usr/bin/chromium).
 // Screenshots go to test/screenshots/ (ignored by git). Look at them after UI changes.
 
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
@@ -14,7 +16,7 @@ import { startServer } from '../server.js';
 const shots = fileURLToPath(new URL('./screenshots', import.meta.url));
 mkdirSync(shots, { recursive: true });
 
-const srv = await startServer({ port: 3456, quiet: true });
+const srv = await startServer({ port: 3456, quiet: true, dataDir: mkdtempSync(join(tmpdir(), 'proquiz-e2e-')) });
 const base = `http://127.0.0.1:${srv.info.port}`;
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM || '/usr/bin/chromium' });
 const errors = [];
@@ -42,6 +44,9 @@ try {
   await host.waitForSelector('#lobby:not([hidden])');
   await tv.waitForSelector('#lobby:not([hidden])');
   await shot(host, 'host-1-empty');
+  await shot(tv, 'tv-0-sound-hint');
+  await tv.mouse.click(5, 5); // a click lets the TV play sound; every sound below must play without errors
+  await tv.waitForSelector('#sound-unlock[hidden]', { state: 'attached' });
 
   const phones = [];
   for (const [name, n] of [['Quizzy Rascals', 0], ['Blue Steel', 1], ['Lemon Heads', 3]]) {

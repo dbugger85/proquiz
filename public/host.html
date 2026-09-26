@@ -19,6 +19,17 @@
     <p id="host-error" class="error" role="alert" hidden></p>
 
     <section id="lobby" class="lobby" hidden>
+      <div id="resume" class="resume" hidden>
+        <div>
+          <h2 data-t="resumeTitle"></h2>
+          <p id="resume-text"></p>
+          <ul id="resume-teams" class="resume-teams"></ul>
+        </div>
+        <div class="row">
+          <button id="resume-yes" class="btn btn-primary" type="button" data-t="resumeYes"></button>
+          <button id="resume-no" class="btn" type="button" data-t="resumeNo"></button>
+        </div>
+      </div>
       <div class="join-card">
         <h2 data-t="scanToJoin">Scan to join</h2>
         <div id="qr" class="qr"></div>
@@ -62,6 +73,10 @@
           <span data-t="answerSeconds"></span>
           <span class="row"><input type="number" name="answerSeconds" min="0" max="120" step="1"> <small data-t="zeroOff"></small></span>
         </label>
+        <div class="row">
+          <label class="check"><input type="checkbox" name="sound"> <span data-t="soundOn"></span></label>
+          <button id="test-sound" class="btn" type="button" data-t="testSound"></button>
+        </div>
         <label class="check"><input type="checkbox" name="finalRound"> <span data-t="finalRound"></span></label>
         <label class="field">
           <span data-t="finalSeconds"></span>
@@ -72,6 +87,7 @@
 
     <section id="game" hidden></section>
   </div>
+  <button id="sound-unlock" class="sound-unlock" type="button" data-t="tapForSound" hidden></button>
   <script type="module" src="/js/host.js"></script>
 </body>
 </html>

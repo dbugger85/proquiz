@@ -3,6 +3,7 @@ import { COLORS } from '/lib/game.js';
 import { connect } from './net.js';
 import { t, setLang, guessLang, translatePage } from './i18n.js';
 import { $, h, inkFor, countdown, runCountdowns } from './ui.js';
+import { keepAwake } from './wake.js';
 
 const KEY = 'proquiz.team'; // { id, name, color } — survives reloads, so a phone re-joins as the same team
 
@@ -52,6 +53,9 @@ const net = connect({
 });
 
 runCountdowns(net.now);
+
+// Any tap keeps the screen on from then on (browsers need a tap before they allow it).
+document.addEventListener('pointerdown', keepAwake);
 
 // ----- join form -----
 
@@ -107,10 +111,10 @@ function buzz(e) {
   }
 }
 
-function buzzer(live) {
+function buzzer(live, size = '') {
   return h(
     'button',
-    { class: `buzzer${live ? ' live' : ''}`, type: 'button', onpointerdown: buzz, 'aria-label': t('buzz') },
+    { class: `buzzer${live ? ' live' : ''}${size ? ` ${size}` : ''}`, type: 'button', onpointerdown: buzz, 'aria-label': t('buzz') },
     h('span', { class: 'label' }, t('buzz')),
   );
 }
@@ -125,6 +129,8 @@ function stage() {
     return [
       h('div', { class: 'big' }, t('youreIn')),
       h('p', { class: 'small' }, t('waitStart')),
+      buzzer(true, 'try'),
+      h('p', { class: 'small' }, t('tryBuzzer')),
       h('button', { class: 'btn btn-quiet', type: 'button', onclick: () => ((editing = true), render()) }, t('changeTeam')),
     ];
   }
