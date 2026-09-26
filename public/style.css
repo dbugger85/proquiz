@@ -1336,3 +1336,337 @@ select option {
   width: min(44vw, 24vh);
   font-size: 1.4rem;
 }
+
+/* ---------- pictures in questions ---------- */
+
+.tv-q.has-image .question {
+  flex: 0 0 auto;
+  font-size: 5vh;
+  padding: 1.5vh 0 0;
+}
+.tv-q .spacer {
+  flex: 0;
+}
+.q-img {
+  flex: 1;
+  min-height: 0;
+  max-width: 100%;
+  object-fit: contain;
+  align-self: center;
+  margin-top: 2vh;
+  border-radius: 2vh;
+  filter: drop-shadow(0 2vh 5vh rgb(0 0 0 / 0.45));
+}
+.q-img.reveal-img {
+  animation: plate-in 450ms cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+.host-imgs {
+  display: flex;
+  gap: 1rem;
+  margin: 0 0 1rem;
+}
+.host-img {
+  margin: 0;
+}
+.host-img img {
+  display: block;
+  max-height: 180px;
+  max-width: 320px;
+  border-radius: var(--r-s);
+  border: 1px solid var(--edge);
+}
+.host-img figcaption {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-top: 0.3rem;
+}
+
+/* ---------- final round ---------- */
+
+.tv-final {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 3vh;
+  animation: zoom-in 500ms cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+.final-kicker {
+  margin: 0;
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 3.2vh;
+  padding: 1vh 3vh;
+  border-radius: var(--pill);
+  background: linear-gradient(90deg, var(--light), var(--flare));
+}
+.final-cat {
+  font-size: 13vh;
+  font-weight: 800;
+  letter-spacing: -0.045em;
+  text-wrap: balance;
+}
+.final-note {
+  margin: 0;
+  font-size: 3.2vh;
+  color: var(--muted);
+}
+.final-teams {
+  list-style: none;
+  margin: 1vh 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1.2vh 1vw;
+}
+.final-teams li {
+  display: flex;
+  gap: 1.2vw;
+  align-items: center;
+  padding: 1.3vh 2vw;
+  border-radius: var(--pill);
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 2.4vh;
+  transition: opacity 200ms;
+}
+.final-teams li.waiting {
+  opacity: 0.45;
+}
+.tv-q .final-teams {
+  margin-top: 2vh;
+}
+
+.tv-judge {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3vh;
+  min-height: 0;
+}
+.judge-q {
+  text-align: center;
+}
+.judge-q .muted {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 2.6vh;
+  color: var(--muted);
+}
+.judge-q p {
+  margin: 1vh 0 0;
+  font-weight: 700;
+  font-size: 4.2vh;
+  text-wrap: balance;
+}
+.judge-cards {
+  flex: 1;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(22vw, 1fr));
+  gap: 2vh 1.2vw;
+  align-content: center;
+}
+.judge-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1.2vh;
+  padding: 2.4vh 1.8vw;
+  border-radius: var(--r-l);
+  background: var(--glass);
+  box-shadow: inset 0 0 0 0.35vh var(--team);
+  min-height: 20vh;
+}
+.judge-card .who {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 2.4vh;
+}
+.judge-card .what {
+  flex: 1;
+  font-weight: 700;
+  font-size: 4.4vh;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+}
+.judge-card.shown {
+  background: var(--team);
+  color: var(--team-ink);
+  animation: plate-in 450ms cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+.judge-card.shown .what {
+  color: inherit;
+}
+.judge-card .bet {
+  align-self: flex-start;
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 3vh;
+  padding: 0.6vh 1.6vh;
+  border-radius: var(--pill);
+  background: rgb(0 0 0 / 0.22);
+}
+.judge-card.right .bet {
+  background: var(--good);
+  color: #03281a;
+}
+.judge-card.wrong .bet {
+  background: var(--bad);
+  color: #33020d;
+}
+.judge-answer {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2vw;
+  font-size: 3vh;
+  color: var(--muted);
+  animation: plate-in 450ms cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+.judge-answer b {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 6vh;
+  letter-spacing: -0.03em;
+  color: var(--good);
+  text-shadow: 0 0 40px rgb(46 229 157 / 0.45);
+}
+.judge-img {
+  max-height: 16vh;
+  border-radius: 1.5vh;
+}
+
+.host-final .where b {
+  margin-left: 0.2rem;
+}
+.final-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+  max-width: 900px;
+}
+.final-row {
+  display: grid;
+  grid-template-columns: minmax(8rem, 1fr) auto 2fr auto;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.6rem 0.8rem 0.6rem 1rem;
+  border-radius: var(--r-m);
+  background: var(--glass);
+  box-shadow: inset 4px 0 0 var(--team);
+}
+.final-row .who {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+.final-row .bet {
+  font-weight: 700;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.final-row .said {
+  font-size: 1.15rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.final-row .verdict {
+  display: flex;
+  gap: 0.4rem;
+}
+.final-row .verdict .btn {
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 1rem;
+  opacity: 0.45;
+}
+.final-row .verdict .btn.on {
+  opacity: 1;
+  box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px currentColor;
+}
+.final-row.judged .verdict .btn:not(.on) {
+  opacity: 0.25;
+}
+
+/* phone: final round */
+.phone-team .kicker {
+  margin: 0;
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 0.85rem;
+  padding: 0.4rem 0.9rem;
+  border-radius: var(--pill);
+  background: rgb(0 0 0 / 0.2);
+}
+.final-form {
+  width: 100%;
+  max-width: 420px;
+  display: grid;
+  gap: 0.75rem;
+  text-align: left;
+}
+.final-form label {
+  font-weight: 700;
+}
+.final-form .muted {
+  font-weight: 400;
+  opacity: 0.8;
+}
+.final-form input {
+  min-height: 60px;
+  font-size: 1.5rem;
+  font-weight: 700;
+  width: 100%;
+  background: rgb(255 255 255 / 0.92);
+  color: #150f3d;
+  border: 0;
+  border-radius: var(--r-m);
+}
+.final-form .error {
+  color: inherit;
+  min-height: 0;
+}
+.chips {
+  display: flex;
+  gap: 0.5rem;
+}
+.chip {
+  flex: 1;
+  min-height: 44px;
+  border: 0;
+  border-radius: var(--pill);
+  background: rgb(0 0 0 / 0.2);
+  color: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.btn-ink {
+  min-height: 60px;
+  border: 0;
+  background: var(--team-ink);
+  color: var(--team);
+  font-family: var(--display);
+  font-size: 1.05rem;
+}
+.btn-ink:hover {
+  background: var(--team-ink);
+  filter: brightness(0.92);
+}
+.final-form input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.final-form input[type='number']::-webkit-inner-spin-button,
+.final-form input[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}

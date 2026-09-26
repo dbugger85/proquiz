@@ -353,3 +353,44 @@ test('restart keeps the teams, clears scores and the board', () => {
   assert.ok(s.used.flat().every((u) => !u));
   assert.equal(hostView(s).canUndo, false);
 });
+
+test('pictures: the TV gets the question picture, the answer picture only when revealed, phones neither', () => {
+  const set = structuredClone(small);
+  set.categories[0].questions[0].image = 'flag.svg';
+  set.categories[0].questions[0].answerImage = 'secret.png';
+  set.final.image = 'final-q.jpg';
+  set.final.answerImage = 'final-a.jpg';
+  assert.deepEqual(validateSet(set), []);
+
+  let s = run(started({}, set), { type: 'pick', c: 0, i: 0 });
+  const tv = () => JSON.stringify(displayView(s));
+  assert.equal(displayView(s).q.image, 'flag.svg');
+  assert.equal(displayView(s).set.categories[0].questions[0].image, 'flag.svg'); // for loading early
+  assert.ok(!tv().includes('secret.png'));
+  assert.ok(!JSON.stringify(phoneView(s, 'r')).includes('flag.svg'));
+  s = apply(s, { type: 'reveal' });
+  assert.equal(displayView(s).q.answerImage, 'secret.png');
+
+  s = run(s, { type: 'next', now: 0 }, { type: 'end' });
+  assert.ok(!tv().includes('final-q.jpg'));
+  s = apply(s, { type: 'next', now: 0 });
+  assert.equal(displayView(s).final.image, 'final-q.jpg');
+  assert.ok(!tv().includes('final-a.jpg'));
+});
+
+test('the final answer shows on the TV once every team is judged', () => {
+  let s = run(started(), { type: 'end' }, { type: 'next', now: 0 }, { type: 'next', now: 0 });
+  assert.equal(s.phase, 'finalJudge');
+  s = run(s, { type: 'judgeFinal', teamId: 'r', correct: true }, { type: 'judgeFinal', teamId: 'b', correct: false });
+  assert.equal(displayView(s).final.answer, undefined);
+  s = apply(s, { type: 'judgeFinal', teamId: 'g', correct: false });
+  assert.equal(displayView(s).final.answer, 'FA');
+});
+
+test('pictures must be plain file names; a picture can stand in for the question text', () => {
+  const set = structuredClone(small);
+  set.categories[1].questions[0] = { value: 100, question: '', image: 'who-is-this.jpg', answer: 'x' };
+  assert.deepEqual(validateSet(set), []);
+  set.categories[1].questions[1].image = '../../etc/passwd';
+  assert.deepEqual(validateSet(set), [{ code: 'bad-image', c: 1, i: 1 }]);
+});

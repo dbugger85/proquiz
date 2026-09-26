@@ -176,3 +176,12 @@ test('the host can turn down the saved game', async () => {
   assert.equal(s.view.teams.length, 0);
   host.close();
 });
+
+test('question pictures are served, and only plain file names are allowed', async () => {
+  const base = `http://127.0.0.1:${srv.info.port}`;
+  const ok = await fetch(`${base}/images/sample-flag-japan.svg`);
+  assert.equal(ok.status, 200);
+  assert.equal(ok.headers.get('content-type'), 'image/svg+xml');
+  assert.equal((await fetch(`${base}/images/..%2Fserver.js`)).status, 400);
+  assert.equal((await fetch(`${base}/images/missing.png`)).status, 404);
+});

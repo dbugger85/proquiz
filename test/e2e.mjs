@@ -36,7 +36,12 @@ async function waitFor(check, ms = 3000) {
     await new Promise((r) => setTimeout(r, 25));
   }
 }
-const shot = (page, name) => page.screenshot({ path: `${shots}/${name}.png` });
+// Every screenshot also checks that no "null"/"undefined" leaked onto the screen.
+async function shot(page, name) {
+  const text = await page.evaluate(() => document.body.innerText);
+  assert.doesNotMatch(text, /\b(null|undefined|NaN)\b/, `${name} shows a broken value`);
+  await page.screenshot({ path: `${shots}/${name}.png` });
+}
 
 try {
   const host = await open('/host', { width: 1366, height: 768 }, 'host');
@@ -173,14 +178,85 @@ try {
   await host.keyboard.press('Space');
   await host.waitForSelector('.host-board');
 
-  // End the board (there's a final question, whose screens come later), then finish.
+  // A picture question: the flag shows on the TV with the question.
+  await host.click('.host-board .col:nth-child(1) .tile:nth-of-type(3)');
+  await host.waitForSelector('.host-q .host-img img');
+  await tv.waitForSelector('.tv-q .q-img');
+  await tv.waitForFunction(() => document.querySelector('.tv-q .q-img').complete);
+  await tv.waitForTimeout(450);
+  await shot(tv, 'tv-10-picture');
+  await shot(host, 'host-7-picture');
+  await host.keyboard.press('r');
+  await host.waitForSelector('body[data-phase=revealed]');
+  await host.keyboard.press('Space');
+  await host.waitForSelector('body[data-phase=board]');
+
+  // A picture that only comes with the answer.
+  await host.click('.host-board .col:nth-child(3) .tile:nth-of-type(1)');
+  await host.waitForSelector('body[data-phase=reading]');
+  assert.equal(await tv.locator('.q-img').count(), 0);
+  await host.keyboard.press('r');
+  await tv.waitForSelector('.tv-q .q-img.reveal-img');
+  await tv.waitForTimeout(500);
+  await shot(tv, 'tv-11-answer-picture');
+  await host.keyboard.press('Space');
+  await host.waitForSelector('body[data-phase=board]');
+
+  // End the board: on to the final round.
   await host.waitForSelector('.controls button:has-text("End the board")');
   await host.keyboard.press('e');
   await host.waitForSelector('body[data-phase=finalWager]');
-  for (const phase of ['finalQuestion', 'finalJudge', 'over']) {
-    await host.keyboard.press('Space');
-    await host.waitForSelector(`body[data-phase=${phase}]`);
+  await tv.waitForSelector('.tv-final');
+  await red.waitForSelector('#bet');
+  // Blue (−100) and Yellow (0) have nothing to bet: they're told so and bet 0 by themselves.
+  await blue.waitForFunction(() => document.body.textContent.includes('no points to bet'));
+  await shot(red, 'phone-10-wager');
+  await red.click('.chip:has-text("Half")');
+  await red.click('.final-form button[type=submit]');
+  await red.waitForFunction(() => document.body.textContent.includes('Bet placed: 100'));
+  await waitFor(() => Object.keys(srv.hub.getState().final.wagers).length === 3);
+  await tv.waitForFunction(() => document.querySelectorAll('.final-teams li.waiting').length === 0);
+  await shot(tv, 'tv-12-final-wager');
+  await shot(host, 'host-8-final-wager');
+
+  // The question: teams type their answers.
+  await host.keyboard.press('Space');
+  await host.waitForSelector('body[data-phase=finalQuestion]');
+  await tv.waitForSelector('.tv-q');
+  for (const [p, text] of [[red, 'Sognefjorden'], [yellow, 'Hardangerfjorden']]) {
+    await p.waitForSelector('#final-answer');
+    await p.fill('#final-answer', text);
+    await p.press('#final-answer', 'Enter');
+    await p.waitForFunction(() => document.body.textContent.includes('Answer sent'));
   }
+  // Typing isn't wiped out when another team sends its answer.
+  await blue.fill('#final-answer', 'Not sure');
+  await waitFor(() => srv.hub.getState().final.answers[srv.hub.getState().teams[2].id] === 'Hardangerfjorden');
+  await blue.waitForTimeout(200);
+  assert.equal(await blue.inputValue('#final-answer'), 'Not sure');
+  await shot(red, 'phone-11-final-answer');
+  await tv.waitForTimeout(450);
+  await shot(tv, 'tv-13-final-question');
+  await shot(host, 'host-9-final-question');
+
+  // Judging: each team's answer appears on the TV as the host marks it.
+  await host.keyboard.press('Space');
+  await host.waitForSelector('body[data-phase=finalJudge]');
+  await tv.waitForSelector('.tv-judge');
+  assert.doesNotMatch(await tv.textContent('.tv-judge'), /Hardangerfjorden/);
+  await host.click('.final-row:nth-child(1) .btn-good');
+  await tv.waitForSelector('.judge-card.shown.right');
+  assert.equal(score('Quizzy Rascals'), 300);
+  await host.click('.final-row:nth-child(3) .btn-bad');
+  await host.click('.final-row:nth-child(2) .btn-bad');
+  await tv.waitForSelector('.judge-answer');
+  assert.match(await tv.textContent('.judge-answer'), /Sognefjorden/);
+  await red.waitForFunction(() => document.body.textContent.includes('Correct! +100'));
+  await tv.waitForTimeout(500);
+  await shot(tv, 'tv-14-final-judged');
+  await shot(host, 'host-10-final-judge');
+
+  await host.keyboard.press('Space');
   await tv.waitForSelector('.tv-over');
   await red.waitForFunction(() => document.body.textContent.includes('Place 1 of 3'));
   await shot(tv, 'tv-9-over');

@@ -8,6 +8,8 @@ import http from 'node:http';
 import os from 'node:os';
 import { readFile, writeFile, mkdir, rename } from 'node:fs/promises';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { IMAGE_NAME } from './lib/validate.js';
 import { randomUUID } from 'node:crypto';
 import { WebSocketServer } from 'ws';
 import { apply, newGame, hostView, displayView, phoneView, GameError, DEFAULT_SETTINGS } from './lib/game.js';
@@ -24,6 +26,10 @@ const TYPES = {
   '.json': 'application/json; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
   '.mp3': 'audio/mpeg',
   '.wav': 'audio/wav',
   '.mp4': 'video/mp4',
@@ -34,8 +40,22 @@ const TYPES = {
 // Short addresses for the pages. Everything else is looked up in public/ (or lib/ for shared code).
 const PAGES = { '/favicon.ico': 'public/icon.svg', '/': 'public/index.html', '/host': 'public/host.html', '/display': 'public/display.html' };
 
-async function serveFile(req, res) {
+// Question pictures: the user's own (in the data folder) first, then the ones that come with ProQuiz.
+async function serveImage(res, name, dataDir) {
+  if (!IMAGE_NAME.test(name)) return send(res, 400, 'Bad image name');
+  for (const dir of [pathToFileURL(path.join(dataDir, 'images') + path.sep), new URL('sets/images/', ROOT)]) {
+    try {
+      const body = await readFile(new URL(name, dir));
+      res.writeHead(200, { 'Content-Type': TYPES[name.slice(name.lastIndexOf('.')).toLowerCase()], 'Cache-Control': 'max-age=3600' });
+      return res.end(body);
+    } catch {}
+  }
+  send(res, 404, 'Not found');
+}
+
+async function serveFile(req, res, dataDir) {
   const path = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+  if (path.startsWith('/images/')) return serveImage(res, path.slice('/images/'.length), dataDir);
   let file = PAGES[path];
   if (!file) {
     if (path.includes('..') || path.includes('\0')) return send(res, 400, 'Bad path');
@@ -325,7 +345,7 @@ export async function startServer({ port = START_PORT, quiet = false, dataDir = 
   const set = JSON.parse(await readFile(new URL('sets/sample.json', ROOT), 'utf8'));
   const store = autosaver(dataDir);
   const saved = await store.load();
-  const server = http.createServer(serveFile);
+  const server = http.createServer((req, res) => serveFile(req, res, dataDir));
   const wss = new WebSocketServer({ server, path: '/ws' });
   const actual = await listen(server, port);
   const ip = lanAddresses()[0];

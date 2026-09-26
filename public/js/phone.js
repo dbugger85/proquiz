@@ -143,8 +143,12 @@ function stage() {
     const place = ranked.findIndex((tm) => tm.score === me.score) + 1;
     return [h('div', { class: 'big' }, t('gameOver')), h('p', { class: 'result' }, t('place', { n: place, total: ranked.length }))];
   }
-  if (s === 'wager' || s === 'finalAnswer' || s === 'finalWait') {
-    return [h('div', { class: 'big' }, t('finalComing'))]; // the final round screens arrive in a later step
+  if (s === 'wager') return wagerStage();
+  if (s === 'finalAnswer') return answerStage();
+  if (s === 'finalWait') {
+    const f = view.final;
+    if (f.judged === null) return [h('div', { class: 'big' }, t('waitJudging')), f.answer ? h('p', { class: 'small' }, t('youAnswered', { text: f.answer })) : null];
+    return [h('div', { class: 'big' }, f.judged ? t('finalRight', { n: f.wager ?? 0 }) : t('finalWrong', { n: f.wager ?? 0 }))];
   }
   // waiting: board, reading or revealed. While the host reads, the (dim) buzzer is there, but pressing it is too early.
   if (view.phase === 'reading') {
@@ -155,6 +159,73 @@ function stage() {
     return [h('div', { class: 'big' }, t('gotIt'))];
   }
   return [h('p', { class: 'small' }, t('waitNext'))];
+}
+
+// ----- final round -----
+
+function wagerStage() {
+  const f = view.final;
+  const head = [h('p', { class: 'kicker' }, t('finalRound')), h('div', { class: 'big' }, f.category)];
+  if (f.maxWager === 0) {
+    if (f.wager == null) net.send({ type: 'wager', amount: 0 });
+    return [...head, h('p', { class: 'small' }, t('noPointsToBet'))];
+  }
+  const input = h('input', { id: 'bet', type: 'number', inputmode: 'numeric', min: 0, max: f.maxWager, step: 1, value: f.wager ?? '', 'aria-label': t('yourBet') });
+  const quick = (label, amount) => h('button', { class: 'chip', type: 'button', onclick: () => ((input.value = amount), input.focus()) }, label);
+  return [
+    ...head,
+    h(
+      'form',
+      {
+        class: 'final-form',
+        onsubmit: (e) => {
+          e.preventDefault();
+          const amount = Math.round(Number(input.value));
+          if (!Number.isFinite(amount) || amount < 0 || amount > f.maxWager) return ($('#final-error').textContent = t('err-bad-wager'));
+          net.send({ type: 'wager', amount });
+          input.blur();
+        },
+      },
+      h('label', { for: 'bet' }, t('yourBet'), ' ', h('span', { class: 'muted' }, t('youHave', { n: f.maxWager }))),
+      input,
+      h('div', { class: 'chips' }, quick(t('betNothing'), 0), quick(t('betHalf'), Math.floor(f.maxWager / 2)), quick(t('betAll'), f.maxWager)),
+      h('p', { id: 'final-error', class: 'error', role: 'alert' }),
+      h('button', { class: 'btn btn-ink', type: 'submit' }, t('placeBet')),
+    ),
+    f.wager != null ? h('p', { class: 'small' }, t('betPlaced', { n: f.wager })) : null,
+  ];
+}
+
+function answerStage() {
+  const f = view.final;
+  const input = h('input', { id: 'final-answer', type: 'text', maxlength: 100, autocomplete: 'off', enterkeyhint: 'send', value: f.answer ?? '', 'aria-label': t('yourAnswer') });
+  return [
+    h('p', { class: 'kicker' }, `${t('finalRound')}: ${f.category}`),
+    h(
+      'form',
+      {
+        class: 'final-form',
+        onsubmit: (e) => {
+          e.preventDefault();
+          net.send({ type: 'finalAnswer', text: input.value });
+          input.blur();
+        },
+      },
+      h('label', { for: 'final-answer' }, t('yourAnswer')),
+      input,
+      h('button', { class: 'btn btn-ink', type: 'submit' }, t('sendAnswer')),
+    ),
+    f.answer != null ? h('p', { class: 'small' }, t('answerSent')) : null,
+    countdown(view),
+  ];
+}
+
+// The stage is only rebuilt when something this team sees has changed. Other teams' bets and answers
+// don't change it, so typing is never wiped out.
+let stageKey = '';
+function stageKeyFor() {
+  const f = view.final;
+  return JSON.stringify([view.lang, view.status, view.phase, view.buzzedTeam, view.event?.seq, view.you.score, view.deadline, f?.wager, f?.answer, f?.judged, f?.maxWager]);
 }
 
 // One-off reactions to what just happened: shake for "too early" or "wrong", flash and buzz for "you're first".
@@ -202,6 +273,10 @@ function render() {
   team.style.setProperty('--team-ink', inkFor(me.color));
   $('#me').textContent = me.name;
   $('#score').textContent = t('points', { n: me.score });
-  $('#stage').replaceChildren(...stage());
+  const key = stageKeyFor();
+  if (key !== stageKey) {
+    stageKey = key;
+    $('#stage').replaceChildren(...stage().filter(Boolean));
+  }
   react();
 }

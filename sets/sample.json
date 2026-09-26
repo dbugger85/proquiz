@@ -5,51 +5,153 @@
     {
       "name": "Capitals",
       "questions": [
-        { "value": 100, "question": "What is the capital of Norway?", "answer": "Oslo" },
-        { "value": 200, "question": "What is the capital of Italy?", "answer": "Rome" },
-        { "value": 300, "question": "What is the capital of Canada?", "answer": "Ottawa" },
-        { "value": 400, "question": "What is the capital of Australia?", "answer": "Canberra" },
-        { "value": 500, "question": "What is the capital of Mongolia?", "answer": "Ulaanbaatar" }
+        {
+          "value": 100,
+          "question": "What is the capital of Norway?",
+          "answer": "Oslo"
+        },
+        {
+          "value": 200,
+          "question": "What is the capital of Italy?",
+          "answer": "Rome"
+        },
+        {
+          "value": 300,
+          "question": "This flag flies over which capital city?",
+          "image": "sample-flag-japan.svg",
+          "answer": "Tokyo (Japan)"
+        },
+        {
+          "value": 400,
+          "question": "What is the capital of Australia?",
+          "answer": "Canberra"
+        },
+        {
+          "value": 500,
+          "question": "What is the capital of Mongolia?",
+          "answer": "Ulaanbaatar"
+        }
       ]
     },
     {
       "name": "Movies",
       "questions": [
-        { "value": 100, "question": "Which film features a snowman called Olaf?", "answer": "Frozen" },
-        { "value": 200, "question": "Who plays Jack in Titanic (1997)?", "answer": "Leonardo DiCaprio" },
-        { "value": 300, "question": "Which film series has a hobbit called Frodo?", "answer": "The Lord of the Rings" },
-        { "value": 400, "question": "What is the name of the lion cub in The Lion King?", "answer": "Simba" },
-        { "value": 500, "question": "Which director made Jaws, E.T. and Jurassic Park?", "answer": "Steven Spielberg" }
+        {
+          "value": 100,
+          "question": "Which film features a snowman called Olaf?",
+          "answer": "Frozen"
+        },
+        {
+          "value": 200,
+          "question": "Who plays Jack in Titanic (1997)?",
+          "answer": "Leonardo DiCaprio"
+        },
+        {
+          "value": 300,
+          "question": "Which film series has a hobbit called Frodo?",
+          "answer": "The Lord of the Rings"
+        },
+        {
+          "value": 400,
+          "question": "What is the name of the lion cub in The Lion King?",
+          "answer": "Simba"
+        },
+        {
+          "value": 500,
+          "question": "Which director made Jaws, E.T. and Jurassic Park?",
+          "answer": "Steven Spielberg"
+        }
       ]
     },
     {
       "name": "Science",
       "questions": [
-        { "value": 100, "question": "Which planet is closest to the Sun?", "answer": "Mercury" },
-        { "value": 200, "question": "What gas do plants take in from the air?", "answer": "Carbon dioxide (CO2)" },
-        { "value": 300, "question": "How many bones does an adult human have?", "answer": "206" },
-        { "value": 400, "question": "What is the chemical symbol for gold?", "answer": "Au" },
-        { "value": 500, "question": "What is the speed of light, roughly, in km per second?", "answer": "About 300,000 km/s" }
+        {
+          "value": 100,
+          "question": "Which planet is closest to the Sun?",
+          "answer": "Mercury",
+          "answerImage": "sample-mercury.svg"
+        },
+        {
+          "value": 200,
+          "question": "What gas do plants take in from the air?",
+          "answer": "Carbon dioxide (CO2)"
+        },
+        {
+          "value": 300,
+          "question": "How many bones does an adult human have?",
+          "answer": "206"
+        },
+        {
+          "value": 400,
+          "question": "What is the chemical symbol for gold?",
+          "answer": "Au"
+        },
+        {
+          "value": 500,
+          "question": "What is the speed of light, roughly, in km per second?",
+          "answer": "About 300,000 km/s"
+        }
       ]
     },
     {
       "name": "Music",
       "questions": [
-        { "value": 100, "question": "Which band had a hit with 'Take On Me'?", "answer": "a-ha" },
-        { "value": 200, "question": "How many strings does a normal guitar have?", "answer": "Six" },
-        { "value": 300, "question": "Which singer is known as the 'Queen of Pop'?", "answer": "Madonna" },
-        { "value": 400, "question": "Which composer wrote the music for Peer Gynt?", "answer": "Edvard Grieg" },
-        { "value": 500, "question": "Which country won Eurovision in 1985 with 'La det swinge'?", "answer": "Norway (Bobbysocks!)" }
+        {
+          "value": 100,
+          "question": "Which band had a hit with 'Take On Me'?",
+          "answer": "a-ha"
+        },
+        {
+          "value": 200,
+          "question": "How many strings does a normal guitar have?",
+          "answer": "Six"
+        },
+        {
+          "value": 300,
+          "question": "Which singer is known as the 'Queen of Pop'?",
+          "answer": "Madonna"
+        },
+        {
+          "value": 400,
+          "question": "Which composer wrote the music for Peer Gynt?",
+          "answer": "Edvard Grieg"
+        },
+        {
+          "value": 500,
+          "question": "Which country won Eurovision in 1985 with 'La det swinge'?",
+          "answer": "Norway (Bobbysocks!)"
+        }
       ]
     },
     {
       "name": "Sports",
       "questions": [
-        { "value": 100, "question": "How many players does a football team have on the field?", "answer": "Eleven" },
-        { "value": 200, "question": "In which sport do you hear 'love' as a score?", "answer": "Tennis" },
-        { "value": 300, "question": "Which country hosted the 1994 Winter Olympics?", "answer": "Norway (Lillehammer)" },
-        { "value": 400, "question": "How long is a marathon, to the nearest kilometre?", "answer": "42 km (42.195)" },
-        { "value": 500, "question": "Which Norwegian has the most Winter Olympic medals?", "answer": "Marit Bjørgen (15)" }
+        {
+          "value": 100,
+          "question": "How many players does a football team have on the field?",
+          "answer": "Eleven"
+        },
+        {
+          "value": 200,
+          "question": "In which sport do you hear 'love' as a score?",
+          "answer": "Tennis"
+        },
+        {
+          "value": 300,
+          "question": "Which country hosted the 1994 Winter Olympics?",
+          "answer": "Norway (Lillehammer)"
+        },
+        {
+          "value": 400,
+          "question": "How long is a marathon, to the nearest kilometre?",
+          "answer": "42 km (42.195)"
+        },
+        {
+          "value": 500,
+          "question": "Which Norwegian has the most Winter Olympic medals?",
+          "answer": "Marit Bjørgen (15)"
+        }
       ]
     }
   ],

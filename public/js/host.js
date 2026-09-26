@@ -167,8 +167,13 @@ function controls() {
     add(' ', t('nextBtn'), { type: 'next' }, 'btn-primary');
   } else if (p === 'board') {
     add('e', t('endBoardBtn'), () => confirm(t('confirmEnd')) && cmd({ type: 'end' }));
-  } else if (p === 'finalWager' || p === 'finalQuestion' || p === 'finalJudge') {
-    add(' ', t('nextBtn'), { type: 'next' }, 'btn-primary'); // the final round screens arrive in a later step
+  } else if (p === 'finalWager') {
+    add(' ', t('showFinalQ'), { type: 'next' }, 'btn-primary');
+  } else if (p === 'finalQuestion') {
+    add(' ', t('stopAnswers'), { type: 'next' }, 'btn-primary');
+  } else if (p === 'finalJudge') {
+    const left = view.teams.filter((tm) => !(tm.id in view.final.judged)).length;
+    add(' ', t('showScores'), () => (left === 0 || confirm(t('confirmUnjudged', { n: left }))) && cmd({ type: 'next' }), 'btn-primary');
   } else if (p === 'over') {
     add('', t('restartBtn'), () => confirm(t('confirmRestart')) && cmd({ type: 'restart' }));
   }
@@ -256,6 +261,9 @@ function buzzOrder() {
   return h('p', { class: 'buzz-order' }, `${t('alsoBuzzed')} `, b.slice(1).map((x) => t('lateBy', { name: teamName(x.teamId), ms: x.at - first })).join(', '));
 }
 
+const img = (name, cls, label) =>
+  name ? h('figure', { class: cls }, h('img', { src: `/images/${encodeURIComponent(name)}`, alt: '' }), label ? h('figcaption', {}, label) : null) : null;
+
 function renderQuestion() {
   const q = view.q;
   const src = view.set.categories[q.c].questions[q.i];
@@ -263,12 +271,52 @@ function renderQuestion() {
     'div',
     { class: 'host-q' },
     h('p', { class: 'where' }, `${view.set.categories[q.c].name} `, h('b', {}, String(q.value))),
-    h('p', { class: 'question' }, src.question),
+    src.image || src.answerImage
+      ? h('div', { class: 'host-imgs' }, img(src.image, 'host-img', t('picQuestion')), img(src.answerImage, 'host-img', t('picAnswer')))
+      : null,
+    src.question ? h('p', { class: 'question' }, src.question) : null,
     h('p', { class: 'answer' }, h('span', {}, `${t('answerLabel')}:`), src.answer),
     statusLine(),
     countdown(view),
     buzzOrder(),
   );
+}
+
+// ----- final round -----
+
+function renderFinal() {
+  const f = view.final;
+  const src = view.set.final;
+  const p = view.phase;
+  const head = [
+    h('p', { class: 'where' }, t('finalRound'), h('b', {}, src.category)),
+    p !== 'finalWager' && (src.image || src.answerImage)
+      ? h('div', { class: 'host-imgs' }, img(src.image, 'host-img', t('picQuestion')), img(src.answerImage, 'host-img', t('picAnswer')))
+      : null,
+    h('p', { class: 'question' }, p === 'finalWager' ? t('hostWagerHint') : src.question),
+    h('p', { class: 'answer' }, h('span', {}, `${t('answerLabel')}:`), src.answer),
+  ];
+  if (p === 'finalQuestion') head.push(countdown(view));
+  const rows = view.teams.map((tm) => {
+    const wager = f.wagers[tm.id];
+    const answer = f.answers[tm.id];
+    const verdict = f.judged[tm.id];
+    const cells = [h('span', { class: 'who' }, tm.name), h('span', { class: 'bet' }, wager == null ? t('betWaiting') : t('betAmount', { n: wager }))];
+    if (p !== 'finalWager') cells.push(h('span', { class: 'said' }, answer == null ? t(p === 'finalJudge' ? 'noAnswer' : 'noAnswerYet') : answer || '—'));
+    if (p === 'finalJudge') {
+      const judge = (correct) => cmd({ type: 'judgeFinal', teamId: tm.id, correct: verdict === correct ? null : correct });
+      cells.push(
+        h(
+          'span',
+          { class: 'verdict' },
+          h('button', { class: `btn btn-good${verdict === true ? ' on' : ''}`, type: 'button', onclick: () => judge(true), 'aria-pressed': String(verdict === true) }, t('correctBtn')),
+          h('button', { class: `btn btn-bad${verdict === false ? ' on' : ''}`, type: 'button', onclick: () => judge(false), 'aria-pressed': String(verdict === false) }, t('wrongBtn')),
+        ),
+      );
+    }
+    return h('li', { class: `final-row${verdict === undefined ? '' : ' judged'}`, style: teamStyle(tm) }, cells);
+  });
+  return h('div', { class: 'host-q host-final' }, head, h('ul', { class: 'final-rows' }, rows));
 }
 
 function renderOver() {
@@ -327,7 +375,7 @@ function renderGame() {
   if (p === 'board') main = renderBoard();
   else if (view.q) main = renderQuestion();
   else if (p === 'over') main = renderOver();
-  else main = h('div', { class: 'host-q' }, h('p', { class: 'question' }, `${t('finalComing')}: ${view.set.final?.category ?? ''}`));
+  else main = renderFinal();
   $('#game').replaceChildren(h('div', { class: 'host-game' }, h('main', { class: 'host-main' }, main), renderScores(), renderControls()));
 }
 

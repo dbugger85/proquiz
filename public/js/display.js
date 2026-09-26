@@ -114,17 +114,99 @@ function band() {
   return [];
 }
 
+const img = (name, cls) => (name ? h('img', { class: cls, src: `/images/${encodeURIComponent(name)}`, alt: '' }) : null);
+
+// Load every question picture while the board is showing, so a picture never pops in late.
+const preloaded = new Set();
+function preloadImages() {
+  for (const cat of view.set.categories)
+    for (const q of cat.questions)
+      if (q.image && !preloaded.has(q.image)) {
+        preloaded.add(q.image);
+        new Image().src = `/images/${encodeURIComponent(q.image)}`;
+      }
+}
+
 function renderQuestion() {
   const q = view.q;
   const zoom = lastScreen !== `q${q.c}-${q.i}`;
   lastScreen = `q${q.c}-${q.i}`;
+  // When the answer comes with its own picture, it takes the question picture's place.
+  const picture = q.answerImage || q.image;
   return h(
     'div',
-    { class: 'tv-q', style: zoom ? '' : 'animation: none' },
+    { class: `tv-q${picture ? ' has-image' : ''}`, style: zoom ? '' : 'animation: none' },
     h('div', { class: 'where' }, h('span', {}, view.set.categories[q.c].name), h('b', {}, String(q.value))),
-    h('p', { class: 'question' }, q.question),
+    img(picture, `q-img${q.answerImage ? ' reveal-img' : ''}`),
+    q.question ? h('p', { class: 'question' }, q.question) : h('div', { class: 'spacer' }),
     q.answer ? h('p', { class: 'answer' }, q.answer) : null,
     h('div', { class: 'band' }, band()),
+  );
+}
+
+// ----- final round -----
+
+function finalTeams(mark) {
+  return h(
+    'ul',
+    { class: 'final-teams' },
+    view.teams.map((tm) => {
+      const done = mark(tm.id);
+      return h('li', { class: `plate${done ? '' : ' waiting'}`, style: teamStyle(tm) }, h('span', {}, tm.name), h('b', {}, done ? '✓' : '…'));
+    }),
+  );
+}
+
+function renderFinal() {
+  const f = view.final;
+  const p = view.phase;
+  if (p === 'finalWager') {
+    const zoom = lastScreen !== 'finalWager';
+    lastScreen = 'finalWager';
+    return h(
+      'div',
+      { class: 'tv-final', style: zoom ? '' : 'animation: none' },
+      h('p', { class: 'final-kicker' }, t('finalRound')),
+      h('h1', { class: 'final-cat' }, f.category),
+      h('p', { class: 'final-note' }, t('placeBets')),
+      finalTeams((id) => f.wagered.includes(id)),
+    );
+  }
+  if (p === 'finalQuestion') {
+    const zoom = lastScreen !== 'finalQuestion';
+    lastScreen = 'finalQuestion';
+    return h(
+      'div',
+      { class: `tv-q${f.image ? ' has-image' : ''}`, style: zoom ? '' : 'animation: none' },
+      h('div', { class: 'where' }, h('span', {}, `${t('finalRound')}: ${f.category}`)),
+      img(f.image, 'q-img'),
+      f.question ? h('p', { class: 'question' }, f.question) : h('div', { class: 'spacer' }),
+      h('div', { class: 'band' }, h('span', {}, t('typeAnswers')), countdown(view)),
+      finalTeams((id) => f.answered.includes(id)),
+    );
+  }
+  // finalJudge: each team's answer and bet appear as the host judges it.
+  lastScreen = 'finalJudge';
+  return h(
+    'div',
+    { class: 'tv-judge' },
+    h('div', { class: 'judge-q' }, h('span', { class: 'muted' }, `${t('finalRound')}: ${f.category}`), h('p', {}, f.question)),
+    h(
+      'ul',
+      { class: 'judge-cards' },
+      view.teams.map((tm) => {
+        const r = f.reveal[tm.id];
+        const verdict = f.judged[tm.id];
+        return h(
+          'li',
+          { class: `judge-card${r ? ' shown' : ''}${verdict === true ? ' right' : verdict === false ? ' wrong' : ''}`, style: teamStyle(tm) },
+          h('span', { class: 'who' }, tm.name),
+          h('span', { class: 'what' }, r ? r.answer || '—' : '?'),
+          r ? h('span', { class: 'bet' }, r.wager === 0 ? '0' : `${verdict ? '+' : '−'}${r.wager}`) : null,
+        );
+      }),
+    ),
+    f.answer ? h('p', { class: 'judge-answer' }, img(f.answerImage, 'judge-img'), h('span', {}, t('theAnswer')), h('b', {}, f.answer)) : null,
   );
 }
 
@@ -168,15 +250,16 @@ function renderGame() {
   let stage;
   if (p === 'board') {
     lastScreen = 'board';
+    preloadImages();
     stage = renderBoard();
   } else if (view.q) stage = renderQuestion();
   else if (p === 'over') stage = renderOver();
-  else stage = h('div', { class: 'tv-over' }, h('h1', {}, `${t('finalComing')}: ${view.final?.category ?? ''}`));
+  else stage = renderFinal();
 
   // The buzz takeover: the frame floods in the colour of the team that buzzed.
   const buzzed = p === 'answering' ? teamById(view.q.buzzedTeam) : null;
   const takeover = buzzed ? h('div', { class: `tv-takeover${fresh && ev.type === 'buzz' ? ' flash' : ''}`, style: teamStyle(buzzed) }) : null;
-  const bumped = fresh && ['correct', 'wrong', 'timeup'].includes(ev.type) ? ev.teamId : null;
+  const bumped = fresh && ['correct', 'wrong', 'timeup'].includes(ev.type) ? ev.teamId : null; // includes final judgements
 
   $('#game').replaceChildren(
     h('div', { class: 'tv-game' }, takeover, h('div', { class: 'tv-stage' }, stage), p === 'over' ? null : renderScores(bumped)),
