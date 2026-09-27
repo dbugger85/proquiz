@@ -2,7 +2,7 @@
 //
 // Keys: Space = turn buzzers on / back to the board, Y = correct, N = wrong, R = show answer,
 // Esc = put the question back, U = undo.
-import { ranking, COLORS } from '/lib/game.js';
+import { ranking, COLORS, KINDS } from '/lib/game.js';
 import { connect } from './net.js';
 import { t, setLang, translatePage } from './i18n.js';
 import { $, h, fill, qrSvg, shortUrl, countdown, runCountdowns, teamStyle } from './ui.js';
@@ -118,10 +118,32 @@ function renderSettings() {
     else el.value = String(value);
   }
   form.elements.finalSeconds.disabled = !view.settings.finalRound;
+  renderCrazyKinds();
+}
+
+// Kaosmodus: a tick for each special; unticked ones are left out of the game.
+function renderCrazyKinds() {
+  const box = $('#crazy-kinds');
+  box.hidden = view.settings.crazy === 'off';
+  const excluded = view.settings.crazyExclude;
+  if (!$('#crazy-kind-list').children.length) {
+    fill(
+      $('#crazy-kind-list'),
+      KINDS.map((kind) =>
+        h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'crazyKind', value: kind }), h('span', { class: `kind-icon k-${kind}` }, ICONS[kind]), h('span', { 'data-t': `n-${kind}` }, t(`n-${kind}`))),
+      ),
+    );
+  }
+  for (const input of box.querySelectorAll('input[name=crazyKind]')) input.checked = !excluded.includes(input.value);
+  $('#crazy-none').hidden = excluded.length < KINDS.length;
 }
 
 $('#settings').addEventListener('change', (e) => {
   const el = e.target;
+  if (el.name === 'crazyKind') {
+    const excluded = [...$('#settings').querySelectorAll('input[name=crazyKind]')].filter((x) => !x.checked).map((x) => x.value);
+    return cmd({ type: 'settings', settings: { crazyExclude: excluded } });
+  }
   let value = el.type === 'checkbox' ? el.checked : el.value;
   if (el.type === 'number') {
     value = Math.round(Number(value));

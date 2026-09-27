@@ -2305,3 +2305,31 @@ kbd {
   opacity: 1;
   box-shadow: 0 0 0 3px var(--bg), 0 0 0 6px #b9e8ff;
 }
+
+/* Kaosmodus: which specials to use (lobby settings). */
+.crazy-kinds {
+  border: 1px solid var(--edge);
+  border-radius: var(--r-m);
+  padding: 0.6rem 0.9rem 0.8rem;
+  margin: 0;
+}
+.crazy-kinds legend {
+  font-weight: 700;
+  padding: 0 0.3rem;
+}
+#crazy-kind-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 0.75rem;
+}
+#crazy-kind-list .check {
+  min-height: 40px;
+}
+.kind-icon {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.6rem;
+  font-family: var(--display);
+  font-weight: 800;
+  color: var(--k);
+}

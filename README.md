@@ -71,7 +71,7 @@ Download the zip for your computer from the [latest release](https://github.com/
 
 ### Crazy mode (Kaosmodus)
 
-Turn it on in the lobby's settings: **A little** hides about 3 special tiles on a 5×5 board, and **Lots** about 6. They land anywhere, and nobody (except you, on the laptop) knows where. When a team picks one, the TV spins a reel and lands on the special. Press **Space** to go on.
+Turn it on in the lobby's settings: **A little** hides about 3 special tiles on a 5×5 board, and **Lots** about 6. They land anywhere, and nobody (except you, on the laptop) knows where. Untick any specials you don't want under **Specials to use**. When a team picks one, the TV spins a reel and lands on the special. Press **Space** to go on.
 
 | Special | What happens |
 |---|---|

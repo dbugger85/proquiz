@@ -190,3 +190,26 @@ test('restart clears the specials; bad levels are refused', () => {
   assert.deepEqual(s.specials, {});
   assert.throws(() => apply(s, { type: 'settings', settings: { crazy: 'wild' } }), { code: 'bad-settings' });
 });
+
+test('the host can leave specials out', () => {
+  for (let seed = 1; seed < 100; seed++) {
+    const kinds = Object.values(placeSpecials({ set: sample, rng: seed }, 'lots', ['jackpot', 'bomb']));
+    assert.equal(kinds.length, 6);
+    assert.ok(!kinds.includes('jackpot') && !kinds.includes('bomb'));
+    assert.ok(kinds.includes('triple'));
+  }
+  // Only kinds that may appear once: the board gets just those.
+  const few = Object.values(placeSpecials({ set: sample, rng: 3 }, 'lots', ['triple', 'bomb', 'hotseat', 'freeze']));
+  assert.deepEqual(few.sort(), ['jackpot', 'rescue', 'turbo']);
+  // Everything left out: no specials at all.
+  assert.deepEqual(placeSpecials({ set: sample, rng: 3 }, 'lots', ['triple', 'bomb', 'hotseat', 'rescue', 'turbo', 'jackpot', 'freeze']), {});
+
+  // Through the settings, which keep a tidy list and refuse unknown kinds.
+  let s = newGame(sample, { crazy: 'lots' });
+  s = apply(s, { type: 'settings', settings: { crazyExclude: ['jackpot', 'turbo', 'jackpot'] } });
+  assert.deepEqual(s.settings.crazyExclude, ['turbo', 'jackpot']);
+  assert.throws(() => apply(s, { type: 'settings', settings: { crazyExclude: ['lava'] } }), { code: 'bad-settings' });
+  assert.throws(() => apply(s, { type: 'settings', settings: { crazyExclude: 'jackpot' } }), { code: 'bad-settings' });
+  s = run(s, { type: 'join', teamId: 'r', name: 'R', color: COLORS[0] }, { type: 'start', seed: 9 });
+  assert.ok(!Object.values(s.specials).some((k) => k === 'jackpot' || k === 'turbo'));
+});

@@ -61,7 +61,14 @@ try {
   // The lobby setting.
   await host.selectOption('select[name=crazy]', 'lots');
   await waitFor(() => state().settings.crazy === 'lots');
+  // Leave the jackpot out.
+  await host.waitForSelector('#crazy-kinds:not([hidden])');
+  await host.uncheck('#crazy-kind-list input[value=jackpot]');
+  await waitFor(() => state().settings.crazyExclude.join() === 'jackpot');
+  await host.evaluate(() => document.querySelector('#settings').scrollIntoView({ block: 'end' }));
   await shot(host, 'crazy-0-lobby');
+  await host.check('#crazy-kind-list input[value=jackpot]'); // back on: the game below uses every special
+  await waitFor(() => state().settings.crazyExclude.length === 0);
 
   // Start with one of each special in known places (normally the server places them at random).
   const specials = { '0-0': 'triple', '0-1': 'bomb', '0-2': 'hotseat', '0-3': 'rescue', '0-4': 'jackpot', '1-0': 'freeze', '1-1': 'turbo' };
