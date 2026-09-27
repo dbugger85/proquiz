@@ -1,6 +1,7 @@
 // Builds the double-click programs for every system into dist/, each zipped with a short "start here" note.
 //
 //   npm run build            (needs Deno and the zip command; downloads Deno's runtime for each system once)
+//   npm run build -- windows  (only some systems: windows, mac-apple-silicon, mac-intel, linux-x64, linux-arm64)
 //
 // The programs contain everything: the server, the pages, the fonts, the sample quizzes.
 
@@ -51,11 +52,17 @@ Your quizzes and the autosave are kept in ~/ProQuiz.
 `,
 };
 
-rmSync(dist, { recursive: true, force: true });
+const only = process.argv.slice(2);
+const targets = only.length ? TARGETS.filter((t) => only.includes(t.name)) : TARGETS;
+if (!targets.length) throw new Error(`Unknown system. Use: ${TARGETS.map((t) => t.name).join(', ')}`);
+// A full build starts from an empty dist/; building only some systems keeps the other zips.
+if (!only.length) rmSync(dist, { recursive: true, force: true });
 mkdirSync(dist, { recursive: true });
 
-for (const t of TARGETS) {
+for (const t of targets) {
   const dir = join(dist, `ProQuiz-${version}-${t.name}`);
+  rmSync(dir, { recursive: true, force: true });
+  rmSync(`${dir}.zip`, { force: true });
   mkdirSync(dir, { recursive: true });
   console.log(`Building ${t.name}…`);
   execFileSync(
