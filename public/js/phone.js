@@ -134,6 +134,19 @@ function stage() {
       h('button', { class: 'btn btn-quiet', type: 'button', onclick: () => ((editing = true), render()) }, t('changeTeam')),
     ];
   }
+  // Kaosmodus
+  if (s === 'special') return [h('div', { class: 'big' }, '👀'), h('div', { class: 'big' }, t('lookTv'))];
+  if (s === 'frozen') return [h('div', { class: 'big' }, '🧊'), h('div', { class: 'big' }, t('frozenBig')), h('p', { class: 'small' }, t('frozenSmall'))];
+  if (s === 'standBack') {
+    return [view.turbo ? h('p', { class: 'kicker' }, t('turboOf', { n: view.turbo.n, total: view.turbo.total })) : null, h('div', { class: 'big' }, t('standBack', { name: nameOf(view.solo) }))];
+  }
+  if (s === 'soloReady') {
+    return [view.turbo ? h('p', { class: 'kicker' }, t('turboOf', { n: view.turbo.n, total: view.turbo.total })) : null, h('div', { class: 'big' }, t('soloReady')), h('p', { class: 'small' }, t('soloReadySmall'))];
+  }
+  if (s === 'solo') return [h('div', { class: 'big' }, t('answerNow')), countdown(view)];
+  if (view.phase === 'revealed' && ev?.type === 'boom' && ev.teamId === me.id) {
+    return [h('div', { class: 'big' }, '💥'), h('div', { class: 'big' }, t('boomYou', { n: ev.amount ?? 0 }))];
+  }
   if (s === 'armed') return [buzzer(true)];
   if (s === 'first') return [h('div', { class: 'big' }, t('youreFirst')), h('p', { class: 'small' }, t('answerNow')), countdown(view)];
   if (s === 'other') return [h('div', { class: 'big' }, t('otherFirst', { name: nameOf(view.buzzedTeam) }))];
@@ -234,6 +247,7 @@ function react() {
   if (!ev || ev.seq === lastSeq || !view.you) return;
   const first = lastSeq === 0;
   lastSeq = ev.seq;
+  if (!first && ev.type === 'special') navigator.vibrate?.([80, 60, 80, 60, 250]);
   if (first || ev.teamId !== view.you.id) return;
   const team = $('#team');
   const again = (cls) => {
@@ -244,6 +258,9 @@ function react() {
   if (ev.type === 'buzz') {
     again('first');
     navigator.vibrate?.(200);
+  } else if (ev.type === 'boom') {
+    again('shake');
+    navigator.vibrate?.([600, 100, 300]);
   } else if (ev.type === 'early' || ev.type === 'wrong' || ev.type === 'timeup') {
     again('shake');
     navigator.vibrate?.([60, 60, 60]);

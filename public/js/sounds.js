@@ -138,6 +138,32 @@ export const sounds = {
     // A suspense sting for the final round.
     [48, 55, 60, 63].forEach((m, i) => note(hz(m), { at: i * 0.18, dur: 1.6 - i * 0.18, type: 'sawtooth', gain: 0.08, filter: 1200 }));
   },
+  // Kaosmodus reveal: the reel ticks, slowing down, then a sting for what it landed on.
+  mystery(kind) {
+    let at = 0;
+    for (let n = 0; n < 16; n++) {
+      note(1200 + (n % 2) * 300, { at, dur: 0.035, type: 'square', gain: 0.07, filter: 5000 });
+      at += 0.04 + n * n * 0.0045;
+    }
+    const sting = {
+      triple: () => [76, 83, 88].forEach((m, i) => note(hz(m), { at: at + i * 0.1, dur: 0.5, type: 'triangle', gain: 0.2 })),
+      bomb: () => {
+        note(90, { at, dur: 1.1, type: 'sawtooth', gain: 0.2, slide: 45, filter: 400 });
+        note(hz(55), { at, dur: 0.9, type: 'square', gain: 0.06, filter: 700 });
+      },
+      turbo: () => [0, 1, 2, 3, 4, 5].forEach((n) => note(hz(79 + n * 2), { at: at + n * 0.06, dur: 0.08, type: 'square', gain: 0.1, filter: 3000 })),
+      jackpot: () => [72, 76, 79, 84, 88].forEach((m, i) => note(hz(m + 12), { at: at + i * 0.07, dur: 0.6, type: 'triangle', gain: 0.14 })),
+      freeze: () => [96, 91, 88, 84].forEach((m, i) => note(hz(m), { at: at + i * 0.09, dur: 0.5, gain: 0.12 })),
+      hotseat: () => note(hz(60), { at, dur: 0.8, type: 'sawtooth', gain: 0.12, slide: hz(72), filter: 1800 }),
+      rescue: () => [67, 72, 76].forEach((m, i) => note(hz(m), { at: at + i * 0.14, dur: 0.4, type: 'triangle', gain: 0.18 })),
+    }[kind];
+    sting?.();
+  },
+  boom() {
+    whoosh({ dur: 0.9, gain: 0.35 });
+    note(70, { dur: 1.4, type: 'sawtooth', gain: 0.3, slide: 30, filter: 300 });
+    note(45, { at: 0.05, dur: 1.2, type: 'sine', gain: 0.35, slide: 25 });
+  },
   fanfare() {
     // Da-da-da-daaa, with a big major chord at the end.
     const brass = (m, at, dur) => {
@@ -197,6 +223,12 @@ export function playEvent(view, ev, colors) {
       break;
     case 'over':
       sounds.fanfare();
+      break;
+    case 'special':
+      sounds.mystery(ev.kind);
+      break;
+    case 'boom':
+      sounds.boom();
       break;
   }
 }

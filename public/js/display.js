@@ -5,6 +5,7 @@ import { t, setLang, translatePage } from './i18n.js';
 import { $, h, qrSvg, shortUrl, countdown, runCountdowns, teamStyle } from './ui.js';
 import { unlockAudio, audioReady, playEvent, playSound, startTicks } from './sounds.js';
 import { syncClip, preloadClips } from './clip.js';
+import { ICONS, ruleFor, badgeFor } from './specials.js';
 
 let view = null;
 let connected = new Set();
@@ -98,6 +99,10 @@ function renderBoard() {
 function band() {
   const q = view.q;
   const p = view.phase;
+  if (p === 'reading' && q.solo) {
+    const team = teamById(q.solo);
+    return [h('span', { class: 'plate buzzed-name', style: teamStyle(team) }, t('standBack', { name: team.name }))];
+  }
   if (p === 'reading') return [h('span', { class: 'muted' }, t('getReady'))];
   if (p === 'armed') {
     const wrong = view.event?.reopened ? teamById(view.event.teamId) : null;
@@ -109,7 +114,10 @@ function band() {
   }
   if (p === 'revealed') {
     const r = q.result;
-    if (r.type === 'correct') return [h('span', { class: 'plate buzzed-name', style: teamStyle(teamById(r.teamId)) }, `${teamById(r.teamId)?.name} +${q.value}`)];
+    if (r.type === 'correct') {
+      const won = q.won ? ` +${q.won} ${ICONS.jackpot}` : '';
+      return [h('span', { class: 'plate buzzed-name', style: teamStyle(teamById(r.teamId)) }, `${teamById(r.teamId)?.name} +${q.value}${won}`)];
+    }
     return [h('span', { class: 'muted' }, r.type === 'timeout' ? t('resultTimeout') : t('resultNobody'))];
   }
   return [];
@@ -135,8 +143,53 @@ function clipViz() {
   return h('div', { class: `clip-viz${view.media?.playing ? ' on' : ''}`, 'aria-hidden': 'true' }, [1, 2, 3, 4, 5, 6, 7].map(() => h('span')));
 }
 
+// ----- Kaosmodus -----
+
+// The reel of icons the reveal spins through, fixed per tile so re-drawing doesn't reshuffle it.
+const reels = new Map();
+function reelFor(key, kind) {
+  if (!reels.has(key)) {
+    const kinds = Object.keys(ICONS);
+    const reel = [];
+    for (let n = 0; n < 14; n++) reel.push(kinds[Math.floor(Math.random() * kinds.length)]);
+    reel.push(kind);
+    reels.set(key, reel);
+  }
+  return reels.get(key);
+}
+
+function renderSpecialTv() {
+  const q = view.q;
+  const key = `s${q.c}-${q.i}`;
+  const fresh = lastScreen !== key;
+  lastScreen = key;
+  const reel = reelFor(key, q.special);
+  const picker = teamById(view.picker);
+  return h(
+    'div',
+    { class: `tv-special k-${q.special}${fresh ? ' spin' : ''}` },
+    h('div', { class: 'reel' }, h('div', { class: 'reel-strip', style: `--n: ${reel.length}` }, reel.map((k) => h('span', {}, ICONS[k])))),
+    h('div', { class: 'special-text' }, h('h1', {}, t(`k-${q.special}`)), h('p', {}, ruleFor(view)), picker ? h('span', { class: 'plate special-team', style: teamStyle(picker) }, picker.name) : null),
+  );
+}
+
+function renderBoom() {
+  const q = view.q;
+  const team = teamById(q.result.teamId);
+  const fresh = lastScreen !== `boom${q.c}-${q.i}`;
+  lastScreen = `boom${q.c}-${q.i}`;
+  return h(
+    'div',
+    { class: `tv-boom${fresh ? ' bang' : ''}` },
+    h('span', { class: 'boom-icon' }, '💥'),
+    h('h1', {}, 'BOOM!'),
+    team ? h('span', { class: 'plate buzzed-name', style: teamStyle(team) }, `${team.name} −${q.result.amount}`) : null,
+  );
+}
+
 function renderQuestion() {
   const q = view.q;
+  if (q.result?.type === 'boom') return renderBoom();
   const zoom = lastScreen !== `q${q.c}-${q.i}`;
   lastScreen = `q${q.c}-${q.i}`;
   // When the answer comes with its own picture, it takes the question picture's place.
@@ -144,7 +197,7 @@ function renderQuestion() {
   return h(
     'div',
     { class: `tv-q${picture ? ' has-image' : ''}`, style: zoom ? '' : 'animation: none' },
-    h('div', { class: 'where' }, h('span', {}, view.set.categories[q.c].name), h('b', {}, String(q.value))),
+    h('div', { class: 'where' }, h('span', {}, view.set.categories[q.c].name), q.special ? h('span', { class: `special-badge k-${q.special}` }, badgeFor(view)) : null, h('b', {}, String(q.value))),
     img(picture, `q-img${q.answerImage ? ' reveal-img' : ''}`),
     picture ? null : clipViz(),
     q.question ? h('p', { class: 'question' }, q.question) : h('div', { class: 'spacer' }),
@@ -263,7 +316,8 @@ function renderGame() {
     lastScreen = 'board';
     preloadImages();
     stage = renderBoard();
-  } else if (view.q) stage = renderQuestion();
+  } else if (p === 'special') stage = renderSpecialTv();
+  else if (view.q) stage = renderQuestion();
   else if (p === 'over') stage = renderOver();
   else stage = renderFinal();
 

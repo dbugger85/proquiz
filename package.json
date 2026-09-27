@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node server.js",
     "test": "node --test test/*.test.js",
-    "e2e": "node test/e2e.mjs",
+    "e2e": "node test/e2e.mjs && node test/e2e-crazy.mjs",
     "build": "node scripts/build.mjs"
   },
   "dependencies": {

@@ -2113,3 +2113,195 @@ kbd {
   min-width: 0;
   padding: 0 0.4rem;
 }
+
+/* ---------- Kaosmodus ---------- */
+
+/* Each special has its own colour. */
+.k-triple { --k: #ffd23f; --k-ink: #2b1d00; }
+.k-bomb { --k: #ff4d4d; --k-ink: #2a0000; }
+.k-hotseat { --k: #ff7a1a; --k-ink: #2a0e00; }
+.k-rescue { --k: #2ee59d; --k-ink: #03281a; }
+.k-turbo { --k: #7fe1ff; --k-ink: #032733; }
+.k-jackpot { --k: #ffc233; --k-ink: #2b1d00; }
+.k-freeze { --k: #b9e8ff; --k-ink: #06283a; }
+
+.special-badge {
+  font-family: var(--display);
+  font-weight: 700;
+  padding: 0.15em 0.7em;
+  border-radius: var(--pill);
+  background: var(--k);
+  color: var(--k-ink);
+  white-space: nowrap;
+}
+.tv-q .where .special-badge {
+  font-size: 2.6vh;
+  margin-left: auto;
+  margin-right: 1.5vw;
+}
+
+/* The TV reveal: a reel of icons spins and lands on the special. */
+.tv-special {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4vh;
+  text-align: center;
+  border-radius: 4vh;
+  background: radial-gradient(60% 60% at 50% 40%, color-mix(in srgb, var(--k) 30%, transparent), transparent 70%);
+}
+.reel {
+  height: 30vh;
+  width: 30vh;
+  overflow: hidden;
+  border-radius: 5vh;
+  background: rgb(0 0 0 / 0.35);
+  box-shadow: inset 0 0 0 0.6vh var(--k), 0 0 10vh color-mix(in srgb, var(--k) 45%, transparent);
+}
+.reel-strip {
+  display: flex;
+  flex-direction: column;
+  transform: translateY(calc((var(--n) - 1) * -30vh));
+}
+.reel-strip span {
+  height: 30vh;
+  display: grid;
+  place-items: center;
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 16vh;
+  line-height: 1;
+  color: var(--k);
+}
+.tv-special.spin .reel-strip {
+  animation: reel 1.9s cubic-bezier(0.12, 0.7, 0.18, 1) both;
+}
+@keyframes reel {
+  from {
+    transform: translateY(0);
+  }
+}
+.special-text {
+  display: grid;
+  justify-items: center;
+  gap: 2vh;
+}
+.special-text h1 {
+  font-size: 12vh;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  color: var(--k);
+  text-shadow: 0 0 6vh color-mix(in srgb, var(--k) 50%, transparent);
+}
+.special-text p {
+  margin: 0;
+  font-size: 4vh;
+  font-weight: 700;
+  max-width: 34ch;
+  text-wrap: balance;
+}
+.special-team {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 3vh;
+  padding: 1.2vh 3vw;
+  border-radius: var(--pill);
+}
+.tv-special.spin .special-text {
+  animation: plate-in 500ms 1.9s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+
+.tv-boom {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3vh;
+  border-radius: 4vh;
+  background: radial-gradient(55% 55% at 50% 45%, rgb(255 77 77 / 0.4), transparent 70%);
+}
+.boom-icon {
+  font-size: 30vh;
+  line-height: 1;
+}
+.tv-boom h1 {
+  font-size: 16vh;
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  color: #ff4d4d;
+  text-shadow: 0 0 8vh rgb(255 77 77 / 0.6);
+}
+.tv-boom.bang {
+  animation: bang 700ms cubic-bezier(0.2, 1.6, 0.4, 1);
+}
+@keyframes bang {
+  0% {
+    transform: scale(0.2);
+    opacity: 0;
+    background-color: #fff;
+  }
+  20% {
+    background-color: rgb(255 255 255 / 0.6);
+  }
+}
+
+/* Host: the special card, special tiles on the board, the freeze choice. */
+.host-board .tile {
+  position: relative;
+}
+.tile-special {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  font-size: 0.9rem;
+  line-height: 1;
+}
+.host-board .tile[data-special] {
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.25);
+}
+.specials-note {
+  margin-top: 0.75rem;
+}
+.special-card {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.25rem;
+  max-width: 720px;
+  border-radius: var(--r-l);
+  background: color-mix(in srgb, var(--k) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--k) 60%, transparent);
+}
+.special-card h2 {
+  font-size: 1.8rem;
+  color: var(--k);
+}
+.special-card p {
+  margin: 0.4rem 0 0;
+  font-size: 1.1rem;
+}
+.special-icon {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 3rem;
+  color: var(--k);
+  line-height: 1;
+}
+.freeze-pick p {
+  font-weight: 700;
+  margin: 0 0 0.6rem;
+}
+.freeze-pick .btn.plate {
+  border: 0;
+  background: var(--team);
+  color: var(--team-ink);
+  opacity: 0.55;
+}
+.freeze-pick .btn.plate.on {
+  opacity: 1;
+  box-shadow: 0 0 0 3px var(--bg), 0 0 0 6px #b9e8ff;
+}

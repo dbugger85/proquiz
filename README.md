@@ -10,6 +10,7 @@ A Jeopardy-style quiz for teams in the same room. A laptop runs the game, a TV s
 - Pictures and sound clips in questions ("Which song is this?").
 - A final round: teams bet, type their answers on their phones, and you judge each one.
 - A question editor, English and Norwegian, and an autosave that survives a crash.
+- **Crazy mode (Kaosmodus):** hidden special tiles, revealed on the TV with a spinning reel. They include bombs, triple points, a hot seat, a rescue for the team in last place, a three-question turbo, a jackpot and a freeze.
 
 ## Screenshots
 
@@ -21,6 +22,8 @@ A Jeopardy-style quiz for teams in the same room. A laptop runs the game, a TV s
 | The board | A picture question |
 | ![A sound clip question, with moving sound bars while the clip plays](docs/screenshots/tv-sound-clip.jpg) | ![The final round: each team's answer and bet, marked right or wrong, and the correct answer](docs/screenshots/tv-final.jpg) |
 | A sound clip question | The final round, judged |
+| ![Crazy mode: a Triple tile revealed](docs/screenshots/tv-crazy-triple.jpg) | ![Crazy mode: a bomb goes off, BOOM, Blue Steel loses 200](docs/screenshots/tv-crazy-boom.jpg) |
+| Crazy mode: triple points | Crazy mode: the bomb |
 
 **On the phones**
 
@@ -65,6 +68,20 @@ Download the zip for your computer from the [latest release](https://github.com/
 4. **Teams join:** they scan the QR code on the TV, type a team name and pick a colour. They can press **Try your buzzer** to hear their tone.
 5. **Settings:** in the lobby, choose the quiz, the language, what a wrong answer costs, and the timers.
 6. **Start game.**
+
+### Crazy mode (Kaosmodus)
+
+Turn it on in the lobby's settings: **A little** hides about 3 special tiles on a 5×5 board, and **Lots** about 6. They land anywhere, and nobody (except you, on the laptop) knows where. When a team picks one, the TV spins a reel and lands on the special. Press **Space** to go on.
+
+| Special | What happens |
+|---|---|
+| ×3 **Triple** | Three times the points, and three times the penalty for every wrong answer |
+| 💣 **Bomb** | No question: the picking team loses the tile's points |
+| 🔥 **Hot seat** | Only the picking team may answer |
+| 🛟 **Rescue** | The team in last place answers alone, and a wrong answer costs nothing |
+| ⚡ **Turbo** | The picking team gets three questions in a row, 5 seconds each, with no penalty |
+| 💰 **Jackpot** | Every point lost to wrong answers and bombs has gone into a secret pot. Answer right to win it |
+| 🧊 **Freeze** | The picking team chooses a team that can't buzz on this question (you click it on the laptop) |
 
 ### Playing
 

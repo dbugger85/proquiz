@@ -8,6 +8,7 @@ import { t, setLang, translatePage } from './i18n.js';
 import { $, h, fill, qrSvg, shortUrl, countdown, runCountdowns, teamStyle } from './ui.js';
 import { unlockAudio, audioReady, playEvent, playSound, startTicks } from './sounds.js';
 import { syncClip, stopClip } from './clip.js';
+import { ICONS, ruleFor, badgeFor } from './specials.js';
 
 let view = null;
 let connected = new Set();
@@ -178,8 +179,11 @@ function controls() {
   const p = view.phase;
   const list = [];
   const add = (key, label, action, cls = '') => list.push({ key, label, action, cls });
-  if (p === 'reading') {
-    add(' ', t('armBtn'), { type: 'arm' }, 'btn-primary');
+  if (p === 'special') {
+    add(' ', view.q.special === 'bomb' ? t('bombGo') : t('specialGo'), { type: 'next' }, 'btn-primary');
+    add('Escape', t('cancelBtn'), { type: 'cancel' });
+  } else if (p === 'reading') {
+    add(' ', view.q.solo ? t('soloArm') : t('armBtn'), { type: 'arm' }, 'btn-primary');
     add('r', t('revealBtn'), { type: 'reveal' });
     add('Escape', t('cancelBtn'), { type: 'cancel' });
   } else if (p === 'armed') {
@@ -285,19 +289,58 @@ function renderBoard() {
           'div',
           { class: 'col' },
           h('div', { class: 'cat' }, cat.name),
-          cat.questions.map((q, i) =>
-            h('button', { class: 'tile', type: 'button', disabled: view.used[c][i], onclick: () => cmd({ type: 'pick', c, i }) }, String(q.value)),
-          ),
+          cat.questions.map((q, i) => {
+            const kind = view.used[c][i] ? null : view.specials?.[`${c}-${i}`];
+            return h(
+              'button',
+              { class: 'tile', type: 'button', disabled: view.used[c][i], 'data-special': kind || false, title: kind ? t(`k-${kind}`) : false, onclick: () => cmd({ type: 'pick', c, i }) },
+              String(q.value),
+              kind ? h('span', { class: 'tile-special' }, ICONS[kind]) : null,
+            );
+          }),
         ),
       ),
     ),
+    Object.keys(view.specials ?? {}).length ? h('p', { class: 'board-hint specials-note' }, t('specialsNote')) : null,
+  );
+}
+
+// Kaosmodus: the reveal, as the host sees it (the freeze choice is made here).
+function renderSpecialHost() {
+  const q = view.q;
+  const kind = q.special;
+  return h(
+    'div',
+    { class: 'host-q host-special' },
+    h('p', { class: 'where' }, `${view.set.categories[q.c].name} `, h('b', {}, String(q.value))),
+    h('div', { class: `special-card k-${kind}` }, h('span', { class: 'special-icon' }, ICONS[kind]), h('div', {}, h('h2', {}, t(`k-${kind}`)), h('p', {}, ruleFor(view)))),
+    kind === 'freeze'
+      ? h(
+          'div',
+          { class: 'freeze-pick' },
+          h('p', {}, t('freezePick')),
+          h(
+            'div',
+            { class: 'row' },
+            view.teams
+              .filter((tm) => tm.id !== view.picker)
+              .map((tm) =>
+                h(
+                  'button',
+                  { class: `btn plate${q.frozen === tm.id ? ' on' : ''}`, style: teamStyle(tm), type: 'button', 'aria-pressed': String(q.frozen === tm.id), onclick: () => cmd({ type: 'freeze', teamId: tm.id }) },
+                  `${ICONS.freeze} ${tm.name}`,
+                ),
+              ),
+          ),
+        )
+      : null,
   );
 }
 
 function statusLine() {
   const q = view.q;
   const p = view.phase;
-  if (p === 'reading') return h('p', { class: 'host-status' }, t('statusReading'));
+  if (p === 'reading') return h('p', { class: 'host-status' }, q.solo ? t('soloStatus', { name: teamName(q.solo) }) : t('statusReading'));
   if (p === 'armed') {
     const wrongTeam = view.event?.reopened ? view.event.teamId : null;
     return h('p', { class: 'host-status' }, wrongTeam ? t('wrongReopen', { name: teamName(wrongTeam) }) : t('buzzersOn'));
@@ -309,7 +352,15 @@ function statusLine() {
   if (p === 'revealed') {
     const r = q.result;
     const text =
-      r.type === 'correct' ? t('resultCorrect', { name: teamName(r.teamId), n: q.value }) : r.type === 'timeout' ? t('resultTimeout') : t('resultNobody');
+      r.type === 'boom'
+        ? t('boomResult', { name: teamName(r.teamId), n: r.amount })
+        : r.type === 'correct' && q.won
+          ? t('jackpotWon', { name: teamName(r.teamId), n: q.value, pot: q.won })
+          : r.type === 'correct'
+            ? t('resultCorrect', { name: teamName(r.teamId), n: q.value })
+            : r.type === 'timeout'
+              ? t('resultTimeout')
+              : t('resultNobody');
     return h('p', { class: 'host-status' }, text);
   }
   return null;
@@ -332,7 +383,7 @@ function renderQuestion() {
   return h(
     'div',
     { class: 'host-q' },
-    h('p', { class: 'where' }, `${view.set.categories[q.c].name} `, h('b', {}, String(q.value))),
+    h('p', { class: 'where' }, `${view.set.categories[q.c].name} `, h('b', {}, String(q.value)), q.special ? h('span', { class: `special-badge k-${q.special}` }, badgeFor(view)) : null),
     src.image || src.answerImage
       ? h('div', { class: 'host-imgs' }, img(src.image, 'host-img', t('picQuestion')), img(src.answerImage, 'host-img', t('picAnswer')))
       : null,
@@ -444,6 +495,7 @@ function renderGame() {
   const p = view.phase;
   let main;
   if (p === 'board') main = renderBoard();
+  else if (p === 'special') main = renderSpecialHost();
   else if (view.q) main = renderQuestion();
   else if (p === 'over') main = renderOver();
   else main = renderFinal();

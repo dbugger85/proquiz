@@ -136,7 +136,7 @@ function listen(server, port, tries = 10) {
 // What the host laptop may do, and what a phone may do (always for its own team).
 const HOST_ACTIONS = new Set([
   'settings', 'loadSet', 'start', 'setPicker', 'pick', 'arm', 'correct', 'wrong', 'reveal', 'cancel',
-  'next', 'end', 'judgeFinal', 'adjust', 'undo', 'restart', 'removeTeam', 'mediaToggle', 'mediaRestart',
+  'next', 'end', 'judgeFinal', 'adjust', 'undo', 'restart', 'removeTeam', 'mediaToggle', 'mediaRestart', 'freeze',
 ]);
 const PHONE_ACTIONS = new Set(['buzz', 'wager', 'finalAnswer']);
 
@@ -340,8 +340,10 @@ export function createHub({ set, info, saved = null, save = () => {}, store = nu
     }
     if (c.role === 'host' && msg.type === 'cmd' && HOST_ACTIONS.has(msg.action?.type)) {
       const action = { ...msg.action };
-      if (action.type === 'start' && !action.picker && state.teams.length) {
-        action.picker = state.teams[Math.floor(Math.random() * state.teams.length)].id;
+      if (action.type === 'start') {
+        if (!action.picker && state.teams.length) action.picker = state.teams[Math.floor(Math.random() * state.teams.length)].id;
+        action.seed = Math.floor(Math.random() * 2 ** 32); // Kaosmodus: where the specials go
+        delete action.specials; // only tests place specials by hand
       }
       return dispatch(action);
     }
@@ -385,6 +387,7 @@ export function createHub({ set, info, saved = null, save = () => {}, store = nu
   return {
     connect,
     setSaved,
+    dispatch, // for tests (e.g. placing Kaosmodus specials by hand)
     getState: () => state,
     stop() {
       clearTimeout(timer);

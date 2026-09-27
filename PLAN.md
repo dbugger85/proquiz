@@ -32,6 +32,7 @@ A Jeopardy-style quiz for teams in one room. The host laptop runs the game, a TV
 10. ✅ Packaging: `npm run build` makes zips for Windows, Mac (Apple Silicon and Intel) and Linux (x64 and arm64), published as GitHub releases
 
 ## Also done
+- Kaosmodus / Crazy mode (planned with Fable, decided by the user on 2026-09-27): an instant bomb, triple, hot seat, rescue (no penalty), turbo (the picking team, 3 random questions, 5 s each, no penalty, no buzzing), jackpot (a secret pot), and freeze, with a mystery-reel reveal on the TV. Off / a little (≈3) / lots (≈6) at random anywhere on the board, and no badge. Placing specials by hand in the editor isn't built.
 - Sound clips in questions (asked for by the user), e.g. "Which song is this?". A clip plays on the TV when the question opens, pauses on a buzz, plays on when others may buzz again and at the reveal. The host has P (play/pause) and 0 (from the start). Each clip can have a start time.
 - Pictures in questions (asked for by the user): `image` shows with the question, `answerImage` only when the answer is revealed. This works for the final question too, and a picture can replace the question text.
 - A modern redesign (2026-09-26, asked for by the user): ink-violet stage, glass tiles, the Unbounded font.
