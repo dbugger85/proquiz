@@ -145,14 +145,14 @@ export const sounds = {
     // A suspense sting for the final round.
     [48, 55, 60, 63].forEach((m, i) => note(hz(m), { at: i * 0.18, dur: 1.6 - i * 0.18, type: 'sawtooth', gain: 0.08, filter: 1200 }));
   },
-  // Kaosmodus reveal: the reel ticks, slowing down, then a sting for what it landed on.
+  // Kaosmodus reveal: the reel ticks, slowing down over ~1.9 s (as long as the TV's reel animation),
+  // then the special's own sting as it lands.
   mystery(kind) {
-    let at = 0;
-    for (let n = 0; n < 16; n++) {
-      note(1200 + (n % 2) * 300, { at, dur: 0.035, type: 'square', gain: 0.07, filter: 5000 });
-      at += 0.04 + n * n * 0.0045;
-    }
-    const sting = {
+    sounds.sting(kind, sounds.reel());
+  },
+  // Each special's own sound (on its own, `at` = 0).
+  sting(kind, at = 0) {
+    const stings = {
       triple: () => [76, 83, 88].forEach((m, i) => note(hz(m), { at: at + i * 0.1, dur: 0.5, type: 'triangle', gain: 0.2 })),
       bomb: () => {
         note(90, { at, dur: 1.1, type: 'sawtooth', gain: 0.2, slide: 45, filter: 400 });
@@ -163,8 +163,17 @@ export const sounds = {
       freeze: () => [96, 91, 88, 84].forEach((m, i) => note(hz(m), { at: at + i * 0.09, dur: 0.5, gain: 0.12 })),
       hotseat: () => note(hz(60), { at, dur: 0.8, type: 'sawtooth', gain: 0.12, slide: hz(72), filter: 1800 }),
       rescue: () => [67, 72, 76].forEach((m, i) => note(hz(m), { at: at + i * 0.14, dur: 0.4, type: 'triangle', gain: 0.18 })),
-    }[kind];
-    sting?.();
+    };
+    stings[kind]?.();
+  },
+  // The reel's ticks; returns how long they last (in seconds).
+  reel() {
+    let at = 0;
+    for (let n = 0; n < 16; n++) {
+      note(1200 + (n % 2) * 300, { at, dur: 0.035, type: 'square', gain: 0.07, filter: 5000 });
+      at += 0.035 + n * n * 0.0011;
+    }
+    return at;
   },
   boom() {
     whoosh({ dur: 0.9, gain: 0.35 });
