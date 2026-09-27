@@ -129,7 +129,7 @@ test('the server runs the timers', async () => {
 test('the game is saved, and after a restart the host can continue it', async () => {
   const host = await client('host');
   host.send({ type: 'cmd', action: { type: 'adjust', teamId: srv.hub.getState().teams[0].id, delta: 700 } });
-  host.send({ type: 'cmd', action: { type: 'settings', settings: { penalty: 'full' } } });
+  host.send({ type: 'cmd', action: { type: 'settings', settings: { penalty: 'full', musicFiles: { lobby: '0123456789abcdef.mp3' }, musicVolume: 50 } } });
   await new Promise((r) => setTimeout(r, 400));
   host.close();
   const file = join(dataDir, 'autosave.json');
@@ -145,6 +145,8 @@ test('the game is saved, and after a restart the host can continue it', async ()
   assert.equal(srv.hub.getState().phase, 'lobby');
   assert.equal(srv.hub.getState().teams.length, 0);
   assert.equal(srv.hub.getState().settings.penalty, 'full'); // settings carry over to a new game
+  assert.deepEqual(srv.hub.getState().settings.musicFiles, { lobby: '0123456789abcdef.mp3' }); // and your own music
+  assert.equal(srv.hub.getState().settings.musicVolume, 50);
 
   // A phone comes back before the host decides: it doesn't know its team yet.
   const p = await client('phone', teamId);

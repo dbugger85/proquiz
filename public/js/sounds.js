@@ -3,6 +3,7 @@
 
 let ctx = null;
 let master = null;
+let limiter = null;
 let volume = 0.8;
 
 function audio() {
@@ -13,10 +14,11 @@ function audio() {
     master = ctx.createGain();
     master.gain.value = volume;
     // A gentle limiter so chords never clip on loud TV speakers.
-    const comp = ctx.createDynamicsCompressor();
-    comp.threshold.value = -10;
-    comp.ratio.value = 6;
-    master.connect(comp).connect(ctx.destination);
+    limiter = ctx.createDynamicsCompressor();
+    limiter.threshold.value = -10;
+    limiter.ratio.value = 6;
+    limiter.connect(ctx.destination);
+    master.connect(limiter);
   }
   return ctx;
 }
@@ -28,6 +30,11 @@ export function unlockAudio() {
 }
 
 export const audioReady = () => ctx?.state === 'running';
+
+// The shared audio setup, for the background music (which has its own volume but the same limiter).
+export function audioGraph() {
+  return audioReady() ? { ctx, limiter } : null;
+}
 
 export function setVolume(v) {
   volume = v;

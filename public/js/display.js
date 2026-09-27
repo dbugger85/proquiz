@@ -5,6 +5,7 @@ import { t, setLang, translatePage } from './i18n.js';
 import { $, h, qrSvg, shortUrl, countdown, runCountdowns, teamStyle } from './ui.js';
 import { unlockAudio, audioReady, playEvent, playSound, startTicks } from './sounds.js';
 import { syncClip, preloadClips } from './clip.js';
+import { syncMusic } from './music.js';
 import { ICONS, ruleFor, badgeFor } from './specials.js';
 
 let view = null;
@@ -35,12 +36,17 @@ startTicks(() => view, net.now);
 
 // The TV plays the sounds. Browsers need one click or key press first.
 function showUnlock() {
-  $('#sound-unlock').hidden = !view?.settings.sound || audioReady();
+  $('#sound-unlock').hidden = !(view?.settings.sound || view?.settings.music) || audioReady();
 }
+// The background music follows every update, and checks a few times a second for "time's nearly up".
+setInterval(() => view && syncMusic(view, net.now()), 250);
 for (const type of ['pointerdown', 'keydown']) {
   document.addEventListener(type, () => {
     unlockAudio();
-    setTimeout(showUnlock, 100);
+    setTimeout(() => {
+      showUnlock();
+      if (view) syncMusic(view, net.now());
+    }, 100);
   });
 }
 
@@ -198,7 +204,11 @@ const stepAt = (u, now) => Math.min(STEPS.length, Math.floor(unveilProgress(u, n
 
 function unveilCanvas(q) {
   const u = q.unveil;
-  return h('canvas', { class: 'q-img unveil', 'data-file': q.image, 'data-ms': u.ms, 'data-done': u.done, 'data-since': u.since ?? '' });
+  const key = `${q.c}-${q.i}`;
+  // Keep the canvas that's already on screen (with its drawing), so updates never flash an empty picture.
+  const canvas = document.querySelector(`canvas.unveil[data-q="${key}"]`) ?? h('canvas', { class: 'q-img unveil', 'data-q': key, 'data-file': q.image });
+  Object.assign(canvas.dataset, { ms: u.ms, done: u.done, since: u.since ?? '' });
+  return canvas;
 }
 
 function drawStep(canvas, img, step) {
@@ -398,5 +408,6 @@ function render() {
   if (inLobby) renderLobby();
   else renderGame();
   syncClip(view, view.q ? `q${view.q.c}-${view.q.i}` : 'final');
+  syncMusic(view, net.now());
   showUnlock();
 }

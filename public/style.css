@@ -2338,3 +2338,40 @@ kbd {
 canvas.q-img.unveil {
   image-rendering: pixelated;
 }
+
+/* Background music settings. */
+input[type='range'] {
+  width: 100%;
+  accent-color: var(--light);
+}
+.music-files small {
+  color: var(--muted);
+}
+.music-row {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.6rem 0;
+  border-top: 1px solid var(--edge);
+}
+.music-row:first-child {
+  border-top: 0;
+}
+.music-mood {
+  font-weight: 700;
+}
+.music-builtin {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+.music-row audio {
+  width: 100%;
+  height: 36px;
+}
+.music-row .btn {
+  min-height: 38px;
+  padding: 0 0.9rem;
+  font-size: 0.85rem;
+}
+.music-status {
+  min-height: 0;
+}

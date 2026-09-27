@@ -2,12 +2,13 @@
 //
 // Keys: Space = turn buzzers on / back to the board, Y = correct, N = wrong, R = show answer,
 // Esc = put the question back, U = undo.
-import { ranking, COLORS, KINDS, unveilProgress } from '/lib/game.js';
+import { ranking, COLORS, KINDS, unveilProgress, MUSIC_MOODS } from '/lib/game.js';
 import { connect } from './net.js';
 import { t, setLang, translatePage } from './i18n.js';
 import { $, h, fill, qrSvg, shortUrl, countdown, runCountdowns, teamStyle } from './ui.js';
 import { unlockAudio, audioReady, playEvent, playSound, startTicks } from './sounds.js';
 import { syncClip, stopClip } from './clip.js';
+import { syncMusic, stopMusic } from './music.js';
 import { ICONS, ruleFor, badgeFor } from './specials.js';
 
 let view = null;
@@ -43,8 +44,10 @@ runCountdowns(net.now);
 startTicks(() => (displays === 0 ? view : null), net.now);
 
 function showUnlock() {
-  $('#sound-unlock').hidden = !view?.settings.sound || displays > 0 || audioReady();
+  $('#sound-unlock').hidden = !(view?.settings.sound || view?.settings.music) || displays > 0 || audioReady();
 }
+// With no TV screen open, this laptop plays the background music too.
+setInterval(() => view && displays === 0 && syncMusic(view, net.now()), 250);
 for (const type of ['pointerdown', 'keydown']) {
   document.addEventListener(type, () => {
     unlockAudio();
@@ -119,6 +122,61 @@ function renderSettings() {
   }
   form.elements.finalSeconds.disabled = !view.settings.finalRound;
   renderCrazyKinds();
+  renderMusicFiles();
+}
+
+// Your own music: a file per moment, or the built-in tune.
+function renderMusicFiles() {
+  const box = $('#music-files');
+  box.hidden = !view.settings.music;
+  const chosen = view.settings.musicFiles;
+  const key = JSON.stringify(chosen) + view.settings.lang;
+  if (box.dataset.key === key) return; // don't redraw (and stop a preview) on every update
+  box.dataset.key = key;
+  const setFile = (mood, name) => {
+    const next = { ...chosen };
+    if (name) next[mood] = name;
+    else delete next[mood];
+    cmd({ type: 'settings', settings: { musicFiles: next } });
+  };
+  fill(
+    $('#music-file-list'),
+    MUSIC_MOODS.map((mood) => {
+      const name = chosen[mood];
+      const status = h('small', { class: 'music-status' });
+      const input = h('input', {
+        type: 'file',
+        accept: 'audio/*',
+        hidden: true,
+        onchange: async (e) => {
+          const file = e.target.files[0];
+          if (!file) return;
+          status.textContent = t('edUploading');
+          try {
+            const r = await fetch(`/api/files?name=${encodeURIComponent(file.name)}`, { method: 'POST', body: file });
+            const up = await r.json();
+            if (!r.ok || up.kind !== 'audio') throw new Error('bad');
+            setFile(mood, up.name);
+          } catch {
+            status.textContent = t('musicUploadFailed');
+          }
+        },
+      });
+      return h(
+        'div',
+        { class: 'music-row' },
+        h('span', { class: 'music-mood' }, t(`mood-${mood}`)),
+        name ? h('audio', { src: `/files/${encodeURIComponent(name)}`, controls: true, preload: 'metadata', onerror: () => (status.textContent = t('musicMissing')) }) : h('span', { class: 'music-builtin' }, t('musicBuiltIn')),
+        h(
+          'span',
+          { class: 'row' },
+          h('label', { class: 'btn' }, t('musicChoose'), input),
+          name ? h('button', { class: 'btn btn-quiet', type: 'button', onclick: () => setFile(mood, null) }, t('musicUseBuiltIn')) : null,
+        ),
+        status,
+      );
+    }),
+  );
 }
 
 // Kaosmodus: a tick for each special; unticked ones are left out of the game.
@@ -145,7 +203,7 @@ $('#settings').addEventListener('change', (e) => {
     return cmd({ type: 'settings', settings: { crazyExclude: excluded } });
   }
   let value = el.type === 'checkbox' ? el.checked : el.value;
-  if (el.type === 'number') {
+  if (el.type === 'number' || el.type === 'range') {
     value = Math.round(Number(value));
     if (!Number.isFinite(value) || value < Number(el.min) || value > Number(el.max)) {
       el.value = String(view.settings[el.name]);
@@ -233,7 +291,8 @@ function controls() {
     add('0', t('clipRestart'), { type: 'mediaRestart' });
   }
   if (view.canUndo && p !== 'over') add('u', t('undoBtn'), { type: 'undo' }, 'push');
-  add('m', view.settings.sound ? t('soundIsOn') : t('soundIsOff'), { type: 'settings', settings: { sound: !view.settings.sound } }, view.canUndo && p !== 'over' ? '' : 'push');
+  add('b', view.settings.music ? t('musicIsOn') : t('musicIsOff'), { type: 'settings', settings: { music: !view.settings.music } }, view.canUndo && p !== 'over' ? '' : 'push');
+  add('m', view.settings.sound ? t('soundIsOn') : t('soundIsOff'), { type: 'settings', settings: { sound: !view.settings.sound } });
   return list;
 }
 
@@ -251,6 +310,7 @@ const HELP = [
   ['P', 'helpP'],
   ['0', 'help0'],
   ['M', 'helpM'],
+  ['B', 'helpB'],
   ['E', 'helpE'],
   ['?', 'helpHelp'],
 ];
@@ -562,7 +622,12 @@ function render() {
     renderGame();
   }
   // With no TV screen open, this laptop plays the question's sound clip.
-  if (displays === 0) syncClip(view, view.q ? `q${view.q.c}-${view.q.i}` : 'final');
-  else stopClip();
+  if (displays === 0) {
+    syncClip(view, view.q ? `q${view.q.c}-${view.q.i}` : 'final');
+    syncMusic(view, net.now());
+  } else {
+    stopClip();
+    stopMusic();
+  }
   showUnlock();
 }

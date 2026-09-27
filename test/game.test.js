@@ -498,3 +498,15 @@ test('a slowly appearing picture keeps running while a team answers alone (Kaosm
   s = apply(s, { type: 'wrong', now: 3000 });
   assert.equal(unveilProgress(s.q.unveil, 3000), 1);
 });
+
+test('music settings: on by default at 35%, own files only as sound file names for known moments', () => {
+  let s = newGame(small);
+  assert.equal(s.settings.music, true);
+  assert.equal(s.settings.musicVolume, 35);
+  assert.deepEqual(s.settings.musicFiles, {});
+  s = apply(s, { type: 'settings', settings: { musicVolume: 80, musicFiles: { lobby: 'abc123.mp3', thinking: 'x.ogg' } } });
+  assert.deepEqual(s.settings.musicFiles, { lobby: 'abc123.mp3', thinking: 'x.ogg' });
+  for (const bad of [{ musicVolume: 101 }, { musicVolume: -1 }, { musicFiles: { lobby: 'virus.exe' } }, { musicFiles: { dance: 'a.mp3' } }, { musicFiles: 'a.mp3' }]) {
+    assert.throws(() => apply(s, { type: 'settings', settings: bad }), { code: 'bad-settings' }, JSON.stringify(bad));
+  }
+});

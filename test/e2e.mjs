@@ -53,6 +53,7 @@ try {
   await shot(tv, 'tv-0-sound-hint');
   await tv.mouse.click(5, 5); // a click lets the TV play sound; every sound below must play without errors
   await tv.waitForSelector('#sound-unlock[hidden]', { state: 'attached' });
+  await tv.waitForSelector('body[data-music=lobby]', { state: 'attached', timeout: 6000 });
 
   const phones = [];
   for (const [name, n] of [['Quizzy Rascals', 0], ['Blue Steel', 1], ['Lemon Heads', 3]]) {
@@ -96,6 +97,12 @@ try {
   await host.selectOption('select[name=penalty]', 'full');
   await waitFor(() => srv.hub.getState().settings.penalty === 'full');
   await host.selectOption('select[name=penalty]', 'half');
+  // The music volume slider.
+  await host.$eval('input[name=musicVolume]', (el) => {
+    el.value = '60';
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await waitFor(() => srv.hub.getState().settings.musicVolume === 60);
 
   host.on('dialog', (d) => d.accept());
   const score = (name) => srv.hub.getState().teams.find((tm) => tm.name === name).score;
@@ -130,12 +137,14 @@ try {
   await host.keyboard.press('Space');
   await red.waitForSelector('.buzzer.live');
   await shot(red, 'phone-5-armed');
+  await tv.waitForSelector('body[data-music=thinking]', { state: 'attached', timeout: 6000 });
   await shot(host, 'host-4-armed');
 
   await blue.click('.buzzer');
   await blue.waitForFunction(() => document.body.textContent.includes('You’re first!'));
   await red.waitForFunction(() => document.body.textContent.includes('Blue Steel was first'));
   await tv.waitForSelector('.tv-takeover');
+  await tv.waitForSelector('body[data-music=answering]', { state: 'attached', timeout: 6000 });
   await shot(blue, 'phone-6-first');
   await shot(red, 'phone-7-other');
   await tv.waitForTimeout(700);
@@ -155,6 +164,7 @@ try {
   await tv.waitForSelector('.tv-q .answer');
   assert.equal(score('Quizzy Rascals'), 200);
   assert.match(await tv.textContent('.tv-q .answer'), /Rome/);
+  await tv.waitForSelector('body[data-music=silent]', { state: 'attached', timeout: 6000 });
   await tv.waitForTimeout(500);
   await shot(tv, 'tv-7-revealed');
   await shot(red, 'phone-8-correct');
@@ -171,6 +181,13 @@ try {
   await host.keyboard.press('Space');
   await tv.waitForSelector('.tv-board');
   assert.equal(await tv.locator('.tv-board .tile.used').count(), 1);
+  await tv.waitForSelector('body[data-music=board]', { state: 'attached', timeout: 6000 });
+  // B turns the music off and on again.
+  await host.keyboard.press('b');
+  await tv.waitForSelector('body[data-music=off]', { state: 'attached', timeout: 6000 });
+  await host.waitForSelector('.controls button:has-text("Music off")');
+  await host.keyboard.press('b');
+  await tv.waitForSelector('body[data-music=board]', { state: 'attached', timeout: 6000 });
   assert.match(await tv.textContent('.tv-picks'), /Quizzy Rascals picks/);
   await shot(tv, 'tv-8-board-after');
 
@@ -237,6 +254,7 @@ try {
   await host.click('.host-board .col:nth-child(4) .tile:nth-of-type(2)');
   await host.waitForSelector('body[data-phase=reading]');
   await tv.waitForSelector('.clip-viz.on');
+  await tv.waitForSelector('body[data-music=silent]', { state: 'attached', timeout: 6000 });
   assert.equal(srv.hub.getState().media.playing, true);
   await tv.waitForTimeout(500);
   await shot(tv, 'tv-15-sound-clip');
@@ -266,6 +284,7 @@ try {
   await host.keyboard.press('e');
   await host.waitForSelector('body[data-phase=finalWager]');
   await tv.waitForSelector('.tv-final');
+  await tv.waitForSelector('body[data-music=final]', { state: 'attached', timeout: 6000 });
   await red.waitForSelector('#bet');
   // Blue (−100) has nothing to bet: it is told so and bets 0 by itself.
   await blue.waitForFunction(() => document.body.textContent.includes('no points to bet'));
@@ -320,6 +339,7 @@ try {
 
   await host.keyboard.press('Space');
   await tv.waitForSelector('.tv-over');
+  await tv.waitForSelector('body[data-music=over]', { state: 'attached', timeout: 6000 });
   await red.waitForFunction(() => document.body.textContent.includes('Place 1 of 3'));
   await shot(tv, 'tv-9-over');
   await shot(host, 'host-6-over');

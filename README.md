@@ -7,6 +7,7 @@ A Jeopardy-style quiz for teams in the same room. A laptop runs the game, a TV s
 - A board of categories and questions (100–500 points). The team that answers right picks the next question.
 - Phones buzz in, and the first team is shown on the TV in its colour. A wrong answer costs points (none, half or all, your choice), and the other teams can try.
 - Game-show sounds, a different buzz note for each team, and timers.
+- Background music, Kahoot style: a lobby tune, thinking music while the buzzers are on, suspense in the final, and party music at the end. You can swap in your own music files.
 - Pictures and sound clips in questions ("Which song is this?"). A picture can start as big blocks and slowly become clear.
 - A final round: teams bet, type their answers on their phones, and you judge each one.
 - A question editor, English and Norwegian, and an autosave that survives a crash.
@@ -66,7 +67,7 @@ Download the zip for your computer from the [latest release](https://github.com/
 3. **TV:** connect the laptop to the TV as a **second screen** (extend, not mirror). On the host screen click **Open TV screen**, drag that window onto the TV, and press **F** for full screen. Click the TV screen once so it's allowed to play sound.
    - If you can only mirror the screen, that works too: skip the TV screen and the laptop plays the sounds. The answers then show only when you reveal them.
 4. **Teams join:** they scan the QR code on the TV, type a team name and pick a colour. They can press **Try your buzzer** to hear their tone.
-5. **Settings:** in the lobby, choose the quiz, the language, what a wrong answer costs, and the timers.
+5. **Settings:** in the lobby, choose the quiz, the language, what a wrong answer costs, the timers, and the music: on or off, the volume, and optionally your own music file for each moment (lobby, between questions, thinking, final, after the game).
 6. **Start game.**
 
 ### Crazy mode (Kaosmodus)
@@ -95,6 +96,7 @@ Turn it on in the lobby's settings: **A little** hides about 3 special tiles on 
 | **U** | Undo the last judgement or score change |
 | **P** / **0** | Play or pause the sound clip / play it from the start |
 | **M** | Sound effects on or off |
+| **B** | Background music on or off |
 | **E** | End the board early and go to the final round |
 | **?** | Show all the keys |
 

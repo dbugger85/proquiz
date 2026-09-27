@@ -83,6 +83,16 @@
           <label class="check"><input type="checkbox" name="sound"> <span data-t="soundOn"></span></label>
           <button id="test-sound" class="btn" type="button" data-t="testSound"></button>
         </div>
+        <label class="check"><input type="checkbox" name="music"> <span data-t="musicOn"></span></label>
+        <label class="field">
+          <span data-t="musicVolume"></span>
+          <input type="range" name="musicVolume" min="0" max="100" step="5">
+        </label>
+        <fieldset id="music-files" class="crazy-kinds music-files">
+          <legend data-t="musicFiles"></legend>
+          <small data-t="musicHint"></small>
+          <div id="music-file-list"></div>
+        </fieldset>
         <label class="field">
           <span data-t="crazyMode"></span>
           <select name="crazy">
