@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { apply, newGame, COLORS, MAX_TEAMS, displayView, phoneView, hostView, GameError } from '../lib/game.js';
+import { apply, newGame, COLORS, MAX_TEAMS, displayView, phoneView, hostView, GameError, unveilProgress } from '../lib/game.js';
 import { validateSet } from '../lib/validate.js';
 
 const sample = JSON.parse(readFileSync(new URL('../sets/sample.json', import.meta.url)));
@@ -436,4 +436,65 @@ test('sound clips: play when the question opens, pause on a buzz, play on after 
 
   set.categories[1].questions[0].audio = '../x.mp3';
   assert.deepEqual(validateSet(set), [{ code: 'bad-audio', c: 1, i: 0 }]);
+});
+
+test('a slowly appearing picture: runs while buzzers are on, freezes on a buzz, clear at the reveal', () => {
+  const set = structuredClone(small);
+  set.categories[0].questions[1].image = 'photo.jpg';
+  set.categories[0].questions[1].unveil = 10;
+  set.categories[1].questions[0].unveil = 10; // no picture: ignored
+  assert.deepEqual(validateSet(set), []);
+
+  let s = run(started({}, set), { type: 'pick', c: 0, i: 1, now: 0 });
+  assert.deepEqual(s.q.unveil, { ms: 10_000, done: 0, since: null }); // blocks while the host reads
+  assert.deepEqual(displayView(s).q.unveil, s.q.unveil);
+  assert.ok(!JSON.stringify(phoneView(s, 'r')).includes('unveil'));
+
+  s = apply(s, { type: 'arm', now: 1000 });
+  assert.equal(s.q.unveil.since, 1000);
+  assert.equal(s.deadline, 1000 + 10_000 + 10_000); // the buzz time starts once the picture is clear
+  assert.equal(unveilProgress(s.q.unveil, 5000), 0.4);
+
+  s = apply(s, { type: 'buzz', teamId: 'b', now: 5000 }); // freezes at 4 s
+  assert.deepEqual(s.q.unveil, { ms: 10_000, done: 4000, since: null });
+  assert.equal(unveilProgress(s.q.unveil, 99_999), 0.4);
+
+  s = apply(s, { type: 'wrong', now: 7000 }); // the others may buzz: it carries on
+  assert.equal(s.q.unveil.since, 7000);
+  assert.equal(s.deadline, 7000 + 6000 + 10_000);
+  assert.equal(unveilProgress(s.q.unveil, 9000), 0.6);
+
+  s = run(s, { type: 'buzz', teamId: 'g', now: 9000 }, { type: 'correct', now: 9500 });
+  assert.equal(unveilProgress(s.q.unveil, 9500), 1); // the answer shows the whole picture
+  s = apply(s, { type: 'undo', now: 12_000 });
+  assert.deepEqual(s.q.unveil, { ms: 10_000, done: 6000, since: null }); // back to what Green saw
+
+  // A question without a picture, or without the setting, has no unveil.
+  const plain = run(started({}, set), { type: 'pick', c: 1, i: 0, now: 0 });
+  assert.equal(plain.q.unveil, null);
+
+  // Bad values are reported.
+  set.categories[0].questions[1].unveil = 999;
+  assert.deepEqual(validateSet(set), [{ code: 'bad-unveil', c: 0, i: 1 }]);
+  set.categories[0].questions[1].unveil = 'x';
+  assert.deepEqual(validateSet(set), [{ code: 'bad-unveil', c: 0, i: 1 }]);
+});
+
+test('a slowly appearing picture keeps running while a team answers alone (Kaosmodus)', () => {
+  const set = structuredClone(small);
+  set.categories[0].questions[1].image = 'photo.jpg';
+  set.categories[0].questions[1].unveil = 10;
+  let s = run(
+    newGame(set, { crazy: 'some' }),
+    { type: 'join', teamId: 'r', name: 'Red', color: COLORS[0] },
+    { type: 'join', teamId: 'b', name: 'Blue', color: COLORS[1] },
+    { type: 'start', picker: 'r', specials: { '0-1': 'hotseat' } },
+    { type: 'pick', c: 0, i: 1, now: 0 },
+    { type: 'next', now: 0 },
+    { type: 'arm', now: 1000 },
+  );
+  assert.equal(s.phase, 'answering');
+  assert.equal(s.q.unveil.since, 1000);
+  s = apply(s, { type: 'wrong', now: 3000 });
+  assert.equal(unveilProgress(s.q.unveil, 3000), 1);
 });

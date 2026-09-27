@@ -448,6 +448,7 @@ function openQuestion(c, i) {
                       onclick: () => {
                         upd(key, null);
                         if (key === 'audio') delete q.audioStart;
+                        if (key === 'image') delete q.unveil;
                         draw();
                         drawStart();
                       },
@@ -459,6 +460,7 @@ function openQuestion(c, i) {
         status ? h('p', { class: `ed-media-status${status === t('edUploadFailed') ? ' bad' : ''}` }, status) : null,
       );
       if (key === 'audio') drawStart();
+      if (key === 'image') drawUnveil();
     };
     return { box, draw };
   }
@@ -483,6 +485,51 @@ function openQuestion(c, i) {
             }),
           )
         : '',
+    );
+  }
+
+  // "Show the picture slowly" (big blocks that get smaller) only when there is a question picture.
+  // Not offered on the final question.
+  const unveilBox = h('div');
+  function drawUnveil() {
+    if (isFinal || !q.image) return fill(unveilBox);
+    const on = Number(q.unveil) > 0;
+    fill(
+      unveilBox,
+      h(
+        'label',
+        { class: 'check' },
+        h('input', {
+          type: 'checkbox',
+          name: 'unveil',
+          checked: on,
+          disabled: builtIn,
+          onchange: (e) => {
+            upd('unveil', e.target.checked ? 15 : null);
+            drawUnveil();
+          },
+        }),
+        h('span', {}, t('edUnveil')),
+      ),
+      on
+        ? field(
+            t('edUnveilSeconds'),
+            h('input', {
+              type: 'number',
+              name: 'unveilSeconds',
+              min: 1,
+              max: 120,
+              step: 1,
+              value: q.unveil,
+              disabled: builtIn,
+              oninput: (e) => {
+                const n = Math.round(Number(e.target.value));
+                if (Number.isFinite(n) && n >= 1) upd('unveil', Math.min(120, n));
+              },
+            }),
+          )
+        : null,
+      on ? h('small', {}, t('edUnveilHint')) : null,
     );
   }
 
@@ -513,7 +560,7 @@ function openQuestion(c, i) {
         ),
     field(t('edQuestion'), question),
     field(t('edAnswer'), text('answer', { max: 120 })),
-    h('div', { class: 'ed-media-grid' }, picQ.box, picA.box, h('div', {}, clip.box, startBox)),
+    h('div', { class: 'ed-media-grid' }, h('div', {}, picQ.box, unveilBox), picA.box, h('div', {}, clip.box, startBox)),
     h('div', { class: 'ed-dialog-actions' }, h('button', { class: 'btn btn-primary', value: 'done' }, t('edDone'))),
   );
   picQ.draw();

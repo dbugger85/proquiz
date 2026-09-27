@@ -101,6 +101,11 @@ try {
   const score = (name) => srv.hub.getState().teams.find((tm) => tm.name === name).score;
   const [red, blue, yellow] = phones;
 
+  // The flag question (Capitals 300) gets a slowly appearing picture: 6 seconds from blocks to clear.
+  const withUnveil = structuredClone(srv.hub.getState().set);
+  withUnveil.categories[0].questions[2].unveil = 6;
+  srv.hub.dispatch({ type: 'loadSet', set: withUnveil, setId: 'sample' });
+
   await host.click('#start');
   await host.waitForSelector('.host-board');
   await tv.waitForSelector('.tv-board');
@@ -179,15 +184,40 @@ try {
   await host.keyboard.press('Space');
   await host.waitForSelector('.host-board');
 
-  // A picture question: the flag shows on the TV with the question.
+  // A picture question that appears slowly: big blocks while the host reads, sharper once the buzzers are on.
+  const step = () => tv.$eval('.tv-q canvas.unveil', (c) => Number(c.dataset.step));
   await host.click('.host-board .col:nth-child(1) .tile:nth-of-type(3)');
   await host.waitForSelector('.host-q .host-img img');
-  await tv.waitForSelector('.tv-q .q-img');
-  await tv.waitForFunction(() => document.querySelector('.tv-q .q-img').complete);
+  await tv.waitForSelector('.tv-q canvas.unveil[data-step="0"]');
+  assert.equal(await tv.locator('.tv-q img.q-img').count(), 0); // the clear picture isn't on screen
   await tv.waitForTimeout(450);
   await shot(tv, 'tv-10-picture');
+  await tv.waitForTimeout(700);
+  assert.equal(await step(), 0); // it waits while the host reads
+  await host.keyboard.press('Space');
+  await host.waitForSelector('body[data-phase=armed]');
+  await host.waitForSelector('[data-unveil-pct]');
+  await tv.waitForTimeout(2600);
+  const mid = await step();
+  assert.ok(mid >= 3 && mid < 10, `step ${mid}`);
+  await shot(tv, 'tv-16-unveil-mid');
   await shot(host, 'host-7-picture');
+  // A buzz freezes it.
+  await yellow.click('.buzzer');
+  await host.waitForSelector('body[data-phase=answering]');
+  const frozen = await step();
+  await tv.waitForTimeout(1300);
+  assert.equal(await step(), frozen);
+  // Wrong: the others may buzz, and it carries on.
+  await host.keyboard.press('n');
+  await host.waitForSelector('body[data-phase=armed]');
+  await tv.waitForFunction((was) => Number(document.querySelector('.tv-q canvas.unveil').dataset.step) > was, frozen);
+  // Show the answer: the whole picture.
   await host.keyboard.press('r');
+  await tv.waitForSelector('.tv-q img.q-img');
+  await tv.waitForFunction(() => document.querySelector('.tv-q .q-img').complete);
+  await tv.waitForTimeout(450);
+  await shot(tv, 'tv-17-unveil-clear');
   await host.waitForSelector('body[data-phase=revealed]');
   await host.keyboard.press('Space');
   await host.waitForSelector('body[data-phase=board]');
@@ -226,7 +256,7 @@ try {
   await host.keyboard.press('y');
   await host.waitForSelector('body[data-phase=revealed]');
   await tv.waitForSelector('.clip-viz.on');
-  assert.equal(score('Lemon Heads'), 200);
+  assert.equal(score('Lemon Heads'), 50); // −150 on the flag, +200 here
   await host.keyboard.press('Space');
   await host.waitForSelector('body[data-phase=board]');
   assert.equal(srv.hub.getState().media, null);
@@ -318,6 +348,8 @@ try {
   const pickers = ed.locator('#q-form input[type=file]');
   await pickers.nth(0).setInputFiles(join(root, 'sets/files/sample-flag-japan.svg'));
   await ed.waitForSelector('#q-form .ed-media img');
+  await ed.check('#q-form input[name=unveil]');
+  await ed.fill('#q-form input[name=unveilSeconds]', '20');
   await pickers.nth(2).setInputFiles(join(root, 'sets/files/sample-twinkle.mp3'));
   await ed.waitForSelector('#q-form .ed-media audio');
   await ed.fill('#q-form input[type=number][step="0.5"]', '1.5');
@@ -340,6 +372,7 @@ try {
   assert.match(saved.categories[0].questions[0].audio, /^[0-9a-f]{16}\.mp3$/);
   assert.match(saved.categories[0].questions[0].image, /^[0-9a-f]{16}\.svg$/);
   assert.equal(saved.categories[0].questions[0].audioStart, 1.5);
+  assert.equal(saved.categories[0].questions[0].unveil, 20);
 
   // In the lobby it shows as "needs fixing" and can't be picked yet.
   await host.click('.controls button:has-text("New game, same teams")');

@@ -7,7 +7,7 @@ A Jeopardy-style quiz for teams in the same room. A laptop runs the game, a TV s
 - A board of categories and questions (100–500 points). The team that answers right picks the next question.
 - Phones buzz in, and the first team is shown on the TV in its colour. A wrong answer costs points (none, half or all, your choice), and the other teams can try.
 - Game-show sounds, a different buzz note for each team, and timers.
-- Pictures and sound clips in questions ("Which song is this?").
+- Pictures and sound clips in questions ("Which song is this?"). A picture can start as big blocks and slowly become clear.
 - A final round: teams bet, type their answers on their phones, and you judge each one.
 - A question editor, English and Norwegian, and an autosave that survives a crash.
 - **Crazy mode (Kaosmodus):** hidden special tiles, revealed on the TV with a spinning reel. They include bombs, triple points, a hot seat, a rescue for the team in last place, a three-question turbo, a jackpot and a freeze.

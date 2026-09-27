@@ -2333,3 +2333,8 @@ kbd {
   font-weight: 800;
   color: var(--k);
 }
+
+/* A slowly appearing picture: hard block edges when scaled up to the TV. */
+canvas.q-img.unveil {
+  image-rendering: pixelated;
+}

@@ -208,6 +208,7 @@ function clean(set) {
     if (x.answerImage) out.answerImage = x.answerImage;
     if (x.audio) out.audio = x.audio;
     if (x.audio && Number(x.audioStart) > 0) out.audioStart = Number(x.audioStart);
+    if (x.image && Number(x.unveil) > 0) out.unveil = Number(x.unveil);
     return out;
   };
   const out = {

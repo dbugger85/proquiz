@@ -263,6 +263,8 @@ export function createHub({ set, info, saved = null, save = () => {}, store = nu
   function resume() {
     if (!resumable) return;
     state = { ...resumable.state, deadline: null };
+    // A picture that was appearing carries on from where it was, not from the old clock.
+    if (state.q?.unveil?.since != null) state.q = { ...state.q, unveil: { ...state.q.unveil, since: Date.now() } };
     resumable = null;
     for (const c of clients) {
       if (c.role === 'phone' && c.askedTeamId && state.teams.some((t) => t.id === c.askedTeamId)) {

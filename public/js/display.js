@@ -1,5 +1,5 @@
 // The TV screen. Shows the game to the room; never gets an answer before the host reveals it.
-import { ranking, COLORS } from '/lib/game.js';
+import { ranking, COLORS, unveilProgress } from '/lib/game.js';
 import { connect } from './net.js';
 import { t, setLang, translatePage } from './i18n.js';
 import { $, h, qrSvg, shortUrl, countdown, runCountdowns, teamStyle } from './ui.js';
@@ -126,14 +126,17 @@ function band() {
 const img = (name, cls) => (name ? h('img', { class: cls, src: `/files/${encodeURIComponent(name)}`, alt: '' }) : null);
 
 // Load every question picture while the board is showing, so a picture never pops in late.
-const preloaded = new Set();
+const images = new Map(); // file → Image, kept for drawing slowly appearing pictures
+function imageFor(file) {
+  if (!images.has(file)) {
+    const im = new Image();
+    im.src = `/files/${encodeURIComponent(file)}`;
+    images.set(file, im);
+  }
+  return images.get(file);
+}
 function preloadImages() {
-  for (const cat of view.set.categories)
-    for (const q of cat.questions)
-      if (q.image && !preloaded.has(q.image)) {
-        preloaded.add(q.image);
-        new Image().src = `/files/${encodeURIComponent(q.image)}`;
-      }
+  for (const cat of view.set.categories) for (const q of cat.questions) if (q.image) imageFor(q.image);
   preloadClips(view.set.categories.flatMap((cat) => cat.questions.filter((q) => q.audio).map((q) => q.audio)));
 }
 
@@ -187,6 +190,58 @@ function renderBoom() {
   );
 }
 
+// ----- slowly appearing pictures: big blocks that get smaller -----
+
+// Blocks across the picture at each step; after the last step the picture is clear.
+const STEPS = [6, 8, 11, 16, 22, 32, 45, 64, 90, 128];
+const stepAt = (u, now) => Math.min(STEPS.length, Math.floor(unveilProgress(u, now) * (STEPS.length + 1)));
+
+function unveilCanvas(q) {
+  const u = q.unveil;
+  return h('canvas', { class: 'q-img unveil', 'data-file': q.image, 'data-ms': u.ms, 'data-done': u.done, 'data-since': u.since ?? '' });
+}
+
+function drawStep(canvas, img, step) {
+  const aspect = img.naturalWidth && img.naturalHeight ? img.naturalWidth / img.naturalHeight : 1.5;
+  const W = 1280;
+  const H = Math.round(W / aspect);
+  if (canvas.width !== W || canvas.height !== H) Object.assign(canvas, { width: W, height: H });
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+  if (step >= STEPS.length) {
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(img, 0, 0, W, H);
+    return;
+  }
+  // Draw the picture tiny (each pixel becomes the average colour of a block), then blow it up without smoothing.
+  const sw = STEPS[step];
+  const sh = Math.max(1, Math.round(sw / aspect));
+  const small = (drawStep.small ??= document.createElement('canvas'));
+  Object.assign(small, { width: sw, height: sh });
+  const sctx = small.getContext('2d');
+  sctx.imageSmoothingEnabled = true;
+  sctx.drawImage(img, 0, 0, sw, sh);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(small, 0, 0, sw, sh, 0, 0, W, H);
+}
+
+// Redraws a slowly appearing picture whenever it reaches its next step (on the server clock).
+function runUnveil() {
+  const tick = () => {
+    for (const canvas of document.querySelectorAll('canvas.unveil')) {
+      const u = { ms: Number(canvas.dataset.ms), done: Number(canvas.dataset.done), since: canvas.dataset.since === '' ? null : Number(canvas.dataset.since) };
+      const step = stepAt(u, net.now());
+      const img = imageFor(canvas.dataset.file);
+      if (String(step) === canvas.dataset.step || !img.complete) continue;
+      drawStep(canvas, img, step);
+      canvas.dataset.step = String(step);
+    }
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+runUnveil();
+
 function renderQuestion() {
   const q = view.q;
   if (q.result?.type === 'boom') return renderBoom();
@@ -194,11 +249,13 @@ function renderQuestion() {
   lastScreen = `q${q.c}-${q.i}`;
   // When the answer comes with its own picture, it takes the question picture's place.
   const picture = q.answerImage || q.image;
+  // The clear picture is only put on screen once the answer is revealed.
+  const blocks = q.unveil && q.image && !q.answerImage && view.phase !== 'revealed';
   return h(
     'div',
     { class: `tv-q${picture ? ' has-image' : ''}`, style: zoom ? '' : 'animation: none' },
     h('div', { class: 'where' }, h('span', {}, view.set.categories[q.c].name), q.special ? h('span', { class: `special-badge k-${q.special}` }, badgeFor(view)) : null, h('b', {}, String(q.value))),
-    img(picture, `q-img${q.answerImage ? ' reveal-img' : ''}`),
+    blocks ? unveilCanvas(q) : img(picture, `q-img${q.answerImage ? ' reveal-img' : ''}`),
     picture ? null : clipViz(),
     q.question ? h('p', { class: 'question' }, q.question) : h('div', { class: 'spacer' }),
     picture ? clipViz() : null,

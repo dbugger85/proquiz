@@ -221,11 +221,15 @@ test('editor API: create, save, list, upload a file, export and import, choose i
   set.title = 'Quiz på fjellet';
   set.categories[0].questions[0].audio = clip.data.name;
   set.categories[0].questions[0].audioStart = 3;
+  set.categories[0].questions[2].unveil = 12; // the flag question has a picture: kept
+  set.categories[1].questions[0].unveil = 12; // no picture: dropped
   set.categories[0].questions[1].answer = '';
   let saved = await call('PUT', `/api/sets/${id}`, { set });
   assert.deepEqual(saved.data.problems, [{ code: 'no-answer', c: 0, i: 1 }]);
   const back = (await call('GET', `/api/sets/${id}`)).data.set;
   assert.equal(back.categories[0].questions[0].audioStart, 3);
+  assert.equal(back.categories[0].questions[2].unveil, 12);
+  assert.equal(back.categories[1].questions[0].unveil, undefined);
   list = (await call('GET', '/api/sets')).data;
   assert.equal(list.find((x) => x.id === id).problems, 1);
 

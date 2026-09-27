@@ -2,7 +2,7 @@
 //
 // Keys: Space = turn buzzers on / back to the board, Y = correct, N = wrong, R = show answer,
 // Esc = put the question back, U = undo.
-import { ranking, COLORS, KINDS } from '/lib/game.js';
+import { ranking, COLORS, KINDS, unveilProgress } from '/lib/game.js';
 import { connect } from './net.js';
 import { t, setLang, translatePage } from './i18n.js';
 import { $, h, fill, qrSvg, shortUrl, countdown, runCountdowns, teamStyle } from './ui.js';
@@ -412,11 +412,28 @@ function renderQuestion() {
     src.question ? h('p', { class: 'question' }, src.question) : null,
     h('p', { class: 'answer' }, h('span', {}, `${t('answerLabel')}:`), src.answer),
     clipLine(src),
+    unveilLine(q),
     statusLine(),
     countdown(view),
     buzzOrder(),
   );
 }
+
+// How clear the slowly appearing picture is on the TV right now (kept up to date by the loop below).
+function unveilLine(q) {
+  if (!q.unveil) return null;
+  if (view.phase === 'reading') return h('p', { class: 'clip-line' }, h('span', { class: 'clip-dot' }), t('unveilWaiting'));
+  return h('p', { class: 'clip-line on', 'data-unveil-pct': '' }, h('span', { class: 'clip-dot' }), h('span', {}));
+}
+function runUnveilLine() {
+  const tick = () => {
+    const el = document.querySelector('[data-unveil-pct]');
+    if (el && view?.q?.unveil) el.lastChild.textContent = t('unveilPct', { n: Math.round(unveilProgress(view.q.unveil, net.now()) * 100) });
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+runUnveilLine();
 
 // "Sound clip: playing" / "paused", so the host knows what the room hears.
 function clipLine(src) {
