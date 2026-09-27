@@ -91,6 +91,75 @@ function whoosh({ at = 0, dur = 0.45, gain = 0.25 } = {}) {
 
 const hz = (midi) => 440 * 2 ** ((midi - 69) / 12);
 
+// ----- noise tools for the explosion and the fuse -----
+
+let brownBuf = null;
+let whiteBuf = null;
+let roomBuf = null;
+
+// Deep, rumbling noise (brown) and plain hiss (white), 4 seconds each, made once.
+function noiseBuffer(kind) {
+  const a = audio();
+  if (kind === 'brown' && brownBuf) return brownBuf;
+  if (kind === 'white' && whiteBuf) return whiteBuf;
+  const buf = a.createBuffer(1, a.sampleRate * 4, a.sampleRate);
+  const d = buf.getChannelData(0);
+  let last = 0;
+  for (let i = 0; i < d.length; i++) {
+    const w = Math.random() * 2 - 1;
+    if (kind === 'brown') {
+      last = (last + 0.02 * w) / 1.02;
+      d[i] = last * 3.5;
+    } else d[i] = w;
+  }
+  return kind === 'brown' ? (brownBuf = buf) : (whiteBuf = buf);
+}
+
+// A short made-up room echo, so the boom sounds like it happens somewhere.
+function room() {
+  const a = audio();
+  if (roomBuf) return roomBuf;
+  const len = Math.floor(a.sampleRate * 2.2);
+  roomBuf = a.createBuffer(2, len, a.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = roomBuf.getChannelData(ch);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len) ** 3.2;
+  }
+  return roomBuf;
+}
+
+// Soft clipping, for grit (a new node each time; the curve is made once).
+let gritCurve = null;
+function distortion() {
+  if (!gritCurve) {
+    gritCurve = new Float32Array(1024);
+    for (let i = 0; i < gritCurve.length; i++) gritCurve[i] = Math.tanh(((i / (gritCurve.length - 1)) * 2 - 1) * 3);
+  }
+  const node = audio().createWaveShaper();
+  node.curve = gritCurve;
+  node.oversample = '4x';
+  return node;
+}
+
+// A burst of noise through a filter, with its own loudness curve: [[time, level], …] after `at`.
+function noiseHit(kind, { at = 0, filter = 'lowpass', freq = [2000], q = 0.7, levels, out }) {
+  const a = audio();
+  const t = a.currentTime + at;
+  const src = a.createBufferSource();
+  src.buffer = noiseBuffer(kind);
+  const f = a.createBiquadFilter();
+  f.type = filter;
+  f.Q.value = q;
+  f.frequency.setValueAtTime(freq[0], t);
+  freq.slice(1).forEach(([when, hz]) => f.frequency.exponentialRampToValueAtTime(hz, t + when));
+  const g = a.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  for (const [when, level] of levels) g.gain.exponentialRampToValueAtTime(Math.max(level, 0.0001), t + when);
+  src.connect(f).connect(g).connect(out);
+  const end = levels[levels.length - 1][0];
+  src.start(t, Math.random() * 0.5, end + 0.1);
+}
+
 // Each team's buzz is a different note of a major pentatonic scale, so any two teams sound good together
 // and everyone learns their own tone. Index = the team's colour number (0–7).
 const TEAM_NOTES = [72, 76, 79, 81, 84, 86, 88, 91]; // C5 E5 G5 A5 C6 D6 E6 G6
@@ -154,9 +223,16 @@ export const sounds = {
   sting(kind, at = 0) {
     const stings = {
       triple: () => [76, 83, 88].forEach((m, i) => note(hz(m), { at: at + i * 0.1, dur: 0.5, type: 'triangle', gain: 0.2 })),
+      // A lit fuse: hissing and crackling, over an ominous low hit.
       bomb: () => {
-        note(90, { at, dur: 1.1, type: 'sawtooth', gain: 0.2, slide: 45, filter: 400 });
-        note(hz(55), { at, dur: 0.9, type: 'square', gain: 0.06, filter: 700 });
+        const a = audio();
+        if (!a || a.state !== 'running') return;
+        noiseHit('white', { at, filter: 'bandpass', freq: [4500, [1.4, 6500]], q: 1.2, levels: [[0.03, 0.22], [1.2, 0.18], [1.5, 0.0001]], out: master });
+        for (let n = 0; n < 18; n++) {
+          noiseHit('white', { at: at + Math.random() * 1.4, filter: 'highpass', freq: [3000], levels: [[0.002, 0.3 * Math.random() + 0.1], [0.02, 0.0001]], out: master });
+        }
+        note(55, { at, dur: 1.4, type: 'sine', gain: 0.35, slide: 48 });
+        note(110, { at, dur: 0.9, type: 'triangle', gain: 0.12, slide: 98, filter: 600 });
       },
       turbo: () => [0, 1, 2, 3, 4, 5].forEach((n) => note(hz(79 + n * 2), { at: at + n * 0.06, dur: 0.08, type: 'square', gain: 0.1, filter: 3000 })),
       jackpot: () => [72, 76, 79, 84, 88].forEach((m, i) => note(hz(m + 12), { at: at + i * 0.07, dur: 0.6, type: 'triangle', gain: 0.14 })),
@@ -175,10 +251,45 @@ export const sounds = {
     }
     return at;
   },
+  // A real-sounding explosion: a crack, a deep thump, a roaring burst that darkens, debris, a rumbling tail.
   boom() {
-    whoosh({ dur: 0.9, gain: 0.35 });
-    note(70, { dur: 1.4, type: 'sawtooth', gain: 0.3, slide: 30, filter: 300 });
-    note(45, { at: 0.05, dur: 1.2, type: 'sine', gain: 0.35, slide: 25 });
+    const a = audio();
+    if (!a || a.state !== 'running') return;
+    const t = a.currentTime;
+    // Everything goes through a little grit and a room echo.
+    const dry = a.createGain();
+    dry.gain.value = 0.9;
+    const wet = a.createGain();
+    wet.gain.value = 0.35;
+    const verb = a.createConvolver();
+    verb.buffer = room();
+    const bus = a.createGain();
+    bus.gain.value = 0.9;
+    bus.connect(distortion()).connect(dry).connect(master);
+    bus.connect(verb).connect(wet).connect(master);
+
+    // 1. The crack: a very short, bright burst.
+    noiseHit('white', { filter: 'highpass', freq: [1500], levels: [[0.002, 1], [0.05, 0.05], [0.12, 0.0001]], out: bus });
+    // 2. The thump: a deep sine that falls, felt more than heard.
+    const o = a.createOscillator();
+    const og = a.createGain();
+    o.frequency.setValueAtTime(95, t);
+    o.frequency.exponentialRampToValueAtTime(32, t + 0.6);
+    og.gain.setValueAtTime(0.0001, t);
+    og.gain.exponentialRampToValueAtTime(1.2, t + 0.01);
+    og.gain.exponentialRampToValueAtTime(0.0001, t + 1.1);
+    o.connect(og).connect(bus);
+    o.start(t);
+    o.stop(t + 1.2);
+    // 3. The blast: loud noise whose filter closes from bright to dark as it fades.
+    noiseHit('white', { filter: 'lowpass', freq: [5000, [0.25, 1400], [1.4, 180]], levels: [[0.008, 0.9], [0.3, 0.35], [1.6, 0.0001]], out: bus });
+    // 4. The rumble: deep noise that rolls on for a few seconds.
+    noiseHit('brown', { filter: 'lowpass', freq: [900, [2.8, 90]], levels: [[0.05, 1], [0.8, 0.55], [3.2, 0.0001]], out: bus });
+    // 5. Debris: a few crackles scattered over the first second.
+    for (let n = 0; n < 12; n++) {
+      const when = 0.12 + Math.random() * 1.1;
+      noiseHit('white', { at: when, filter: 'bandpass', freq: [1200 + Math.random() * 2500], q: 2, levels: [[0.003, 0.25 * (1 - when / 1.4)], [0.04, 0.0001]], out: bus });
+    }
   },
   fanfare() {
     // Da-da-da-daaa, with a big major chord at the end.
