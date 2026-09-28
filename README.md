@@ -51,7 +51,7 @@ Download the zip for your computer from the [latest release](https://github.com/
 | Older Mac (Intel) | `ProQuiz-…-mac-intel.zip` → right-click `ProQuiz` → Open |
 | Linux | `ProQuiz-…-linux-x64.zip` → run `./ProQuiz` |
 
-- **Windows** warns the first time, because the program isn't signed (signing costs money). Click **More info → Run anyway**, then **Allow** network access, or phones can't connect.
+- **Windows:** before you unzip, right-click the zip → **Properties** → tick **Unblock** → **OK**. Without this, Windows may refuse to start ProQuiz and offer only "Don't run". If it still warns, click **More info → Run anyway**. Then **Allow** network access, or phones can't connect. The program isn't signed (signing costs money), which is why Windows is careful.
 - **Mac** blocks a normal double-click the first time for the same reason. Right-click → **Open** once, and allow incoming connections if asked.
 
 ## Before the night

@@ -24,11 +24,14 @@ const TARGETS = [
 const START_HERE = {
   windows: `ProQuiz ${version}
 
-1. Double-click ProQuiz.exe.
-2. If Windows says "Windows protected your PC", click "More info" and then "Run anyway".
+1. Before you unzip: right-click the zip file, choose Properties, tick "Unblock" at the bottom, and click OK.
+   (Windows marks files from the internet, and without this it may refuse to start ProQuiz.
+   If you already unzipped it, delete the folder, unblock the zip and unzip it again.)
+2. Double-click ProQuiz.exe.
+3. If Windows says "Windows protected your PC", click "More info" and then "Run anyway".
    (ProQuiz isn't signed by Microsoft, which costs money. It is safe.)
-3. When Windows asks about network access, click "Allow". Phones can't connect without it.
-4. A black window opens and your web browser shows the host screen. Keep the black window open while you play.
+4. When Windows asks about network access, click "Allow". Phones can't connect without it.
+5. A black window opens and your web browser shows the host screen. Keep the black window open while you play.
 
 Your quizzes and the autosave are kept in the ProQuiz folder in your user folder.
 `,
