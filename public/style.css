@@ -2375,3 +2375,66 @@ input[type='range'] {
 .music-status {
   min-height: 0;
 }
+
+/* The TV screen inside the host page (single-screen mode). */
+body.display.embedded {
+  cursor: default;
+}
+.embedded .tv-board button.tile {
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 5.6vh;
+  transition: box-shadow 120ms;
+}
+.embedded .tv-board button.tile:hover,
+.embedded .tv-board button.tile:focus-visible {
+  box-shadow: inset 0 0 0 0.5vh var(--light), 0 0 4vh rgb(111 85 255 / 0.5);
+  outline: none;
+}
+.stage-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: calc(100vh - 73px);
+}
+.stage-area iframe {
+  flex: 1;
+  width: 100%;
+  border: 0;
+  min-height: 0;
+  background: var(--bg);
+}
+.stage-controls .controls {
+  border-top: 1px solid var(--edge);
+}
+.controls .team-btn {
+  background: var(--team);
+  border-color: var(--team);
+  color: var(--team-ink);
+  opacity: 0.6;
+  min-height: 40px;
+  font-size: 0.9rem;
+}
+.controls .team-btn.on {
+  opacity: 1;
+  box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px currentColor;
+}
+.peek-note {
+  margin: 0 0 1rem;
+  padding: 0.6rem 0.9rem;
+  border-radius: var(--r-m);
+  background: rgb(255 77 109 / 0.14);
+  border: 1px solid rgb(255 77 109 / 0.45);
+  font-weight: 700;
+}
+:fullscreen .host-bar {
+  display: none;
+}
+:fullscreen .stage-area {
+  height: 100vh;
+}

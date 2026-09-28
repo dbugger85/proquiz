@@ -54,6 +54,27 @@ try {
   await tv.mouse.click(5, 5); // a click lets the TV play sound; every sound below must play without errors
   await tv.waitForSelector('#sound-unlock[hidden]', { state: 'attached' });
   await tv.waitForSelector('body[data-music=lobby]', { state: 'attached', timeout: 6000 });
+  // …and it can actually be heard at the default volume (measured on the TV's audio output).
+  const level = await tv.evaluate(async () => {
+    const { audioGraph } = await import('/js/sounds.js');
+    const g = audioGraph();
+    const an = g.ctx.createAnalyser();
+    an.fftSize = 2048;
+    g.limiter.connect(an);
+    const buf = new Float32Array(an.fftSize);
+    let sum = 0;
+    let n = 0;
+    const end = Date.now() + 2500;
+    while (Date.now() < end) {
+      an.getFloatTimeDomainData(buf);
+      for (const x of buf) sum += x * x;
+      n += buf.length;
+      await new Promise((r) => setTimeout(r, 40));
+    }
+    g.limiter.disconnect(an);
+    return 10 * Math.log10(sum / n);
+  });
+  assert.ok(level > -40, `the lobby music is too quiet: ${level.toFixed(1)} dB`);
 
   const phones = [];
   for (const [name, n] of [['Quizzy Rascals', 0], ['Blue Steel', 1], ['Lemon Heads', 3]]) {

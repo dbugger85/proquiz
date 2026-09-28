@@ -15,6 +15,8 @@ let view = null;
 let connected = new Set();
 let info = null;
 let displays = 0; // TV screens open; when there are none, this laptop plays the sounds
+let tvs = 0; // separate TV screens (not the one shown inside this page)
+let peek = false; // single-screen mode: showing the host view (with the answers) instead of the TV view
 let soundSeq = null;
 let resume = null; // a saved game the host can continue
 
@@ -28,6 +30,7 @@ const net = connect({
       view = msg.view;
       connected = new Set(msg.connected);
       displays = msg.displays;
+      tvs = msg.tvs ?? msg.displays;
       resume = msg.resume ?? null;
       const ev = view.event;
       if (ev && soundSeq !== null && ev.seq !== soundSeq && displays === 0) playEvent(view, ev, COLORS);
@@ -258,7 +261,7 @@ function renderResume() {
 function controls() {
   const p = view.phase;
   const list = [];
-  const add = (key, label, action, cls = '') => list.push({ key, label, action, cls });
+  const add = (key, label, action, cls = '', team = null) => list.push({ key, label, action, cls, team });
   if (p === 'special') {
     add(' ', view.q.special === 'bomb' ? t('bombGo') : t('specialGo'), { type: 'next' }, 'btn-primary');
     add('Escape', t('cancelBtn'), { type: 'cancel' });
@@ -286,6 +289,25 @@ function controls() {
   } else if (p === 'over') {
     add('', t('restartBtn'), () => confirm(t('confirmRestart')) && cmd({ type: 'restart' }));
   }
+  if (singleScreen()) {
+    // With no separate TV screen, the choices that need the host view on a TV setup get buttons here.
+    if (p === 'special' && view.q.special === 'freeze') {
+      for (const tm of view.teams.filter((x) => x.id !== view.picker)) {
+        add('', `🧊 ${tm.name}`, { type: 'freeze', teamId: tm.id }, `team-btn${view.q.frozen === tm.id ? ' on' : ''}`, tm);
+      }
+    }
+    if (p === 'finalJudge') {
+      for (const tm of view.teams) {
+        const v = view.final.judged[tm.id];
+        add('', `✓ ${tm.name}`, { type: 'judgeFinal', teamId: tm.id, correct: v === true ? null : true }, `team-btn${v === true ? ' on' : ''}`, tm);
+        add('', `✗ ${tm.name}`, { type: 'judgeFinal', teamId: tm.id, correct: v === false ? null : false }, `team-btn${v === false ? ' on' : ''}`, tm);
+      }
+    }
+    add('h', peek ? t('tvViewBtn') : t('hostViewBtn'), () => {
+      peek = !peek;
+      render();
+    });
+  }
   if (view.media) {
     add('p', view.media.playing ? t('clipPause') : t('clipPlay'), { type: 'mediaToggle' });
     add('0', t('clipRestart'), { type: 'mediaRestart' });
@@ -311,6 +333,8 @@ const HELP = [
   ['0', 'help0'],
   ['M', 'helpM'],
   ['B', 'helpB'],
+  ['H', 'helpH'],
+  ['F', 'helpF'],
   ['E', 'helpE'],
   ['?', 'helpHelp'],
 ];
@@ -331,16 +355,31 @@ function toggleHelp(show = $('#help').hidden) {
 $('#help-btn').addEventListener('click', () => toggleHelp());
 $('#help').addEventListener('click', (e) => e.target === $('#help') && toggleHelp(false));
 
+// Returns true when the key did something.
+function handleKey(e) {
+  if (e.key === '?') return toggleHelp(), true;
+  if (e.key === 'Escape' && !$('#help').hidden) return toggleHelp(false), true;
+  if (!view || view.phase === 'lobby' || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return false;
+  const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  if (key === 'f' && singleScreen()) {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen().catch(() => {});
+    return true;
+  }
+  const c = controls().find((x) => x.key === key);
+  if (!c) return false;
+  run(c.action);
+  return true;
+}
 document.addEventListener('keydown', (e) => {
   if (e.target.closest('input, select, textarea')) return;
-  if (e.key === '?') return toggleHelp();
-  if (e.key === 'Escape' && !$('#help').hidden) return toggleHelp(false);
-  if (!view || view.phase === 'lobby' || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
-  const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-  const c = controls().find((x) => x.key === key);
-  if (!c) return;
-  e.preventDefault();
-  run(c.action);
+  if (handleKey(e)) e.preventDefault();
+});
+// The TV view inside this page passes on its key presses and tile clicks.
+window.addEventListener('message', (e) => {
+  if (e.origin !== location.origin || !e.data?.proquiz) return;
+  if (e.data.type === 'key') handleKey(e.data);
+  if (e.data.type === 'pick') cmd({ type: 'pick', c: e.data.c, i: e.data.i });
 });
 
 function renderControls() {
@@ -350,7 +389,7 @@ function renderControls() {
     controls().map((c) =>
       h(
         'button',
-        { class: `btn ${c.cls}`, type: 'button', onclick: (e) => (e.currentTarget.blur(), run(c.action)) },
+        { class: `btn ${c.cls}`, type: 'button', style: c.team ? teamStyle(c.team) : false, onclick: (e) => (e.currentTarget.blur(), run(c.action)) },
         c.label,
         c.key ? h('kbd', {}, keyLabel(c.key)) : null,
       ),
@@ -590,7 +629,33 @@ function adjust(team) {
   if (answer && Number.isFinite(delta) && delta !== 0) cmd({ type: 'adjust', teamId: team.id, delta });
 }
 
+// Single-screen mode: no separate TV screen is open, so this page shows the TV view (answers hidden),
+// with the controls underneath. H switches to the host view and back.
+const singleScreen = () => Boolean(view) && view.phase !== 'lobby' && tvs === 0;
+let stage = null; // the TV view, kept between updates (moving an iframe would reload it)
+
+function renderStage() {
+  if (!stage) {
+    stage = h('div', { class: 'stage-area' }, h('iframe', { src: '/display?embedded', title: t('openDisplay'), allow: 'autoplay; fullscreen' }), h('div', { class: 'stage-controls' }));
+    $('#game').append(stage);
+  }
+  fill(stage.querySelector('.stage-controls'), renderControls());
+}
+
 function renderGame() {
+  const tvView = singleScreen() && !peek;
+  if (singleScreen()) renderStage();
+  else if (stage) {
+    stage.remove(); // a separate TV screen took over: this page goes back to being the host view
+    stage = null;
+    peek = false;
+  }
+  if (stage) stage.hidden = !tvView;
+  let hostArea = $('#game > .host-game');
+  if (tvView) {
+    hostArea?.remove();
+    return;
+  }
   const p = view.phase;
   let main;
   if (p === 'board') main = renderBoard();
@@ -598,7 +663,10 @@ function renderGame() {
   else if (view.q) main = renderQuestion();
   else if (p === 'over') main = renderOver();
   else main = renderFinal();
-  $('#game').replaceChildren(h('div', { class: 'host-game' }, h('main', { class: 'host-main' }, main), renderScores(), renderControls()));
+  const note = singleScreen() ? h('p', { class: 'peek-note' }, t('peekNote')) : null;
+  const area = h('div', { class: 'host-game' }, h('main', { class: 'host-main' }, note, main), renderScores(), renderControls());
+  if (hostArea) hostArea.replaceWith(area);
+  else $('#game').prepend(area);
 }
 
 // ----- everything -----

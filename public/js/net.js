@@ -1,7 +1,7 @@
 // A WebSocket to the server that reconnects by itself (phones sleep, Wi-Fi drops).
 // Every (re)connect starts with a hello, so the server knows who this is again.
 
-export function connect({ role, teamId = () => null, onMessage, onStatus = () => {} }) {
+export function connect({ role, teamId = () => null, onMessage, onStatus = () => {}, extra = {} }) {
   let ws = null;
   let delay = 500;
   let retry = null;
@@ -12,7 +12,7 @@ export function connect({ role, teamId = () => null, onMessage, onStatus = () =>
     ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
     ws.onopen = () => {
       delay = 500;
-      ws.send(JSON.stringify({ type: 'hello', role, teamId: teamId() }));
+      ws.send(JSON.stringify({ type: 'hello', role, teamId: teamId(), ...extra }));
       onStatus(true);
     };
     ws.onmessage = (e) => {

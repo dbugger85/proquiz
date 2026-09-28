@@ -222,9 +222,34 @@ test('undo takes back the last judgement', () => {
   assert.equal(score(s, 'r'), -100);
   assert.equal(s.phase, 'armed');
   assert.equal(hostView(s).canUndo, true);
-  s = apply(s, { type: 'undo' });
+  s = apply(s, { type: 'undo' }); // back to Red answering
+  assert.equal(s.phase, 'answering');
+  s = run(s, { type: 'undo' }, { type: 'undo' }); // before the buzzers went on, before the tile was picked
+  assert.equal(s.phase, 'board');
   assert.equal(hostView(s).canUndo, false);
   assert.equal(apply(s, { type: 'undo' }), s);
+});
+
+test('undo goes back one step, also over questions nobody answered', () => {
+  // Question 1: Red gets it. Question 2: nobody, the host shows the answer. Back on the board.
+  let s = run(armedAt(started()), { type: 'buzz', teamId: 'r', now: 1100 }, { type: 'correct' }, { type: 'next', now: 0 });
+  s = run(s, { type: 'pick', c: 1, i: 0 }, { type: 'reveal' }, { type: 'next', now: 0 });
+  assert.equal(s.phase, 'board');
+  s = apply(s, { type: 'undo' }); // back to question 2's answer, not to question 1
+  assert.equal(s.phase, 'revealed');
+  assert.deepEqual([s.q.c, s.q.i], [1, 0]);
+  s = apply(s, { type: 'undo' });
+  assert.equal(s.phase, 'reading');
+  assert.deepEqual([s.q.c, s.q.i], [1, 0]);
+  s = apply(s, { type: 'undo' }); // the tile is back on the board
+  assert.equal(s.phase, 'board');
+  assert.equal(s.used[1][0], false);
+  assert.equal(score(s, 'r'), 200); // question 1 still counts
+  // A timeout can be undone too.
+  let t = run(armedAt(started()), { type: 'timeout', now: 11_000 });
+  assert.equal(t.phase, 'revealed');
+  t = apply(t, { type: 'undo' });
+  assert.equal(t.phase, 'armed');
 });
 
 test('undo keeps teams that joined in the meantime', () => {

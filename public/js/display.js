@@ -16,8 +16,14 @@ let soundSeq = null; // the last event we played a sound for (null until the fir
 let lastScreen = ''; // so the question only zooms in once, not on every update
 const seen = new Set(); // teams already on screen, so only new ones pop in
 
+// Inside the host page (single-screen mode, no separate TV): the tiles can be clicked and keys go to the host controls.
+const embedded = new URLSearchParams(location.search).has('embedded');
+if (embedded) document.body.classList.add('embedded');
+const toHost = (msg) => window.parent.postMessage({ proquiz: true, ...msg }, location.origin);
+
 const net = connect({
   role: 'display',
+  extra: { embedded },
   onMessage(msg) {
     if (msg.type === 'welcome') info = msg.info;
     if (msg.type === 'sound') playSound(view, msg, COLORS);
@@ -28,6 +34,8 @@ const net = connect({
       if (ev && soundSeq !== null && ev.seq !== soundSeq) playEvent(view, ev, COLORS);
       soundSeq = ev?.seq ?? 0;
     }
+    // Inside the host page, the host's own clicks allow sound, so switch it on without a click here.
+    if (embedded && !audioReady()) unlockAudio();
     if (view) render();
   },
 });
@@ -52,6 +60,11 @@ for (const type of ['pointerdown', 'keydown']) {
 
 // F for full screen (the TV window has no controls).
 document.addEventListener('keydown', (e) => {
+  if (embedded) {
+    if (e.target.closest?.('input, select, textarea')) return;
+    if (e.key === ' ') e.preventDefault();
+    return toHost({ type: 'key', key: e.key, repeat: e.repeat, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey });
+  }
   if (e.key === 'f' || e.key === 'F') {
     if (document.fullscreenElement) document.exitFullscreen();
     else document.documentElement.requestFullscreen().catch(() => {});
@@ -94,7 +107,11 @@ function renderBoard() {
           'div',
           { class: 'col' },
           h('div', { class: 'cat' }, cat.name),
-          cat.questions.map((q, i) => h('div', { class: `tile${view.used[c][i] ? ' used' : ''}` }, String(q.value))),
+          cat.questions.map((q, i) =>
+            embedded && !view.used[c][i]
+              ? h('button', { class: 'tile', type: 'button', onclick: () => toHost({ type: 'pick', c, i }) }, String(q.value))
+              : h('div', { class: `tile${view.used[c][i] ? ' used' : ''}` }, String(q.value)),
+          ),
         ),
       ),
     ),

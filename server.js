@@ -227,12 +227,15 @@ export function createHub({ set, info, saved = null, save = () => {}, store = nu
 
   function broadcast() {
     const connected = connectedTeams();
-    const displays = [...clients].filter((c) => c.role === 'display').length; // the host plays the sounds when there is no TV screen
+    // `displays` counts every TV screen (the host plays the sounds when there is none); `tvs` leaves out the one
+    // shown inside the host page when there is no separate TV screen (single-screen mode).
+    const displays = [...clients].filter((c) => c.role === 'display').length;
+    const tvs = [...clients].filter((c) => c.role === 'display' && !c.embedded).length;
     const serverNow = Date.now();
     const resume = resumable && summary(resumable);
     for (const c of clients) {
       if (!c.role) continue;
-      const msg = { type: 'state', view: viewFor(c), connected, displays, serverNow };
+      const msg = { type: 'state', view: viewFor(c), connected, displays, tvs, serverNow };
       if (c.role === 'host' && resume) msg.resume = resume;
       send(c.ws, msg);
     }
@@ -302,6 +305,7 @@ export function createHub({ set, info, saved = null, save = () => {}, store = nu
       if (msg.role === 'host' && !c.local) return send(c.ws, { type: 'error', code: 'host-only-on-laptop' });
       if (!['host', 'display', 'phone'].includes(msg.role)) return;
       c.role = msg.role;
+      c.embedded = c.role === 'display' && msg.embedded === true;
       if (c.role === 'phone') {
         c.askedTeamId = typeof msg.teamId === 'string' ? msg.teamId : null;
         const known = state.teams.some((t) => t.id === msg.teamId);

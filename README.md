@@ -65,7 +65,7 @@ Download the zip for your computer from the [latest release](https://github.com/
 1. **Wi-Fi:** connect the laptop and all the phones to the **same Wi-Fi**.
 2. **Start** ProQuiz. Keep its black (or Terminal) window open while you play.
 3. **TV:** connect the laptop to the TV as a **second screen** (extend, not mirror). On the host screen click **Open TV screen**, drag that window onto the TV, and press **F** for full screen. Click the TV screen once so it's allowed to play sound.
-   - If you can only mirror the screen, that works too: skip the TV screen and the laptop plays the sounds. The answers then show only when you reveal them.
+   - **Only one screen** (just the laptop, or the laptop mirrored to the TV)? Skip "Open TV screen". Once the game starts, the laptop shows the TV view itself, with the controls underneath: click the tiles on the board, and the answers stay hidden until you reveal them. Press **H** to peek at the host view (with the answer and score changes), and **H** again to go back. **F** is full screen.
 4. **Teams join:** they scan the QR code on the TV, type a team name and pick a colour. They can press **Try your buzzer** to hear their tone.
 5. **Settings:** in the lobby, choose the quiz, the language, what a wrong answer costs, the timers, and the music: on or off, the volume, and optionally your own music file for each moment (lobby, between questions, thinking, final, after the game).
 6. **Start game.**
@@ -97,6 +97,7 @@ Turn it on in the lobby's settings: **A little** hides about 3 special tiles on 
 | **P** / **0** | Play or pause the sound clip / play it from the start |
 | **M** | Sound effects on or off |
 | **B** | Background music on or off |
+| **H** | Without a separate TV screen: switch between the TV view and the host view |
 | **E** | End the board early and go to the final round |
 | **?** | Show all the keys |
 

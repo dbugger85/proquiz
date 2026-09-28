@@ -122,7 +122,7 @@ let out = null; // music volume → the shared limiter
 let noise = null; // one second of noise, shared by all drum hits
 let current = null; // what is playing: { kind: 'song' | 'file', key, bus, ... }
 let lastMood = null;
-let volume = 0.35;
+let volume = null; // the music volume setting (0–100) last applied
 const bad = new Set(); // the host's files that failed to load (their moment plays the built-in tune)
 const files = new Map(); // file → { el, gain }
 
@@ -134,7 +134,7 @@ function ready() {
   if (!ctx) {
     ctx = g.ctx;
     out = ctx.createGain();
-    out.gain.value = curve(volume);
+    out.gain.value = 0;
     out.connect(g.limiter);
     noise = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
     const d = noise.getChannelData(0);
@@ -143,8 +143,8 @@ function ready() {
   return true;
 }
 
-// 0–100 → gain. Even 100 stays below the sound effects.
-const curve = (v) => 0.6 * (v / 100) ** 1.5;
+// 0–100 → gain. The default 35 sits clearly audible under the sound effects; 100 is about as loud as them.
+export const curve = (v) => 0.9 * (v / 100) ** 1.2;
 
 function tone(dest, freq, t, dur, { type = 'sine', gain = 1, attack = 0.005, filter = null, slide = null } = {}) {
   const o = ctx.createOscillator();
@@ -312,8 +312,8 @@ export function syncMusic(view, now) {
   if (typeof document !== 'undefined') document.body.dataset.music = mood;
   if (!ready()) return;
   const v = view?.settings?.musicVolume ?? 35;
-  if (v / 100 !== volume) {
-    volume = v / 100;
+  if (v !== volume) {
+    volume = v;
     ramp(out.gain, curve(v), 0.2);
   }
   const m = MOODS[mood];
