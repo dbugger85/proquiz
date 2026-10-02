@@ -380,6 +380,9 @@ select option {
   min-height: 48px;
   cursor: pointer;
 }
+.check input {
+  flex: none; /* the box keeps its size when the text wraps */
+}
 .row {
   display: flex;
   align-items: center;
@@ -2312,6 +2315,7 @@ kbd {
   border-radius: var(--r-m);
   padding: 0.6rem 0.9rem 0.8rem;
   margin: 0;
+  min-width: 0; /* a fieldset is as wide as its contents by default, which pushed it past the panel */
 }
 .crazy-kinds legend {
   font-weight: 700;
@@ -2319,7 +2323,7 @@ kbd {
 }
 #crazy-kind-list {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fill, minmax(min(13rem, 100%), 1fr)); /* one column when the panel is narrow */
   gap: 0 0.75rem;
 }
 #crazy-kind-list .check {

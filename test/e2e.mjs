@@ -416,7 +416,7 @@ try {
   assert.equal(saved.categories[0].questions[0].unveil, 20);
 
   // In the lobby it shows as "needs fixing" and can't be picked yet.
-  await host.click('.controls button:has-text("New game, same teams")');
+  await host.click('.controls button:has-text("Back to the main menu")');
   await host.waitForSelector('body[data-phase=lobby]');
   await host.evaluate(() => window.dispatchEvent(new Event('focus')));
   await host.waitForFunction(() => [...document.querySelectorAll('#set-picker option')].some((o) => o.textContent.includes('needs fixing') && o.disabled));

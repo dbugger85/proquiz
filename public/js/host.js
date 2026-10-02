@@ -287,7 +287,7 @@ function controls() {
     const left = view.teams.filter((tm) => !(tm.id in view.final.judged)).length;
     add(' ', t('showScores'), () => (left === 0 || confirm(t('confirmUnjudged', { n: left }))) && cmd({ type: 'next' }), 'btn-primary');
   } else if (p === 'over') {
-    add('', t('restartBtn'), () => confirm(t('confirmRestart')) && cmd({ type: 'restart' }));
+    add(' ', t('restartBtn'), () => confirm(t('confirmRestart')) && cmd({ type: 'restart' }), 'btn-primary');
   }
   if (singleScreen()) {
     // With no separate TV screen, the choices that need the host view on a TV setup get buttons here.

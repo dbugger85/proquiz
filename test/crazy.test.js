@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { apply, newGame, COLORS, displayView, phoneView, hostView } from '../lib/game.js';
-import { placeSpecials, specialCount } from '../lib/crazy.js';
+import { placeSpecials, specialCount, turboTiles, SOLO } from '../lib/crazy.js';
 
 const sample = JSON.parse(readFileSync(new URL('../sets/sample.json', import.meta.url)));
 const run = (s, ...actions) => actions.reduce(apply, s);
@@ -38,6 +38,27 @@ test('placement: a little is about 1 in 8 tiles, lots about 1 in 4, always a tri
   assert.equal(Object.keys(a.specials).length, 6);
   const off = run(newGame(sample), { type: 'join', teamId: 'r', name: 'R', color: COLORS[0] }, { type: 'start', seed: 7 });
   assert.deepEqual(off.specials, {});
+});
+
+test('placement: spread over the categories, and no one-team specials on picture questions', () => {
+  // A 6×5 board where every 100 and 200 question has a picture.
+  const set = { categories: Array.from({ length: 6 }, () => ({ questions: Array.from({ length: 5 }, (_, i) => (i < 2 ? { image: 'x.png' } : {})) })) };
+  const perCategory = Array(6).fill(0);
+  for (let seed = 1; seed < 500; seed++) {
+    const some = placeSpecials({ set, rng: seed }, 'some'); // 4 specials on 6 categories
+    const cols = Object.keys(some).map((k) => Number(k.split('-')[0]));
+    assert.equal(new Set(cols).size, cols.length, `seed ${seed}: two specials in one category`);
+    cols.forEach((c) => perCategory[c]++);
+    const lots = placeSpecials({ set, rng: seed }, 'lots', ['triple', 'bomb', 'jackpot', 'freeze']); // only one-team kinds
+    for (const [key, kind] of Object.entries(lots)) {
+      assert.ok(SOLO.includes(kind));
+      assert.ok(Number(key.split('-')[1]) >= 2, `seed ${seed}: ${kind} on a picture question`);
+    }
+  }
+  assert.ok(Math.min(...perCategory) > 200, 'every category gets specials'); // about 333 each
+  // Turbo never adds a picture question either.
+  const s = { set, rng: 5, specials: {}, used: set.categories.map((cat) => cat.questions.map(() => false)) };
+  for (const [, i] of turboTiles(s, 20)) assert.ok(i >= 2);
 });
 
 test('the TV and the phones never learn where the specials are', () => {
