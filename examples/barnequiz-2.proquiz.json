@@ -1,0 +1,210 @@
+{
+  "proquiz": 1,
+  "set": {
+    "v": 1,
+    "title": "Barnequiz 2 (5–9 år)",
+    "categories": [
+      {
+        "name": "Dyr",
+        "questions": [
+          {
+            "value": 100,
+            "question": "Hvilket dyr har en lang snabel?",
+            "answer": "Elefanten"
+          },
+          {
+            "value": 200,
+            "question": "Hvilket dyr hopper og bærer ungen sin i en pung på magen?",
+            "answer": "Kenguruen"
+          },
+          {
+            "value": 300,
+            "question": "Hva kaller vi en kuunge?",
+            "answer": "En kalv"
+          },
+          {
+            "value": 400,
+            "question": "Hvilket dyr er dette? Se godt etter!",
+            "answer": "En pingvin",
+            "image": "barnequiz2-pingvin.svg",
+            "unveil": 15
+          },
+          {
+            "value": 500,
+            "question": "Hvor mange bein har en maur?",
+            "answer": "Seks (alle insekter har seks bein)"
+          }
+        ]
+      },
+      {
+        "name": "Mat",
+        "questions": [
+          {
+            "value": 100,
+            "question": "Hvilken frukt er dette?",
+            "answer": "En banan",
+            "image": "barnequiz2-banan.svg",
+            "unveil": 10
+          },
+          {
+            "value": 200,
+            "question": "Hva lager biene?",
+            "answer": "Honning"
+          },
+          {
+            "value": 300,
+            "question": "Hvilken oransje grønnsak vokser i jorda og er god for synet?",
+            "answer": "Gulroten"
+          },
+          {
+            "value": 400,
+            "question": "Hva lages popcorn av?",
+            "answer": "Mais (maiskorn)"
+          },
+          {
+            "value": 500,
+            "question": "Hvilket dyr gir oss melk som vi lager geitost av?",
+            "answer": "Geita"
+          }
+        ]
+      },
+      {
+        "name": "Eventyr",
+        "questions": [
+          {
+            "value": 100,
+            "question": "Hvem skulle Rødhette besøke i skogen?",
+            "answer": "Bestemor"
+          },
+          {
+            "value": 200,
+            "question": "Hvor mange dverger bor sammen med Snøhvit?",
+            "answer": "Sju"
+          },
+          {
+            "value": 300,
+            "question": "Hva heter den lille grisen som er bestevennen til Ole Brumm?",
+            "answer": "Nasse Nøff"
+          },
+          {
+            "value": 400,
+            "question": "I eventyret om Gullhår: hvor mange bjørner bor i huset?",
+            "answer": "Tre"
+          },
+          {
+            "value": 500,
+            "question": "Hva heter de to storebrødrene til Askeladden?",
+            "answer": "Per og Pål"
+          }
+        ]
+      },
+      {
+        "name": "Tall",
+        "questions": [
+          {
+            "value": 100,
+            "question": "Hva er 5 + 5?",
+            "answer": "10"
+          },
+          {
+            "value": 200,
+            "question": "Hvor mange hjul har en vanlig bil?",
+            "answer": "Fire"
+          },
+          {
+            "value": 300,
+            "question": "Hvor mange stjerner ser du?",
+            "answer": "Sju",
+            "image": "barnequiz2-stjerner.svg"
+          },
+          {
+            "value": 400,
+            "question": "Hva er 10 − 4?",
+            "answer": "6"
+          },
+          {
+            "value": 500,
+            "question": "Hvor mange måneder er det i ett år?",
+            "answer": "12"
+          }
+        ]
+      },
+      {
+        "name": "Norge og verden",
+        "questions": [
+          {
+            "value": 100,
+            "question": "Hva heter hovedstaden i Norge?",
+            "answer": "Oslo"
+          },
+          {
+            "value": 200,
+            "question": "Hvilken dag går barnetoget i Norge?",
+            "answer": "17. mai (nasjonaldagen)"
+          },
+          {
+            "value": 300,
+            "question": "Hvilket land har dette flagget?",
+            "answer": "Sverige",
+            "image": "barnequiz2-flagg.svg"
+          },
+          {
+            "value": 400,
+            "question": "Hvilket stort dyr med svære horn kalles «skogens konge»?",
+            "answer": "Elgen"
+          },
+          {
+            "value": 500,
+            "question": "I hvilket land står de store, gamle pyramidene?",
+            "answer": "Egypt"
+          }
+        ]
+      },
+      {
+        "name": "Natur og rommet",
+        "questions": [
+          {
+            "value": 100,
+            "question": "Hva bruker vi nesen til?",
+            "answer": "Å lukte (og puste)"
+          },
+          {
+            "value": 200,
+            "question": "Hva heter den varme stjernen som lyser opp dagen?",
+            "answer": "Sola"
+          },
+          {
+            "value": 300,
+            "question": "Hva kan vi se på himmelen når sola skinner mens det regner?",
+            "answer": "En regnbue",
+            "answerImage": "barnequiz2-regnbue.svg"
+          },
+          {
+            "value": 400,
+            "question": "Hva blir vann til når det blir veldig kaldt?",
+            "answer": "Is"
+          },
+          {
+            "value": 500,
+            "question": "Hvilken planet kalles «den røde planeten»?",
+            "answer": "Mars"
+          }
+        ]
+      }
+    ],
+    "final": {
+      "category": "Havet",
+      "question": "Hva er det aller største dyret i hele verden?",
+      "answer": "Blåhvalen",
+      "answerImage": "barnequiz2-hval.svg"
+    }
+  },
+  "files": {
+    "barnequiz2-pingvin.svg": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI5MDAiIGhlaWdodD0iNTAwIiB2aWV3Qm94PSIwIDAgOTAwIDUwMCI+PHJlY3Qgd2lkdGg9IjkwMCIgaGVpZ2h0PSI1MDAiIGZpbGw9IiNiZmU2ZmYiLz4KPHJlY3QgeT0iNDAwIiB3aWR0aD0iOTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iI2ZmZmZmZiIvPjxlbGxpcHNlIGN4PSI0NTAiIGN5PSI0MDUiIHJ4PSIyMjAiIHJ5PSIyMiIgZmlsbD0iI2NmZTNmMiIvPgo8ZWxsaXBzZSBjeD0iNDUwIiBjeT0iMjcwIiByeD0iMTI1IiByeT0iMTUwIiBmaWxsPSIjMWQyNDMzIi8+CjxlbGxpcHNlIGN4PSI0NTAiIGN5PSIyOTUiIHJ4PSI4NSIgcnk9IjExOCIgZmlsbD0iI2ZmZmZmZiIvPgo8Y2lyY2xlIGN4PSI0NTAiIGN5PSIxNTAiIHI9IjgwIiBmaWxsPSIjMWQyNDMzIi8+CjxlbGxpcHNlIGN4PSI0MjAiIGN5PSIxNjAiIHJ4PSIzMCIgcnk9IjM2IiBmaWxsPSIjZmZmIi8+PGVsbGlwc2UgY3g9IjQ4MCIgY3k9IjE2MCIgcng9IjMwIiByeT0iMzYiIGZpbGw9IiNmZmYiLz4KPGNpcmNsZSBjeD0iNDI1IiBjeT0iMTYwIiByPSIxMSIgZmlsbD0iIzFkMjQzMyIvPjxjaXJjbGUgY3g9IjQ3NSIgY3k9IjE2MCIgcj0iMTEiIGZpbGw9IiMxZDI0MzMiLz4KPHBhdGggZD0iTTQzMCAxOTAgTDQ3MCAxOTAgTDQ1MCAyMTggWiIgZmlsbD0iI2ZmOWQxYyIvPgo8cGF0aCBkPSJNMzMwIDI0MCBRMjkwIDMyMCAzMjAgMzcwIFEzNTAgMzIwIDM0NSAyNTAgWiIgZmlsbD0iIzFkMjQzMyIvPjxwYXRoIGQ9Ik01NzAgMjQwIFE2MTAgMzIwIDU4MCAzNzAgUTU1MCAzMjAgNTU1IDI1MCBaIiBmaWxsPSIjMWQyNDMzIi8+CjxlbGxpcHNlIGN4PSI0MDUiIGN5PSI0MTAiIHJ4PSI0MiIgcnk9IjE0IiBmaWxsPSIjZmY5ZDFjIi8+PGVsbGlwc2UgY3g9IjQ5NSIgY3k9IjQxMCIgcng9IjQyIiByeT0iMTQiIGZpbGw9IiNmZjlkMWMiLz48L3N2Zz4=",
+    "barnequiz2-stjerner.svg": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI5MDAiIGhlaWdodD0iNTAwIiB2aWV3Qm94PSIwIDAgOTAwIDUwMCI+PHJlY3Qgd2lkdGg9IjkwMCIgaGVpZ2h0PSI1MDAiIGZpbGw9IiMyMjMwNWUiLz48cG9seWdvbiBwb2ludHM9IjEzMC4wLDcwLjAgMTQ4LjUsMTE0LjUgMTk2LjYsMTE4LjQgMTYwLjAsMTQ5LjcgMTcxLjEsMTk2LjYgMTMwLjAsMTcxLjUgODguOSwxOTYuNiAxMDAuMCwxNDkuNyA2My40LDExOC40IDExMS41LDExNC41IiBmaWxsPSIjZmZjMjFhIiBzdHJva2U9IiNlMDhhMDAiIHN0cm9rZS13aWR0aD0iNSIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjxwb2x5Z29uIHBvaW50cz0iMzMwLjAsNDAuMCAzNDguNSw4NC41IDM5Ni42LDg4LjQgMzYwLjAsMTE5LjcgMzcxLjEsMTY2LjYgMzMwLjAsMTQxLjUgMjg4LjksMTY2LjYgMzAwLjAsMTE5LjcgMjYzLjQsODguNCAzMTEuNSw4NC41IiBmaWxsPSIjZmZkODRkIiBzdHJva2U9IiNlMDhhMDAiIHN0cm9rZS13aWR0aD0iNSIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjxwb2x5Z29uIHBvaW50cz0iNTYwLjAsODAuMCA1NzguNSwxMjQuNSA2MjYuNiwxMjguNCA1OTAuMCwxNTkuNyA2MDEuMSwyMDYuNiA1NjAuMCwxODEuNSA1MTguOSwyMDYuNiA1MzAuMCwxNTkuNyA0OTMuNCwxMjguNCA1NDEuNSwxMjQuNSIgZmlsbD0iI2ZmYzIxYSIgc3Ryb2tlPSIjZTA4YTAwIiBzdHJva2Utd2lkdGg9IjUiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48cG9seWdvbiBwb2ludHM9Ijc3MC4wLDUwLjAgNzg4LjUsOTQuNSA4MzYuNiw5OC40IDgwMC4wLDEyOS43IDgxMS4xLDE3Ni42IDc3MC4wLDE1MS41IDcyOC45LDE3Ni42IDc0MC4wLDEyOS43IDcwMy40LDk4LjQgNzUxLjUsOTQuNSIgZmlsbD0iI2ZmZDg0ZCIgc3Ryb2tlPSIjZTA4YTAwIiBzdHJva2Utd2lkdGg9IjUiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48cG9seWdvbiBwb2ludHM9IjIyMC4wLDI3MC4wIDIzOC41LDMxNC41IDI4Ni42LDMxOC40IDI1MC4wLDM0OS43IDI2MS4xLDM5Ni42IDIyMC4wLDM3MS41IDE3OC45LDM5Ni42IDE5MC4wLDM0OS43IDE1My40LDMxOC40IDIwMS41LDMxNC41IiBmaWxsPSIjZmZjMjFhIiBzdHJva2U9IiNlMDhhMDAiIHN0cm9rZS13aWR0aD0iNSIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjxwb2x5Z29uIHBvaW50cz0iNDcwLjAsMjkwLjAgNDg4LjUsMzM0LjUgNTM2LjYsMzM4LjQgNTAwLjAsMzY5LjcgNTExLjEsNDE2LjYgNDcwLjAsMzkxLjUgNDI4LjksNDE2LjYgNDQwLjAsMzY5LjcgNDAzLjQsMzM4LjQgNDUxLjUsMzM0LjUiIGZpbGw9IiNmZmQ4NGQiIHN0cm9rZT0iI2UwOGEwMCIgc3Ryb2tlLXdpZHRoPSI1IiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PHBvbHlnb24gcG9pbnRzPSI3MjAuMCwyNjAuMCA3MzguNSwzMDQuNSA3ODYuNiwzMDguNCA3NTAuMCwzMzkuNyA3NjEuMSwzODYuNiA3MjAuMCwzNjEuNSA2NzguOSwzODYuNiA2OTAuMCwzMzkuNyA2NTMuNCwzMDguNCA3MDEuNSwzMDQuNSIgZmlsbD0iI2ZmYzIxYSIgc3Ryb2tlPSIjZTA4YTAwIiBzdHJva2Utd2lkdGg9IjUiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48L3N2Zz4=",
+    "barnequiz2-flagg.svg": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI5MDAiIGhlaWdodD0iNTAwIiB2aWV3Qm94PSIwIDAgOTAwIDUwMCI+PHJlY3Qgd2lkdGg9IjkwMCIgaGVpZ2h0PSI1MDAiIGZpbGw9IiMwMDZhYTciLz48cmVjdCB4PSIwIiB5PSIwIiB3aWR0aD0iOTAwIiBoZWlnaHQ9IjUwMCIgZmlsbD0iIzAwNmFhNyIvPjxyZWN0IHg9IjI1MCIgeT0iMCIgd2lkdGg9IjEwMCIgaGVpZ2h0PSI1MDAiIGZpbGw9IiNmZWNjMDAiLz48cmVjdCB4PSIwIiB5PSIyMDAiIHdpZHRoPSI5MDAiIGhlaWdodD0iMTAwIiBmaWxsPSIjZmVjYzAwIi8+PC9zdmc+",
+    "barnequiz2-regnbue.svg": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI5MDAiIGhlaWdodD0iNTAwIiB2aWV3Qm94PSIwIDAgOTAwIDUwMCI+PHJlY3Qgd2lkdGg9IjkwMCIgaGVpZ2h0PSI1MDAiIGZpbGw9IiNiZmU2ZmYiLz48cGF0aCBkPSJNOTAgNDMwIEEzNjAgMzYwIDAgMCAxIDgxMCA0MzAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2U1MzkzNSIgc3Ryb2tlLXdpZHRoPSI0MiIvPjxwYXRoIGQ9Ik0xMzAgNDMwIEEzMjAgMzIwIDAgMCAxIDc3MCA0MzAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZiOGMwMCIgc3Ryb2tlLXdpZHRoPSI0MiIvPjxwYXRoIGQ9Ik0xNzAgNDMwIEEyODAgMjgwIDAgMCAxIDczMCA0MzAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZkZDgzNSIgc3Ryb2tlLXdpZHRoPSI0MiIvPjxwYXRoIGQ9Ik0yMTAgNDMwIEEyNDAgMjQwIDAgMCAxIDY5MCA0MzAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzQzYTA0NyIgc3Ryb2tlLXdpZHRoPSI0MiIvPjxwYXRoIGQ9Ik0yNTAgNDMwIEEyMDAgMjAwIDAgMCAxIDY1MCA0MzAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzFlODhlNSIgc3Ryb2tlLXdpZHRoPSI0MiIvPjxwYXRoIGQ9Ik0yOTAgNDMwIEExNjAgMTYwIDAgMCAxIDYxMCA0MzAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzVlMzViMSIgc3Ryb2tlLXdpZHRoPSI0MiIvPjxjaXJjbGUgY3g9IjE0MCIgY3k9IjQzMCIgcj0iNzAiIGZpbGw9IiNmZmYiLz48Y2lyY2xlIGN4PSIyMTAiIGN5PSI0NDUiIHI9IjU1IiBmaWxsPSIjZmZmIi8+PGNpcmNsZSBjeD0iNzYwIiBjeT0iNDMwIiByPSI3MCIgZmlsbD0iI2ZmZiIvPjxjaXJjbGUgY3g9IjY5MCIgY3k9IjQ0NSIgcj0iNTUiIGZpbGw9IiNmZmYiLz48L3N2Zz4=",
+    "barnequiz2-banan.svg": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI5MDAiIGhlaWdodD0iNTAwIiB2aWV3Qm94PSIwIDAgOTAwIDUwMCI+PHJlY3Qgd2lkdGg9IjkwMCIgaGVpZ2h0PSI1MDAiIGZpbGw9IiNmZmY0ZTAiLz48cGF0aCBkPSJNMjMwIDE3MCBRMzAwIDQyMCA2NDAgMzMwIFE3MjAgMzAwIDcwMCAyNTAgUTY0MCAzMDAgNDgwIDI5MCBRMzMwIDI3MCAyOTAgMTUwIFoiIGZpbGw9IiNmZmQ5M2IiIHN0cm9rZT0iI2M5OWEwMCIgc3Ryb2tlLXdpZHRoPSIxMiIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPgo8cmVjdCB4PSIyNjIiIHk9IjEyMCIgd2lkdGg9IjM0IiBoZWlnaHQ9IjUwIiByeD0iOCIgZmlsbD0iIzZiNGExZiIgdHJhbnNmb3JtPSJyb3RhdGUoLTE1IDI3OSAxNDUpIi8+PGNpcmNsZSBjeD0iNzAyIiBjeT0iMjUyIiByPSIxMiIgZmlsbD0iIzZiNGExZiIvPjwvc3ZnPg==",
+    "barnequiz2-hval.svg": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI5MDAiIGhlaWdodD0iNTAwIiB2aWV3Qm94PSIwIDAgOTAwIDUwMCI+PHJlY3Qgd2lkdGg9IjkwMCIgaGVpZ2h0PSI1MDAiIGZpbGw9IiNiZmU2ZmYiLz48cmVjdCB5PSIzMDAiIHdpZHRoPSI5MDAiIGhlaWdodD0iMjAwIiBmaWxsPSIjMTU2NWMwIi8+CjxwYXRoIGQ9Ik0xMjAgMzAwIFExNDAgMTcwIDM4MCAxNzAgUTYyMCAxNzAgNjgwIDI2MCBMNzYwIDIwMCBRNzkwIDE5MCA3OTAgMjIwIEw3NjAgMzAwIFoiIGZpbGw9IiM1YzdmYTMiLz4KPHBhdGggZD0iTTEyMCAzMDAgUTMwMCAzNjAgNzAwIDMwMCBaIiBmaWxsPSIjOWRiN2QwIi8+PGNpcmNsZSBjeD0iMjMwIiBjeT0iMjQ1IiByPSIxMiIgZmlsbD0iIzFkMjQzMyIvPgo8cGF0aCBkPSJNMzAwIDE2NSBRMjkwIDkwIDI2MCA2MCBNMzAwIDE2NSBRMzEwIDkwIDM0MCA2MCIgc3Ryb2tlPSIjM2Q4ZmQ2IiBzdHJva2Utd2lkdGg9IjE2IiBmaWxsPSJub25lIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KPHBhdGggZD0iTTAgMzAwIFE2MCAyODAgMTIwIDMwMCBUMjQwIDMwMCBUMzYwIDMwMCBUNDgwIDMwMCBUNjAwIDMwMCBUNzIwIDMwMCBUODQwIDMwMCBUOTYwIDMwMCIgc3Ryb2tlPSIjMGQ0N2ExIiBzdHJva2Utd2lkdGg9IjEwIiBmaWxsPSJub25lIi8+PC9zdmc+"
+  }
+}

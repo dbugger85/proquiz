@@ -60,6 +60,9 @@ Download the zip for your computer from the [latest release](https://github.com/
 2. Click **Edit questions** to make your quiz. Click a tile to write its question and answer, and add a picture or sound clip if you like. The editor saves by itself, and a list under the board tells you what's missing. Two sample quizzes are included, in English and Norwegian.
 3. Try it once with two phones, so you know how it feels.
 
+**Ready-made quizzes to import** (download the file, then **Import** in the editor):
+- [Barnequiz 2 (5–9 år)](examples/barnequiz-2.proquiz.json): a Norwegian quiz for children aged 5 to 9, about animals, food, fairy tales, numbers, Norway and the world, and nature and space, with six pictures.
+
 ## On the night
 
 1. **Wi-Fi:** connect the laptop and all the phones to the **same Wi-Fi**.
