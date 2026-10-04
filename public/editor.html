@@ -25,6 +25,7 @@
             <span data-t="edImport"></span>
             <input id="import-file" type="file" accept=".json,application/json" hidden>
           </label>
+          <button id="ai-quiz" class="btn" type="button" data-t="aiButton"></button>
         </div>
         <ul id="quiz-list" class="ed-list"></ul>
       </aside>
@@ -37,6 +38,10 @@
 
   <dialog id="q-dialog" class="ed-dialog">
     <form method="dialog" id="q-form"></form>
+  </dialog>
+
+  <dialog id="ai-dialog" class="ed-dialog">
+    <form method="dialog" id="ai-form"></form>
   </dialog>
 
   <script type="module" src="/js/editor.js"></script>

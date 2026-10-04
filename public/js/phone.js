@@ -171,7 +171,56 @@ function stage() {
   if (view.phase === 'revealed' && ev?.type === 'correct' && ev.teamId === me.id) {
     return [h('div', { class: 'big' }, t('gotIt'))];
   }
+  if (view.phase === 'board' && view.canPick) return pickStage();
+  if (view.phase === 'board' && view.settings.phonePick && view.picker && view.picker !== me.id) {
+    return [h('p', { class: 'small' }, t('otherPicks', { name: nameOf(view.picker) }))];
+  }
   return [h('p', { class: 'small' }, t('waitNext'))];
+}
+
+// ----- picking the next question (only the picking team, only while the board shows) -----
+
+let pickCat = null; // the category tapped first, then its points are shown
+
+function pickStage() {
+  const board = view.board;
+  const cat = board[pickCat];
+  if (!cat || cat.used.every(Boolean)) {
+    pickCat = null;
+    return [
+      h('div', { class: 'big' }, t('yourPick')),
+      h('p', { class: 'small' }, t('pickCategory')),
+      h(
+        'div',
+        { class: 'pick-board' },
+        board.map((cat, c) => {
+          const left = cat.used.filter((u) => !u).length;
+          return h(
+            'button',
+            { class: 'pick-cat', type: 'button', disabled: left === 0, onclick: () => ((pickCat = c), render()) },
+            h('span', { class: 'pick-name' }, cat.name),
+            h('small', {}, t('tilesLeft', { n: left })),
+          );
+        }),
+      ),
+    ];
+  }
+  return [
+    h('p', { class: 'kicker' }, cat.name),
+    h('p', { class: 'small' }, t('pickValue')),
+    h(
+      'div',
+      { class: 'pick-values' },
+      cat.values.map((value, i) =>
+        h(
+          'button',
+          { class: `pick-tile${cat.used[i] ? ' used' : ''}`, type: 'button', disabled: cat.used[i], onclick: () => net.send({ type: 'pick', c: pickCat, i }) },
+          String(value),
+        ),
+      ),
+    ),
+    h('button', { class: 'btn btn-quiet', type: 'button', onclick: () => ((pickCat = null), render()) }, t('pickBack')),
+  ];
 }
 
 // ----- final round -----
@@ -238,7 +287,11 @@ function answerStage() {
 let stageKey = '';
 function stageKeyFor() {
   const f = view.final;
-  return JSON.stringify([view.lang, view.status, view.phase, view.buzzedTeam, view.event?.seq, view.you.score, view.deadline, f?.wager, f?.answer, f?.judged, f?.maxWager]);
+  if (!view.canPick) pickCat = null;
+  return JSON.stringify([
+    view.lang, view.status, view.phase, view.buzzedTeam, view.event?.seq, view.you.score, view.deadline, f?.wager, f?.answer, f?.judged, f?.maxWager,
+    view.picker, view.settings.phonePick, view.board, pickCat,
+  ]);
 }
 
 // One-off reactions to what just happened: shake for "too early" or "wrong", flash and buzz for "you're first".

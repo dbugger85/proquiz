@@ -209,12 +209,25 @@ try {
   await host.waitForSelector('.controls button:has-text("Music off")');
   await host.keyboard.press('b');
   await tv.waitForSelector('body[data-music=board]', { state: 'attached', timeout: 6000 });
-  assert.match(await tv.textContent('.tv-picks'), /Quizzy Rascals picks/);
+  assert.match(await tv.textContent('.tv-picks'), /Quizzy Rascals picks on their phone/);
+  assert.match(await host.textContent('.board-hint'), /Quizzy Rascals is picking on their phone/);
   await shot(tv, 'tv-8-board-after');
 
-  // The host gives up on a question: R shows the answer.
-  await host.click('.host-board .col:nth-child(2) .tile:nth-of-type(1)');
+  // Quizzy Rascals picks the next question on their phone: a category, then the points.
+  await red.bringToFront(); // a phone in the background barely moves its animations, so the old "first" flash would still show
+  await red.waitForFunction(() => !document.getAnimations().some((a) => a.animationName === 'first-flash' && a.playState === 'running'));
+  await red.waitForSelector('.pick-board');
+  await blue.waitForSelector('#stage :text("Quizzy Rascals is picking")');
+  assert.equal(await blue.locator('.pick-board').count(), 0);
+  await shot(red, 'phone-9-pick-board');
+  await red.click('.pick-cat >> nth=1');
+  await red.waitForSelector('.pick-values');
+  await shot(red, 'phone-10-pick-values');
+  await red.click('.pick-tile >> nth=0');
   await host.waitForSelector('.host-q');
+  await red.waitForSelector('.pick-board', { state: 'detached' });
+
+  // The host gives up on a question: R shows the answer.
   await host.keyboard.press('r');
   await tv.waitForSelector('.tv-q .answer');
   assert.match(await tv.textContent('.tv-q .band'), /Nobody got it/);
@@ -414,6 +427,45 @@ try {
   assert.match(saved.categories[0].questions[0].image, /^[0-9a-f]{16}\.svg$/);
   assert.equal(saved.categories[0].questions[0].audioStart, 1.5);
   assert.equal(saved.categories[0].questions[0].unveil, 20);
+
+  // Make a quiz with AI: choose topics and size, copy the request, paste a (messy) answer, and the board fills in.
+  await ed.click('#ai-quiz');
+  await ed.waitForSelector('#ai-dialog[open]');
+  await ed.fill('#ai-form textarea[name=topics]', 'Hovedsteder\nDyr\nMat\nSport');
+  await ed.selectOption('#ai-form select[name=difficulty]', 'kids');
+  await ed.selectOption('#ai-form select[name=categories]', '3');
+  await ed.selectOption('#ai-form select[name=rows]', '3');
+  await ed.selectOption('#ai-form select[name=lang]', 'no');
+  const request = await ed.inputValue('#ai-request');
+  assert.match(request, /Exactly 3 categories with exactly 3 questions each/);
+  assert.match(request, /"Hovedsteder", "Dyr", "Mat"\./);
+  assert.match(request, /children aged 5 to 9/);
+  assert.match(request, /Norwegian \(bokmål\)/);
+  assert.match(await ed.textContent('.ai-too-many'), /first 3 topics/);
+  await shot(ed, 'editor-4-ai-request');
+  await ed.click('.ai-fill');
+  assert.match(await ed.textContent('#ai-error'), /Paste the answer/); // nothing pasted yet
+  const aiQuiz = {
+    title: 'Barnas quiz',
+    categories: ['Hovedsteder', 'Dyr', 'Mat'].map((name, c) => ({
+      name,
+      questions: [100, 200, 300].map((value, i) => ({ value, question: `Spørsmål ${c + 1}.${i + 1}?`, answer: `Svar ${c + 1}.${i + 1}` })),
+    })),
+    final: { category: 'Verden', question: 'Hva er verdens største hav?', answer: 'Stillehavet' },
+  };
+  aiQuiz.categories[1].questions[2].answer = 'Svar 1.1'; // the same answer twice
+  await ed.fill('#ai-reply', `Her er quizen din!\n\n\`\`\`json\n${JSON.stringify(aiQuiz, null, 2).replace('"title"', '“title”')}\n\`\`\`\nLykke til!`);
+  await ed.click('.ai-fill');
+  await ed.waitForSelector('#ai-dialog:not([open])', { state: 'hidden' });
+  await ed.waitForFunction(() => document.querySelector('.ed-name input')?.value === 'Barnas quiz');
+  assert.equal(await ed.locator('.ed-col').count(), 3);
+  assert.match(await ed.textContent('.ed-tile[data-c="0"][data-i="0"]'), /Spørsmål 1\.1/);
+  assert.match(await ed.textContent('.ai-note'), /Made with AI/);
+  assert.match(await ed.textContent('.ai-note'), /Svar 1\.1/);
+  assert.match(await ed.textContent('.ed-problems'), /Everything is ready to play/);
+  await shot(ed, 'editor-5-ai-board');
+  const aiSaved = (await (await fetch(`${base}/api/sets`)).json()).find((x) => x.title === 'Barnas quiz');
+  assert.equal(aiSaved.problems, 0);
 
   // In the lobby it shows as "needs fixing" and can't be picked yet.
   await host.click('.controls button:has-text("Back to the main menu")');

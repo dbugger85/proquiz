@@ -397,11 +397,18 @@ function renderControls() {
   );
 }
 
+function boardHint() {
+  if (!view.picker) return t('boardHint');
+  const name = teamName(view.picker);
+  if (!view.settings.phonePick) return `${t('picks', { name })}. ${t('boardHint')}`;
+  return connected.has(view.picker) ? t('boardHintPhone', { name }) : t('noPhonePicker', { name });
+}
+
 function renderBoard() {
   return h(
     'div',
     {},
-    h('p', { class: 'board-hint' }, view.picker ? `${t('picks', { name: teamName(view.picker) })}. ${t('boardHint')}` : t('boardHint')),
+    h('p', { class: 'board-hint' }, boardHint()),
     h(
       'div',
       { class: 'host-board' },

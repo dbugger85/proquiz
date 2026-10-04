@@ -60,6 +60,8 @@ Download the zip for your computer from the [latest release](https://github.com/
 2. Click **Edit questions** to make your quiz. Click a tile to write its question and answer, and add a picture or sound clip if you like. The editor saves by itself, and a list under the board tells you what's missing. Two sample quizzes are included, in English and Norwegian.
 3. Try it once with two phones, so you know how it feels.
 
+**Make a quiz with AI:** in the editor, click **Make questions with AI**. Type a few topics (one per line, each becomes a category), add example questions if you like, and choose the difficulty (kids 5–9, easy, medium, hard or expert), the board size, the final question and the language. Click **Copy the request**, paste it into Claude or ChatGPT, then copy the AI's whole answer back into the box and click **Fill the board**. Your new quiz opens in the editor. **Check every answer: AI can get facts wrong.** ProQuiz itself never goes on the internet.
+
 **Ready-made quizzes to import** (download the file, then **Import** in the editor):
 - [Barnequiz 2 (5–9 år)](examples/barnequiz-2.proquiz.json): a Norwegian quiz for children aged 5 to 9, about animals, food, fairy tales, numbers, Norway and the world, and nature and space, with six pictures.
 
@@ -71,7 +73,8 @@ Download the zip for your computer from the [latest release](https://github.com/
    - **Only one screen** (just the laptop, or the laptop mirrored to the TV)? Skip "Open TV screen". Once the game starts, the laptop shows the TV view itself, with the controls underneath: click the tiles on the board, and the answers stay hidden until you reveal them. Press **H** to peek at the host view (with the answer and score changes), and **H** again to go back. **F** is full screen.
 4. **Teams join:** they scan the QR code on the TV, type a team name and pick a colour. They can press **Try your buzzer** to hear their tone.
 5. **Settings:** in the lobby, choose the quiz, the language, what a wrong answer costs, the timers, and the music: on or off, the volume, and optionally your own music file for each moment (lobby, between questions, thinking, final, after the game).
-6. **Start game.**
+6. **Picking on the phone:** with **Teams pick the next question on their phone** ticked (it is by default), the team whose turn it is chooses a category and then the points on its phone, and the question opens on the TV at once. You can always click a tile on the laptop instead, for example if their phone has run out of battery.
+7. **Start game.**
 
 ### Crazy mode (Kaosmodus)
 
@@ -91,7 +94,7 @@ Turn it on in the lobby's settings: **A little** hides about 3 special tiles on 
 
 | Key | What it does |
 |---|---|
-| Click a tile | Open the question the team picked |
+| Click a tile | Open the question the team picked (or let them pick it on their phone) |
 | **Space** | Turn the buzzers on (after reading the question), or go back to the board |
 | **Y** / **N** | The answer is correct / wrong |
 | **R** | Show the answer (nobody got it) |

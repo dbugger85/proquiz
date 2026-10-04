@@ -204,6 +204,52 @@ test('cancel puts the tile back; reveal gives up on it', () => {
   assert.equal(apply(w, { type: 'cancel' }), w);
 });
 
+test('the picking team can pick the next question on its phone', () => {
+  let s = started();
+  assert.equal(s.settings.phonePick, true); // on by default
+  assert.equal(apply(s, { type: 'pick', c: 0, i: 1, teamId: 'b' }), s); // not their turn
+  for (const [c, i] of [['0', 1], [0, '1'], [0, 1.5], ['__proto__', 0], [5, 0]]) assert.equal(apply(s, { type: 'pick', c, i, teamId: 'r' }), s);
+  assert.equal(apply(started({ phonePick: false }), { type: 'pick', c: 0, i: 1, teamId: 'r' }).phase, 'board'); // switched off
+
+  s = apply(s, { type: 'pick', c: 0, i: 1, teamId: 'r' });
+  assert.equal(s.phase, 'reading');
+  assert.deepEqual([s.q.c, s.q.i, s.used[0][1], s.event.type], [0, 1, true, 'pick']);
+  assert.equal(apply(s, { type: 'pick', c: 1, i: 0, teamId: 'r' }), s); // a second tap does nothing
+  assert.equal(apply(s, { type: 'undo' }).phase, 'board'); // the host can put it back
+
+  // The host can always pick, also when the setting is off.
+  assert.equal(apply(started({ phonePick: false }), { type: 'pick', c: 0, i: 1 }).phase, 'reading');
+  // A used tile can't be picked from the phone either.
+  s = run(s, { type: 'reveal' }, { type: 'next', now: 0 });
+  assert.equal(apply(s, { type: 'pick', c: 0, i: 1, teamId: 'r' }), s);
+});
+
+test('only the picking team gets the board on its phone: names, points and used tiles, nothing else', () => {
+  const set = structuredClone(small);
+  set.categories[0].questions[0].image = 'flag.svg';
+  set.categories[0].questions[0].unveil = 5;
+  set.categories[1].questions[1].audio = 'song.mp3';
+  let s = started({}, set);
+  const r = phoneView(s, 'r');
+  assert.equal(r.canPick, true);
+  assert.equal(r.settings.phonePick, true);
+  assert.deepEqual(r.board, [
+    { name: 'A', values: [100, 200], used: [false, false] },
+    { name: 'B', values: [100, 200], used: [false, false] },
+  ]);
+  const text = JSON.stringify(r);
+  for (const secret of ['a1', 'a2', 'A1', 'A2', 'b1', 'B2', 'fq', 'FA', 'flag.svg', 'song.mp3', 'unveil', 'image', 'audio']) assert.ok(!text.includes(`"${secret}`), secret);
+  assert.equal(phoneView(s, 'b').canPick, false);
+  assert.equal(phoneView(s, 'b').board, undefined);
+  assert.equal(phoneView(s, 'nobody').canPick, false);
+  assert.equal(phoneView(started({ phonePick: false }), 'r').canPick, false);
+
+  s = apply(s, { type: 'pick', c: 1, i: 0 });
+  assert.equal(phoneView(s, 'r').board, undefined); // gone once a question is open
+  s = run(s, { type: 'reveal' }, { type: 'next', now: 0 });
+  assert.deepEqual(phoneView(s, 'r').board[1].used, [true, false]);
+});
+
 test('used tiles cannot be picked again', () => {
   const s = run(started(), { type: 'pick', c: 0, i: 0 }, { type: 'reveal' }, { type: 'next', now: 0 });
   assert.equal(apply(s, { type: 'pick', c: 0, i: 0 }), s);

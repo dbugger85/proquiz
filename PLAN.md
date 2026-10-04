@@ -32,6 +32,8 @@ A Jeopardy-style quiz for teams in one room. The host laptop runs the game, a TV
 10. ✅ Packaging: `npm run build` makes zips for Windows, Mac (Apple Silicon and Intel) and Linux (x64 and arm64), published as GitHub releases
 
 ## Also done
+- Picking the tile from the phone (planned with Fable, decided by the user on 2026-10-04): a lobby setting, on by default. The picking team's phone shows the categories, then the points, and the question opens at once. The host can always click a tile too. No time limit. Only the picking team gets the board, with names, points and used tiles only.
+- Making a quiz with AI by copy and paste (planned with Fable, decided by the user on 2026-10-04): no API key and no internet in ProQuiz. The editor writes a request from topics, example questions, a difficulty (kids 5–9, easy, medium, hard, expert), the board size, the final and the language. The host pastes it into Claude or ChatGPT and pastes the answer back, and it becomes a new quiz with a note to check the facts. Filling only the empty tiles of an existing quiz isn't built.
 - Background music (planned with Fable, 2026-09-27): four built-in generated tunes that follow the game (lobby, calm between questions, thinking that gets intense in the last 3 s, a soft hum while a team answers, silence at reveals and for sound clips and the Kaosmodus reel, suspense in the final, party music after the fanfare), your own file per moment, on/off (B) and a volume slider, separate from the effects.
 - Slowly appearing pictures (planned with Fable, 2026-09-27): a per-question option "Show the picture slowly" (seconds until it's clear). It pixelates from big blocks to clear, runs while the buzzers are on, freezes on a buzz, and the buzz timer starts once it's clear. No blur, no dropping points, not on the final.
 - Kaosmodus / Crazy mode (planned with Fable, decided by the user on 2026-09-27): an instant bomb, triple, hot seat, rescue (no penalty), turbo (the picking team, 3 random questions, 5 s each, no penalty, no buzzing), jackpot (a secret pot), and freeze, with a mystery-reel reveal on the TV. Off / a little (≈3) / lots (≈6) at random anywhere on the board, and no badge. Placing specials by hand in the editor isn't built.
@@ -40,4 +42,4 @@ A Jeopardy-style quiz for teams in one room. The host laptop runs the game, a TV
 - A modern redesign (2026-09-26, asked for by the user): ink-violet stage, glass tiles, the Unbounded font.
 
 ## Later
-Daily Double, a round 2 with doubled values, picking the tile from the phone, sound files instead of synthesized sounds, correcting for phone clock differences.
+Daily Double, a round 2 with doubled values, a time limit for picking, letting the picking phone choose who to freeze, AI filling only the empty tiles of a quiz, sound files instead of synthesized sounds, correcting for phone clock differences.

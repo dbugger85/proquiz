@@ -138,7 +138,7 @@ const HOST_ACTIONS = new Set([
   'settings', 'loadSet', 'start', 'setPicker', 'pick', 'arm', 'correct', 'wrong', 'reveal', 'cancel',
   'next', 'end', 'judgeFinal', 'adjust', 'undo', 'restart', 'removeTeam', 'mediaToggle', 'mediaRestart', 'freeze',
 ]);
-const PHONE_ACTIONS = new Set(['buzz', 'wager', 'finalAnswer']);
+const PHONE_ACTIONS = new Set(['buzz', 'wager', 'finalAnswer', 'pick']);
 
 const isLocal = (addr) => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(addr);
 

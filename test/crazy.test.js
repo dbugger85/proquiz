@@ -152,10 +152,21 @@ test('turbo: three questions in a row for the picking team, 5 seconds each, no p
   assert.equal(s.phase, 'revealed');
   s = run(s, { type: 'next', now: 0 }, { type: 'arm', now: 0 }, { type: 'wrong', now: 1 });
   assert.equal(score(s, 'r'), first);
+  assert.equal(phoneView(s, 'r').canPick, false); // the run never goes back to the board in between
   s = apply(s, { type: 'next', now: 0 });
   assert.equal(s.phase, 'board');
   assert.equal(s.turbo, null);
   assert.equal(s.used.flat().filter(Boolean).length, 3);
+  assert.equal(phoneView(s, s.picker).canPick, true); // afterwards the picking team picks on its phone again
+});
+
+test('a special tile picked on the phone gets the same reveal, and the phone board never gives specials away', () => {
+  let s = game({ '0-1': 'hotseat', '2-3': 'bomb' });
+  const v = JSON.stringify(phoneView(s, 'r'));
+  for (const secret of ['hotseat', 'bomb', 'specials', 'special":"']) assert.ok(!v.includes(secret), secret);
+  s = apply(s, { type: 'pick', c: 0, i: 1, teamId: 'r' });
+  assert.equal(s.phase, 'special');
+  assert.deepEqual([s.event.type, s.event.kind, s.event.teamId], ['special', 'hotseat', 'r']);
 });
 
 test('jackpot: lost points pile up in a secret pot, and a right answer on the jackpot tile wins it', () => {

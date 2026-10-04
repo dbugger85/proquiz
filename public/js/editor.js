@@ -1,6 +1,7 @@
 // The question editor (laptop only). Quizzes save themselves a moment after each change.
 import { validateSet, MAX_CATEGORIES, MAX_QUESTIONS } from '/lib/validate.js';
-import { t, setLang, translatePage } from './i18n.js';
+import { buildRequest, parseReply, splitTopics, AiQuizError, DIFFICULTIES, MIN_SIZE } from '/lib/aiquiz.js';
+import { t, setLang, getLang, translatePage } from './i18n.js';
 import { $, h, fill } from './ui.js';
 
 let quizzes = []; // the list on the left
@@ -10,6 +11,7 @@ let builtIn = false;
 let problems = [];
 let saveTimer = null;
 let savePromise = Promise.resolve();
+let aiNote = null; // { id, duplicates } for a quiz just made with AI (shown until another quiz is opened)
 
 // ----- talking to the server -----
 
@@ -93,6 +95,7 @@ async function select(id) {
   await saveNow();
   const found = await call('GET', `/api/sets/${id}`).catch(() => null);
   if (!found) return;
+  if (aiNote && aiNote.id !== id) aiNote = null;
   currentId = id;
   set = found.set;
   builtIn = found.builtIn;
@@ -147,6 +150,19 @@ function renderMain() {
           { class: 'ed-note' },
           h('p', {}, t('edSampleNote')),
           h('button', { class: 'btn btn-primary', type: 'button', onclick: () => createQuiz({ ...structuredClone(set), title: t('edCopyName', { title: set.title }) }) }, t('edCopy')),
+        )
+      : null,
+    aiNote?.id === currentId
+      ? h(
+          'div',
+          { class: 'ed-note ai-note' },
+          h(
+            'div',
+            {},
+            h('p', {}, t('aiMadeNote')),
+            aiNote.duplicates.length ? h('p', { class: 'muted' }, t('aiDuplicates', { list: aiNote.duplicates.join(', ') })) : null,
+          ),
+          h('button', { class: 'btn', type: 'button', onclick: () => ((aiNote = null), renderMain()) }, t('aiDismiss')),
         )
       : null,
     h(
@@ -574,6 +590,115 @@ function openQuestion(c, i) {
   dialog.showModal();
   if (!builtIn) (isFinal ? form.querySelector('input') : question).focus();
 }
+
+// ----- making a quiz with AI (copy and paste, ProQuiz itself stays offline) -----
+
+const aiOpts = { topics: '', examples: '', difficulty: 'medium', categories: 5, rows: 5, final: true, lang: null };
+
+function openAiDialog() {
+  const dialog = $('#ai-dialog');
+  const form = $('#ai-form');
+  aiOpts.lang ??= getLang();
+  const field = (label, input, hint) => h('label', { class: 'field' }, h('span', {}, label), input, hint ? h('small', {}, hint) : null);
+  const choice = (name, options) =>
+    h(
+      'select',
+      { name, onchange: (e) => update(name, typeof aiOpts[name] === 'number' ? Number(e.target.value) : e.target.value) },
+      options.map(([value, label]) => h('option', { value, selected: String(aiOpts[name]) === String(value) }, label)),
+    );
+  const sizes = Array.from({ length: MAX_CATEGORIES - MIN_SIZE + 1 }, (_, n) => [n + MIN_SIZE, String(n + MIN_SIZE)]);
+  const request = h('textarea', { id: 'ai-request', class: 'ai-request', readonly: true, rows: 8 });
+  const tooMany = h('small', { class: 'ai-too-many' });
+  const copied = h('span', { class: 'ed-status', role: 'status' });
+  const reply = h('textarea', { id: 'ai-reply', rows: 6, placeholder: t('aiReplyPlaceholder'), oninput: () => (error.textContent = '') });
+  const error = h('p', { id: 'ai-error', class: 'ed-media-status bad', role: 'alert' });
+
+  // Only the request text and the hint change while typing, so the cursor stays where it is.
+  function redraw() {
+    request.value = buildRequest(aiOpts);
+    const n = splitTopics(aiOpts.topics).length;
+    tooMany.textContent = n > aiOpts.categories ? t('aiTooManyTopics', { n: aiOpts.categories }) : '';
+  }
+  function update(key, value) {
+    aiOpts[key] = value;
+    redraw();
+  }
+  const text = (key, rows) => {
+    const el = h('textarea', { name: key, rows, oninput: (e) => update(key, e.target.value) });
+    el.value = aiOpts[key];
+    return el;
+  };
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(request.value);
+    } catch {
+      request.select();
+      document.execCommand('copy');
+    }
+    copied.textContent = t('aiCopied');
+    setTimeout(() => (copied.textContent = ''), 2000);
+  }
+
+  async function fillBoard() {
+    error.textContent = '';
+    let made;
+    try {
+      made = parseReply(reply.value, { final: aiOpts.final, title: t('aiDefaultTitle') });
+    } catch (err) {
+      if (!(err instanceof AiQuizError)) throw err;
+      error.textContent = t(`ai-${err.code}`);
+      return;
+    }
+    await saveNow();
+    const { id } = await call('POST', '/api/sets', { set: made.set });
+    aiNote = { id, duplicates: made.duplicates };
+    reply.value = '';
+    dialog.close();
+    await loadList();
+    await select(id);
+  }
+
+  fill(
+    form,
+    h('h2', {}, t('aiTitle')),
+    h('p', { class: 'muted' }, t('aiIntro')),
+    h('h3', {}, t('aiStep1')),
+    h(
+      'div',
+      { class: 'ai-grid' },
+      h('div', { class: 'ai-topics' }, field(t('aiTopics'), text('topics', 4), t('aiTopicsHint')), tooMany),
+      field(t('aiExamples'), text('examples', 4), t('aiExamplesHint')),
+    ),
+    h(
+      'div',
+      { class: 'ai-opts' },
+      field(t('aiDifficulty'), choice('difficulty', DIFFICULTIES.map((d) => [d, t(`aiLevel-${d}`)]))),
+      field(t('aiCategories'), choice('categories', sizes)),
+      field(t('aiRows'), choice('rows', sizes)),
+      field(t('aiLang'), choice('lang', [['en', 'English'], ['no', 'Norsk']])),
+      h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'final', checked: aiOpts.final, onchange: (e) => update('final', e.target.checked) }), h('span', {}, t('aiFinal'))),
+    ),
+    h('h3', {}, t('aiStep2')),
+    request,
+    h('div', { class: 'row' }, h('button', { class: 'btn btn-primary ai-copy', type: 'button', onclick: copy }, t('aiCopy')), copied),
+    h('h3', {}, t('aiStep3')),
+    reply,
+    h('p', { class: 'ai-warn' }, t('aiWarn')),
+    error,
+    h(
+      'div',
+      { class: 'ed-dialog-actions' },
+      h('button', { class: 'btn btn-quiet', value: 'cancel' }, t('aiCancel')),
+      h('button', { class: 'btn btn-primary ai-fill', type: 'button', onclick: fillBoard }, t('aiFill')),
+    ),
+  );
+  redraw();
+  dialog.showModal();
+  form.querySelector('textarea').focus();
+}
+
+$('#ai-quiz').addEventListener('click', openAiDialog);
 
 // ----- start -----
 

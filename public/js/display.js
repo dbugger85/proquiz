@@ -115,7 +115,9 @@ function renderBoard() {
         ),
       ),
     ),
-    view.picker ? h('p', { class: 'tv-picks' }, h('b', {}, t('picks', { name: teamById(view.picker)?.name ?? '' }))) : null,
+    view.picker
+      ? h('p', { class: 'tv-picks' }, h('b', {}, t(view.settings.phonePick && connected.has(view.picker) ? 'picksOnPhone' : 'picks', { name: teamById(view.picker)?.name ?? '' })))
+      : null,
   ];
 }
 

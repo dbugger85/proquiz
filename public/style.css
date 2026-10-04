@@ -1196,6 +1196,72 @@ select option {
   --bar: var(--team-ink);
   background: rgb(0 0 0 / 0.18);
 }
+/* Picking the next question on the phone: categories first, then their points. */
+.pick-board {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+.pick-cat {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.8rem;
+  min-height: 56px;
+  padding: 0.6rem 1rem;
+  border: 0;
+  border-radius: 18px;
+  background: rgb(0 0 0 / 0.18);
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  font-size: 1.1rem;
+  text-align: left;
+  cursor: pointer;
+}
+.pick-cat .pick-name {
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.pick-cat small {
+  white-space: nowrap;
+  opacity: 0.75;
+  font-weight: 400;
+}
+.pick-cat:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.pick-values {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
+  gap: 0.6rem;
+}
+.pick-tile {
+  min-height: 64px;
+  border: 0;
+  border-radius: 18px;
+  background: rgb(255 255 255 / 0.24);
+  color: inherit;
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 1.4rem;
+  cursor: pointer;
+}
+.pick-tile.used {
+  opacity: 0.35;
+  text-decoration: line-through;
+  cursor: default;
+}
+.pick-cat:active:not(:disabled),
+.pick-tile:active:not(:disabled) {
+  transform: scale(0.97);
+}
 .offline-banner {
   position: fixed;
   inset: auto 1rem 1rem 1rem;
@@ -2059,6 +2125,51 @@ select option {
   margin: 0 -1.75rem;
   padding: 1rem 1.75rem;
   background: linear-gradient(180deg, transparent, #14123a 30%);
+}
+
+/* Making a quiz with AI */
+.ed-dialog h3 {
+  margin: 0.4rem 0 0;
+  font-size: 1rem;
+}
+.ai-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+.ai-opts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem 1.25rem;
+}
+.ai-request {
+  font-family: ui-monospace, monospace;
+  font-size: 0.85rem;
+  min-height: 160px;
+}
+.ai-too-many {
+  color: #ffcf5c;
+}
+.ed-dialog .muted,
+.ai-note .muted {
+  margin: 0;
+  color: var(--muted);
+}
+.ai-warn {
+  margin: 0;
+  color: #ffcf5c;
+}
+.ai-note .muted {
+  margin-top: 0.35rem;
+}
+.ed-dialog-actions .btn-quiet {
+  margin-right: auto;
+}
+@media (max-width: 800px) {
+  .ai-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ---------- keyboard help ---------- */

@@ -96,6 +96,22 @@ test('host and display get the phone address; phones join and show up as connect
   await new Promise((r) => setTimeout(r, 100));
   assert.equal(srv.hub.getState().teams.find((t) => t.id === red.teamId).score, 0);
 
+  // Blue answered right, so Blue picks next, on its phone. Only Blue's phone gets the board.
+  host.send({ type: 'cmd', action: { type: 'next' } });
+  const blueBoard = (await blue.wait((m) => m.type === 'state' && m.view.canPick)).view;
+  assert.deepEqual(blueBoard.board[0].used, [true, false, false, false, false]);
+  const redBoard = (await red.wait((m) => m.type === 'state' && m.view.phase === 'board' && m.view.picker === blue.teamId)).view;
+  assert.equal(redBoard.canPick, false);
+  assert.equal(redBoard.board, undefined);
+  red.send({ type: 'pick', c: 0, i: 1 }); // not Red's turn
+  blue.send({ type: 'pick', c: '0', i: '1' }); // not numbers
+  blue.send({ type: 'pick', c: 0, i: 0 }); // already used
+  await new Promise((r) => setTimeout(r, 100));
+  assert.equal(srv.hub.getState().phase, 'board');
+  blue.send({ type: 'pick', c: 0, i: 1 });
+  await host.wait((m) => m.type === 'state' && m.view.phase === 'reading' && m.view.q.i === 1);
+  assert.deepEqual([srv.hub.getState().q.c, srv.hub.getState().q.i], [0, 1]);
+
   // Reconnecting with the saved team id keeps the team and score.
   blue.close();
   await host.wait((m) => m.type === 'state' && !m.connected.includes(blue.teamId));
