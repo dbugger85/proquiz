@@ -127,6 +127,15 @@ test('host and display get the phone address; phones join and show up as connect
   for (const c of [host, red, back, late, stranger]) c.close();
 });
 
+test('a busy port is skipped: a second ProQuiz starts on the next one', async () => {
+  const second = await startServer({ port: srv.info.port, quiet: true, dataDir: mkdtempSync(join(tmpdir(), 'proquiz-test-')) });
+  try {
+    assert.equal(second.info.port, srv.info.port + 1);
+  } finally {
+    second.close();
+  }
+});
+
 test('the server runs the timers', async () => {
   const host = await client('host');
   host.send({ type: 'cmd', action: { type: 'restart' } });

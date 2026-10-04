@@ -410,8 +410,9 @@ export async function startServer({ port = START_PORT, quiet = false, dataDir = 
   let hub = null;
   const api = apiHandler(sets, { onSetSaved: (...a) => hub?.setSaved(...a), getLang: () => hub?.getState().settings.lang ?? 'en' });
   const server = http.createServer((req, res) => serveFile(req, res, { store: sets, api }));
-  const wss = new WebSocketServer({ server, path: '/ws' });
   const actual = await listen(server, port);
+  // Only after listening: the WebSocket server passes the server's errors on, and "port busy" would crash it.
+  const wss = new WebSocketServer({ server, path: '/ws' });
   const ip = lanAddresses()[0];
   const info = {
     port: actual,
