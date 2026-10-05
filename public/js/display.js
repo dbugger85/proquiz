@@ -143,6 +143,8 @@ function band() {
       const won = q.won ? ` +${q.won} ${ICONS.jackpot}` : '';
       return [h('span', { class: 'plate buzzed-name', style: teamStyle(teamById(r.teamId)) }, `${teamById(r.teamId)?.name} +${q.value}${won}`)];
     }
+    // Daily Double lost: the whole bet goes.
+    if (q.fullPenalty && q.lockedOut.includes(q.solo)) return [h('span', { class: 'plate buzzed-name', style: teamStyle(teamById(q.solo)) }, `${teamById(q.solo)?.name} −${q.value}`)];
     return [h('span', { class: 'muted' }, r.type === 'timeout' ? t('resultTimeout') : t('resultNobody'))];
   }
   return [];

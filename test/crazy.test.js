@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { apply, newGame, COLORS, displayView, phoneView, hostView } from '../lib/game.js';
-import { placeSpecials, specialCount, turboTiles, SOLO } from '../lib/crazy.js';
+import { placeSpecials, specialCount, turboTiles, maxBet, SOLO } from '../lib/crazy.js';
 
 const sample = JSON.parse(readFileSync(new URL('../sets/sample.json', import.meta.url)));
 const run = (s, ...actions) => actions.reduce(apply, s);
@@ -232,9 +232,9 @@ test('the host can leave specials out', () => {
   }
   // Only kinds that may appear once: the board gets just those.
   const few = Object.values(placeSpecials({ set: sample, rng: 3 }, 'lots', ['triple', 'bomb', 'hotseat', 'freeze']));
-  assert.deepEqual(few.sort(), ['jackpot', 'rescue', 'turbo']);
+  assert.deepEqual(few.sort(), ['double', 'jackpot', 'rescue', 'turbo']);
   // Everything left out: no specials at all.
-  assert.deepEqual(placeSpecials({ set: sample, rng: 3 }, 'lots', ['triple', 'bomb', 'hotseat', 'rescue', 'turbo', 'jackpot', 'freeze']), {});
+  assert.deepEqual(placeSpecials({ set: sample, rng: 3 }, 'lots', ['triple', 'bomb', 'hotseat', 'rescue', 'turbo', 'jackpot', 'freeze', 'double']), {});
 
   // Through the settings, which keep a tidy list and refuse unknown kinds.
   let s = newGame(sample, { crazy: 'lots' });
@@ -244,4 +244,90 @@ test('the host can leave specials out', () => {
   assert.throws(() => apply(s, { type: 'settings', settings: { crazyExclude: 'jackpot' } }), { code: 'bad-settings' });
   s = run(s, { type: 'join', teamId: 'r', name: 'R', color: COLORS[0] }, { type: 'start', seed: 9 });
   assert.ok(!Object.values(s.specials).some((k) => k === 'jackpot' || k === 'turbo'));
+});
+
+test('freeze: the picking team chooses on its phone, never itself, and only the picking team', () => {
+  let s = run(game({ '4-1': 'freeze' }), { type: 'pick', c: 4, i: 1 });
+  assert.equal(phoneView(s, 'r').status, 'freezeChoose');
+  assert.equal(phoneView(s, 'b').status, 'special');
+  assert.equal(apply(s, { type: 'freezePick', teamId: 'b', target: 'g' }), s); // not their pick
+  assert.equal(apply(s, { type: 'freezePick', teamId: 'r', target: 'r' }), s); // not yourself
+  assert.equal(apply(s, { type: 'freezePick', teamId: 'r', target: 'nobody' }), s);
+  s = run(s, { type: 'freezePick', teamId: 'r', target: 'g' }, { type: 'freezePick', teamId: 'r', target: 'b' });
+  assert.equal(s.q.frozen, 'b');
+  assert.equal(phoneView(s, 'r').frozen, 'b');
+  s = apply(s, { type: 'freezePick', teamId: 'r', target: 'b' }); // tap again to take it back
+  assert.equal(s.q.frozen, null);
+  s = run(s, { type: 'freezePick', teamId: 'r', target: 'g' }, { type: 'next', now: 0 }, { type: 'arm', now: 0 });
+  assert.equal(phoneView(s, 'g').status, 'frozen');
+  // Not outside the reveal, and not on other specials.
+  assert.equal(apply(s, { type: 'freezePick', teamId: 'r', target: 'b' }), s);
+  const t = run(game({ '1-1': 'triple' }), { type: 'pick', c: 1, i: 1 });
+  assert.equal(apply(t, { type: 'freezePick', teamId: 'r', target: 'b' }), t);
+});
+
+test('daily double: the picking team bets on its phone, answers alone, wins the bet or loses all of it', () => {
+  let s = run(game({ '0-2': 'double' }, { penalty: 'none' }), { type: 'adjust', teamId: 'r', delta: 300 }, { type: 'pick', c: 0, i: 2 });
+  assert.equal(s.phase, 'special');
+  assert.equal(phoneView(s, 'r').status, 'bet');
+  assert.equal(phoneView(s, 'b').status, 'special');
+  assert.equal(phoneView(s, 'b').betting, undefined);
+  // Up to the score or the board's top value (500), whichever is more.
+  assert.deepEqual(phoneView(s, 'r').betting, { bet: null, max: 500, value: 300 });
+  assert.equal(maxBet(sample, 900), 900);
+  assert.equal(maxBet(sample, -200), 500);
+  assert.throws(() => apply(s, { type: 'bet', teamId: 'r', amount: 501 }), { code: 'bad-wager' });
+  assert.throws(() => apply(s, { type: 'bet', teamId: 'r', amount: -1 }), { code: 'bad-wager' });
+  assert.throws(() => apply(s, { type: 'bet', teamId: 'r', amount: 1.5 }), { code: 'bad-wager' });
+  assert.equal(apply(s, { type: 'bet', teamId: 'b', amount: 100 }), s); // only the picking team bets
+  s = apply(s, { type: 'bet', teamId: 'r', amount: 450 });
+  assert.equal(phoneView(s, 'r').betting.bet, 450);
+  assert.equal(displayView(s).q.bet, 450); // the TV shows the bet
+  s = run(s, { type: 'next', now: 0 });
+  assert.equal(s.q.value, 450);
+  assert.equal(s.q.solo, 'r');
+  assert.equal(apply(s, { type: 'bet', teamId: 'r', amount: 10 }), s); // too late to change it
+  s = run(s, { type: 'arm', now: 0 });
+  assert.equal(s.phase, 'answering');
+  // Wrong costs the whole bet, even with "no penalty" for wrong answers.
+  const wrong = apply(s, { type: 'wrong', now: 1 });
+  assert.equal(score(wrong, 'r'), 300 - 450);
+  assert.equal(wrong.phase, 'revealed');
+  assert.equal(wrong.pot, 450); // into the jackpot
+  const right = apply(s, { type: 'correct' });
+  assert.equal(score(right, 'r'), 300 + 450);
+  // Running out of time is wrong too.
+  assert.equal(score(apply(s, { type: 'timeout', now: 999999 }), 'r'), -150);
+});
+
+test('daily double: with no bet the tile’s value is played, and the host can bet for a team', () => {
+  let s = run(game({ '1-0': 'double' }), { type: 'pick', c: 1, i: 0 });
+  const plain = apply(s, { type: 'next', now: 0 });
+  assert.equal(plain.q.value, 100);
+  s = run(s, { type: 'bet', amount: 0 }, { type: 'next', now: 0 }, { type: 'arm', now: 0 }, { type: 'wrong', now: 1 });
+  assert.equal(score(s, 'r'), 0);
+  // Without negative scores, a lost bet stops at zero.
+  s = run(game({ '1-0': 'double' }, { allowNegative: false }), { type: 'pick', c: 1, i: 0 }, { type: 'bet', amount: 500 }, { type: 'next', now: 0 }, { type: 'arm', now: 0 }, { type: 'wrong', now: 1 });
+  assert.equal(score(s, 'r'), 0);
+});
+
+test('specials placed by hand in the quiz: they always play, Kaosmodus adds random ones elsewhere', () => {
+  const set = structuredClone(sample);
+  set.categories[0].questions[0].special = 'double';
+  set.categories[2].questions[3].special = 'bomb';
+  set.categories[1].questions[1].special = 'lava'; // unknown kinds are ignored
+  const join = { type: 'join', teamId: 'r', name: 'R', color: COLORS[0] };
+  const off = run(newGame(set), join, { type: 'start', seed: 3 });
+  assert.deepEqual(off.specials, { '0-0': 'double', '2-3': 'bomb' });
+  const notUsed = run(newGame(set, { quizSpecials: false }), join, { type: 'start', seed: 3 });
+  assert.deepEqual(notUsed.specials, {});
+  for (let seed = 1; seed < 100; seed++) {
+    const lots = run(newGame(set, { crazy: 'lots' }), join, { type: 'start', seed }).specials;
+    assert.equal(Object.keys(lots).length, 6, `seed ${seed}`); // the hand-placed ones count
+    assert.equal(lots['0-0'], 'double');
+    assert.equal(lots['2-3'], 'bomb');
+    assert.equal(Object.values(lots).filter((k) => k === 'double').length, 1);
+  }
+  // The TV never sees them in the quiz.
+  assert.ok(!JSON.stringify(displayView(off)).includes('double'));
 });

@@ -410,12 +410,15 @@ try {
   // A wrong kind of file is refused with a clear message.
   await pickers.nth(1).setInputFiles({ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('hello') });
   await ed.waitForSelector('#q-form .ed-media-status.bad');
+  // A special placed by hand.
+  await ed.selectOption('#q-form select[name=special]', 'double');
   await shot(ed, 'editor-2-question');
   await ed.click('#q-form button[value=done]');
   await ed.waitForSelector('#q-dialog:not([open])', { state: 'attached' });
   await ed.waitForFunction(() => document.querySelector('#ed-status').textContent === 'Saved');
   await shot(ed, 'editor-3-board');
   assert.match(await ed.textContent('.ed-problems'), /Fix these/);
+  assert.equal(await ed.textContent('.ed-tile[data-c="0"][data-i="0"] .ed-special'), '🎲');
 
   // It's saved on the laptop, with the clip and its start time.
   const list = await (await fetch(`${base}/api/sets`)).json();
@@ -427,6 +430,7 @@ try {
   assert.match(saved.categories[0].questions[0].image, /^[0-9a-f]{16}\.svg$/);
   assert.equal(saved.categories[0].questions[0].audioStart, 1.5);
   assert.equal(saved.categories[0].questions[0].unveil, 20);
+  assert.equal(saved.categories[0].questions[0].special, 'double');
 
   // Make a quiz with AI: choose topics and size, copy the request, paste a (messy) answer, and the board fills in.
   await ed.click('#ai-quiz');
@@ -466,6 +470,35 @@ try {
   await shot(ed, 'editor-5-ai-board');
   const aiSaved = (await (await fetch(`${base}/api/sets`)).json()).find((x) => x.title === 'Barnas quiz');
   assert.equal(aiSaved.problems, 0);
+
+  // Fill only the empty spots of a quiz that is started: the AI sees what is there and nothing else changes.
+  await ed.click('.ed-item:has-text("Musikkquiz")');
+  await ed.waitForFunction(() => document.querySelector('.ed-name input')?.value === 'Musikkquiz');
+  await ed.click('.ai-fill-open');
+  await ed.waitForSelector('#ai-dialog[open] .ai-gaps');
+  assert.match(await ed.textContent('.ai-gaps'), /Empty questions: 24/);
+  assert.match(await ed.textContent('.ai-gaps'), /Categories without a name: 4/);
+  await ed.fill('#ai-form textarea[name=topics]', 'Rock\nPop');
+  const fillRequest = await ed.inputValue('#ai-request');
+  assert.match(fillRequest, /"question": "Name this tune"/);
+  assert.match(fillRequest, /Use these topics for them, in order: "Rock", "Pop", then choose new topics yourself/);
+  assert.ok(!fillRequest.includes('"special"'));
+  await shot(ed, 'editor-6-ai-fill-request');
+  const sketch = JSON.parse(fillRequest.match(/```json\n([\s\S]*?)\n```/)[1]);
+  sketch.categories[0].questions[0].question = 'Changed by the AI';
+  sketch.categories[0].questions.slice(1).forEach((q, i) => Object.assign(q, { question: `Sang ${i + 2}?`, answer: `Svar ${i + 2}` }));
+  sketch.categories[1].name = 'Rock';
+  await ed.fill('#ai-reply', '```json\n' + JSON.stringify(sketch) + '\n```');
+  await ed.click('.ai-fill-gaps');
+  await ed.waitForSelector('#ai-dialog:not([open])', { state: 'hidden' });
+  await ed.waitForSelector('.ed-tile.ai-filled');
+  assert.equal(await ed.locator('.ed-tile.ai-filled').count(), 4);
+  assert.match(await ed.textContent('.ai-note'), /Filled in with AI: 4 questions/);
+  assert.match(await ed.textContent('.ai-note'), /still empty/);
+  assert.match(await ed.textContent('.ed-tile[data-c="0"][data-i="0"]'), /Name this tune/); // not changed
+  assert.equal(await ed.inputValue('.ed-col:nth-child(2) .ed-cat input'), 'Rock');
+  await ed.waitForFunction(() => document.querySelector('#ed-status').textContent === 'Saved');
+  await shot(ed, 'editor-7-ai-filled');
 
   // In the lobby it shows as "needs fixing" and can't be picked yet.
   await host.click('.controls button:has-text("Back to the main menu")');

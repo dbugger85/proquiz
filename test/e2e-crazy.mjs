@@ -1,7 +1,7 @@
 // Browser test for Kaosmodus / Crazy mode: one of each special, with screenshots.
 //   npm run e2e   (runs this after test/e2e.mjs)
 
-import { mkdirSync, mkdtempSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -58,6 +58,22 @@ try {
   const [red, blue, yellow] = phones;
   const id = (name) => state().teams.find((tm) => tm.name === name).id;
 
+  // A quiz with a special placed by hand: the lobby offers to use it (on by default), then back to the sample.
+  const own = JSON.parse(readFileSync(new URL('../sets/sample.json', import.meta.url)));
+  own.title = 'Own specials';
+  own.categories[2].questions[0].special = 'double';
+  const { id: ownId } = await (await fetch(`${base}/api/sets`, { method: 'POST', body: JSON.stringify({ set: own }) })).json();
+  await host.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await host.waitForSelector(`#set-picker option[value="${ownId}"]`, { state: 'attached' });
+  await host.selectOption('#set-picker', ownId);
+  await host.waitForSelector('#quiz-specials:not([hidden])');
+  assert.match(await host.textContent('#quiz-specials'), /own special tiles \(1\)/);
+  assert.equal(await host.isChecked('#quiz-specials input'), true);
+  await host.evaluate(() => document.querySelector('#quiz-specials').scrollIntoView({ block: 'center' }));
+  await shot(host, 'crazy-0-lobby-own-specials');
+  await host.selectOption('#set-picker', 'sample');
+  await host.waitForSelector('#quiz-specials[hidden]', { state: 'attached' });
+
   // The lobby setting.
   await host.selectOption('select[name=crazy]', 'lots');
   await waitFor(() => state().settings.crazy === 'lots');
@@ -71,10 +87,10 @@ try {
   await waitFor(() => state().settings.crazyExclude.length === 0);
 
   // Start with one of each special in known places (normally the server places them at random).
-  const specials = { '0-0': 'triple', '0-1': 'bomb', '0-2': 'hotseat', '0-3': 'rescue', '0-4': 'jackpot', '1-0': 'freeze', '1-1': 'turbo' };
+  const specials = { '0-0': 'triple', '0-1': 'bomb', '0-2': 'hotseat', '0-3': 'rescue', '0-4': 'jackpot', '1-0': 'freeze', '1-1': 'turbo', '1-2': 'double' };
   srv.hub.dispatch({ type: 'start', picker: id('Quizzy Rascals'), specials });
   await host.waitForSelector('body[data-phase=board]');
-  assert.equal(await host.locator('.host-board .tile[data-special]').count(), 7);
+  assert.equal(await host.locator('.host-board .tile[data-special]').count(), 8);
   assert.equal(await tv.locator('text=💣').count(), 0); // the TV doesn't know
   await shot(host, 'crazy-1-host-board');
 
@@ -84,7 +100,7 @@ try {
     await tile(c, i);
     await phase('special');
     await tv.waitForSelector('.tv-special.spin');
-    await red.waitForFunction(() => document.body.textContent.includes('Look at the TV!'));
+    await yellow.waitForFunction(() => document.body.textContent.includes('Look at the TV!'));
     await tv.waitForTimeout(2700); // the reel spins and lands
     await shot(tv, `crazy-${name}-tv`);
   };
@@ -142,10 +158,17 @@ try {
   assert.equal(score('Blue Steel'), 350);
   await space('board');
 
-  // Freeze: Blue freezes Red.
+  // Freeze: Blue freezes Red on their phone (first Yellow by mistake, then Red).
   await reveal(1, 0, 'freeze');
-  await host.click('.freeze-pick button:has-text("Quizzy Rascals")');
+  await blue.waitForSelector('.freeze-team');
+  assert.equal(await blue.locator('.freeze-team').count(), 2); // not themselves
+  await shot(blue, 'crazy-freeze-choose-phone');
+  await blue.click('.freeze-team:has-text("Lemon Heads")');
+  await blue.waitForSelector('.freeze-team.on:has-text("Lemon Heads")');
+  await blue.click('.freeze-team:has-text("Quizzy Rascals")');
   await tv.waitForFunction(() => document.body.textContent.includes('Quizzy Rascals is frozen!'));
+  await host.waitForSelector('.freeze-pick button.on:has-text("Quizzy Rascals")');
+  await shot(blue, 'crazy-freeze-chosen-phone');
   await shot(host, 'crazy-freeze-host');
   await space('reading');
   await space('armed');
@@ -195,6 +218,33 @@ try {
   assert.ok(score('Quizzy Rascals') >= before);
   await space('board');
   assert.equal(state().turbo, null);
+
+  // Daily Double: Red bets on their phone, then answers alone and gets it wrong: the whole bet goes.
+  await reveal(1, 2, 'double');
+  await red.waitForSelector('#double-bet');
+  const redBefore = score('Quizzy Rascals');
+  await red.fill('#double-bet', String(redBefore + 1));
+  await red.click('.final-form button[type=submit]');
+  await red.waitForTimeout(300);
+  assert.equal(state().q.bet, undefined); // more than allowed: not sent
+  await red.fill('#double-bet', '400');
+  await red.click('.final-form button[type=submit]');
+  await red.waitForFunction(() => document.body.textContent.includes('You bet 400'));
+  await tv.waitForFunction(() => document.body.textContent.includes('bets 400'));
+  await host.waitForFunction(() => document.querySelector('#double-bet')?.value === '400');
+  await shot(red, 'crazy-double-bet-phone');
+  await shot(tv, 'crazy-double-bet-tv');
+  await shot(host, 'crazy-double-host');
+  await space('reading');
+  await tv.waitForFunction(() => document.querySelector('.tv-q .where')?.textContent.includes('400'));
+  await space('answering');
+  await host.keyboard.press('n');
+  await phase('revealed');
+  assert.equal(score('Quizzy Rascals'), redBefore - 400);
+  await tv.waitForFunction(() => document.body.textContent.includes('Quizzy Rascals −400'));
+  await tv.waitForTimeout(500);
+  await shot(tv, 'crazy-double-lost-tv');
+  await space('board');
 
   assert.deepEqual(errors, []);
   console.log('e2e crazy: all good. Screenshots in test/screenshots/crazy-*');

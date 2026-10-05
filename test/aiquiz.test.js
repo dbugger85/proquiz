@@ -1,7 +1,7 @@
 // Making a quiz with AI: the request text, and reading messy pasted answers.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildRequest, parseReply, repairJson, splitTopics, AiQuizError, AI_ERRORS, DIFFICULTIES } from '../lib/aiquiz.js';
+import { buildRequest, parseReply, repairJson, splitTopics, AiQuizError, AI_ERRORS, DIFFICULTIES, gapsOf, guessLanguage, buildFillRequest, parseFill } from '../lib/aiquiz.js';
 import { validateSet } from '../lib/validate.js';
 import { STRINGS } from '../public/js/i18n.js';
 
@@ -144,4 +144,108 @@ test('every difficulty and every error has a text in both languages', () => {
     for (const d of DIFFICULTIES) assert.ok(STRINGS[lang][`aiLevel-${d}`], `${lang} aiLevel-${d}`);
     for (const code of AI_ERRORS) assert.ok(STRINGS[lang][`ai-${code}`], `${lang} ai-${code}`);
   }
+});
+
+// ----- filling only the empty spots -----
+
+// A Norwegian quiz that is partly written: an empty tile, an answer without a question, a question without an
+// answer, a nameless category, an empty category, a picture question without text, and an empty final.
+function started() {
+  return {
+    v: 1,
+    title: 'Fredagsquiz',
+    categories: [
+      { name: 'Dyr', questions: [{ value: 100, question: 'Hvilket dyr sier mø?', answer: 'En ku', special: 'double' }, { value: 200, question: '', answer: '' }] },
+      { name: '', questions: [{ value: 100, question: '', answer: 'Oslo' }, { value: 200, question: 'Hva heter Norges konge?', answer: '' }] },
+      { name: '', questions: [{ value: 100, question: '', answer: '' }, { value: 200, question: '', answer: '' }] },
+      { name: 'Bilder', questions: [{ value: 100, question: '', answer: '', image: 'abc.png' }, { value: 200, question: 'Hvor mange bein har en edderkopp?', answer: 'Åtte' }] },
+    ],
+    final: { category: '', question: '', answer: '' },
+  };
+}
+
+test('fill: finds what is missing, and leaves picture questions it cannot see alone', () => {
+  const gaps = gapsOf(started());
+  assert.deepEqual(gaps.tiles, [
+    { c: 0, i: 1, need: 'both' },
+    { c: 1, i: 0, need: 'question' },
+    { c: 1, i: 1, need: 'answer' },
+    { c: 2, i: 0, need: 'both' },
+    { c: 2, i: 1, need: 'both' },
+  ]);
+  assert.deepEqual(gaps.names, [1, 2]);
+  assert.deepEqual(gaps.final, ['category', 'question', 'answer']);
+  assert.equal(gaps.skipped, 1);
+  assert.equal(gaps.count, 8);
+  assert.equal(guessLanguage(started()), 'no');
+  assert.equal(guessLanguage(quiz()), 'en');
+  assert.equal(guessLanguage({ title: '', categories: [{ name: '', questions: [] }] }), null);
+});
+
+test('fill: the request shows the quiz so far and adjusts to it', () => {
+  const text = buildFillRequest(started(), { topics: 'Fotball' });
+  assert.match(text, /"question": "Hvilket dyr sier mø\?"/); // what is there
+  assert.match(text, /"question": "\[picture\]", "answer": "\[keep\]"/);
+  assert.ok(!text.includes('special')); // specials are not the AI's business
+  assert.match(text, /1 empty tile need|3 empty tiles need a question and an answer/);
+  assert.match(text, /1 answer needs a question/);
+  assert.match(text, /1 question needs its answer/);
+  assert.match(text, /1 category has questions but no name: give it/);
+  assert.match(text, /1 category is completely empty. Use these topics for them, in order: "Fotball"/);
+  assert.match(text, /Norwegian \(bokmål\), like the rest/);
+  assert.match(text, /match the questions that are already there/);
+  assert.match(text, /100 is the easiest and 200 the hardest/);
+  assert.match(text, /final question needs a question and an answer/);
+  assert.ok(!text.includes('needs a short, fun "title"'));
+  // A chosen level and language win; with nothing written yet, "match" falls back to medium.
+  assert.match(buildFillRequest(started(), { difficulty: 'kids', lang: 'en' }), /children aged 5 to 9[\s\S]*in English/);
+  const blank = { title: '', categories: [{ name: '', questions: [{ value: 100, question: '', answer: '' }] }] };
+  assert.match(buildFillRequest(blank), /a normal pub quiz/);
+  assert.match(buildFillRequest(blank), /needs a short, fun "title"/);
+});
+
+test('fill: only the gaps are filled, and nothing that was there changes', () => {
+  const set = started();
+  const reply = {
+    title: 'Ny tittel',
+    categories: [
+      // The AI moved "Bilder" to the front and changed things it shouldn't: those are ignored.
+      { name: 'Bilder', questions: [{ value: 100, question: 'Hva er dette?', answer: 'En katt' }, { value: 200, question: 'Hvor mange bein har en edderkopp?', answer: 'Åtte' }] },
+      { name: 'Dyr', questions: [{ value: 100, question: 'Endret!', answer: 'Endret' }, { value: 200, question: 'Hvilket dyr har snabel?', answer: 'Elefant' }] },
+      { name: 'Byer', questions: [{ value: 100, question: 'Hva heter Norges hovedstad?', answer: 'Feil' }, { value: 200, question: 'Endret', answer: 'Harald' }] },
+      { name: 'Fotball', questions: [{ value: 100, question: 'Hvor mange spillere har et lag på banen?', answer: 'Elleve' }, { value: 200, question: '', answer: '' }] },
+    ],
+    final: { category: 'Elver', question: 'Hvilken elv renner gjennom Kairo?', answer: 'Nilen' },
+  };
+  const made = parseFill('Here you go:\n```json\n' + JSON.stringify(reply) + '\n```', set);
+  const out = made.set;
+  assert.equal(out.title, 'Fredagsquiz');
+  assert.deepEqual(out.categories[0].questions[0], set.categories[0].questions[0]); // untouched, special and all
+  assert.equal(out.categories[0].questions[1].question, 'Hvilket dyr har snabel?'); // found "Dyr" by name
+  assert.equal(out.categories[1].questions[0].question, 'Hva heter Norges hovedstad?');
+  assert.equal(out.categories[1].questions[0].answer, 'Oslo'); // the answer that was there stays
+  assert.equal(out.categories[1].questions[1].question, 'Hva heter Norges konge?');
+  assert.equal(out.categories[1].questions[1].answer, 'Harald');
+  assert.equal(out.categories[1].name, 'Byer');
+  assert.equal(out.categories[2].name, 'Fotball');
+  assert.equal(out.categories[2].questions[0].answer, 'Elleve');
+  assert.deepEqual(out.categories[3].questions[0], set.categories[3].questions[0]); // the picture question is left alone
+  assert.deepEqual(out.final, { category: 'Elver', question: 'Hvilken elv renner gjennom Kairo?', answer: 'Nilen' });
+  assert.deepEqual(made.filled, ['0-1', '1-0', '1-1', '2-0']);
+  assert.equal(made.names, 2);
+  assert.equal(made.final, true);
+  assert.equal(made.left, 1); // 2-1 came back empty
+  assert.deepEqual(started(), set); // the quiz passed in is not changed
+});
+
+test('fill: an answer with nothing usable is refused, and duplicates are listed', () => {
+  assert.throws(() => parseFill('{"categories": [{"name": "", "questions": []}]}', started()), (e) => e instanceof AiQuizError && e.code === 'nothing-filled');
+  assert.throws(() => parseFill('nothing here', started()), { code: 'no-json' });
+  const copy = structuredClone(started());
+  copy.categories = copy.categories.map((c) => ({ ...c, questions: c.questions.map((q) => ({ ...q, answer: q.answer || '[keep]', question: q.question || '[picture]' })) }));
+  copy.categories[0].questions[1] = { value: 200, question: 'Hvilket dyr sier mø?', answer: 'En ku' };
+  const made = parseFill(JSON.stringify(copy), started());
+  assert.deepEqual(made.filled, ['0-1']);
+  assert.deepEqual(made.duplicates, ['En ku']);
+  assert.ok(STRINGS.en['ai-nothing-filled'] && STRINGS.no['ai-nothing-filled']);
 });

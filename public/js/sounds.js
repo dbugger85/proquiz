@@ -414,6 +414,15 @@ export const sounds = {
         noiseHit('white', { at, filter: 'highpass', freq: [7000], levels: [[0.2, 0.08], [1.4, 0.0001]], wet: 0.6 });
         stack(hz(52), { at, dur: 1.4, gain: 0.06, attack: 0.2, voices: [['sine', 0, 1], ['triangle', 5, 1]], filter: [800, 1200, 600], wet: 0.5 });
       },
+      // Dice rattling, then two big brass hits: double!
+      double: () => {
+        for (let n = 0; n < 10; n++) woodblock({ at: at + n * 0.045 + Math.random() * 0.02, pitch: 1400 + Math.random() * 1400, gain: 0.3 });
+        for (const [i, root] of [[0, 55], [1, 62]]) {
+          for (const m of MAJOR(root)) stack(hz(m), { at: at + 0.5 + i * 0.22, dur: 0.6, gain: 0.09, filter: [600, 4000, 1400], drive: 1.6, wet: 0.3 });
+          thump(110, 50, { at: at + 0.5 + i * 0.22, dur: 0.3, gain: 0.4 });
+        }
+        cymbal({ at: at + 0.72, dur: 1.2, gain: 0.1 });
+      },
     };
     stings[kind]?.();
   },

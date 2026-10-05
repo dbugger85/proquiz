@@ -136,9 +136,9 @@ function listen(server, port, tries = 10) {
 // What the host laptop may do, and what a phone may do (always for its own team).
 const HOST_ACTIONS = new Set([
   'settings', 'loadSet', 'start', 'setPicker', 'pick', 'arm', 'correct', 'wrong', 'reveal', 'cancel',
-  'next', 'end', 'judgeFinal', 'adjust', 'undo', 'restart', 'removeTeam', 'mediaToggle', 'mediaRestart', 'freeze',
+  'next', 'end', 'judgeFinal', 'adjust', 'undo', 'restart', 'removeTeam', 'mediaToggle', 'mediaRestart', 'freeze', 'bet',
 ]);
-const PHONE_ACTIONS = new Set(['buzz', 'wager', 'finalAnswer', 'pick']);
+const PHONE_ACTIONS = new Set(['buzz', 'wager', 'finalAnswer', 'pick', 'freezePick', 'bet']);
 
 const isLocal = (addr) => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(addr);
 

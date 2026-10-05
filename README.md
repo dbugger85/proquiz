@@ -11,7 +11,7 @@ A Jeopardy-style quiz for teams in the same room. A laptop runs the game, a TV s
 - Pictures and sound clips in questions ("Which song is this?"). A picture can start as big blocks and slowly become clear.
 - A final round: teams bet, type their answers on their phones, and you judge each one.
 - A question editor, English and Norwegian, and an autosave that survives a crash.
-- **Crazy mode (Kaosmodus):** hidden special tiles, revealed on the TV with a spinning reel. They include bombs, triple points, a hot seat, a rescue for the team in last place, a three-question turbo, a jackpot and a freeze.
+- **Crazy mode (Kaosmodus):** hidden special tiles, revealed on the TV with a spinning reel. They include bombs, triple points, a hot seat, a rescue for the team in last place, a three-question turbo, a jackpot, a freeze and a Daily Double. You can also place specials yourself in the editor.
 
 ## Screenshots
 
@@ -62,6 +62,8 @@ Download the zip for your computer from the [latest release](https://github.com/
 
 **Make a quiz with AI:** in the editor, click **Make questions with AI**. Type a few topics (one per line, each becomes a category), add example questions if you like, and choose the difficulty (kids 5–9, easy, medium, hard or expert), the board size, the final question and the language. Click **Copy the request**, paste it into Claude or ChatGPT, then copy the AI's whole answer back into the box and click **Fill the board**. Your new quiz opens in the editor. **Check every answer: AI can get facts wrong.** ProQuiz itself never goes on the internet.
 
+**Fill the empty spots with AI:** started a quiz but ran out of ideas? Open it in the editor and click **Fill empty spots with AI** under the board. ProQuiz shows what is missing (empty questions, questions without an answer, answers without a question, category names, the final). The request includes everything you have already written, so the AI matches its topics, difficulty and language and avoids repeating your answers. You can choose a difficulty yourself, and give topics for categories that are completely empty. Paste the answer back and only the empty spots are filled: nothing you wrote changes, and the new tiles get a dashed edge so you can check them. Picture and sound questions without an answer are left for you, because the AI can't see them.
+
 **Ready-made quizzes to import** (download the file, then **Import** in the editor):
 - [Barnequiz 2 (5–9 år)](examples/barnequiz-2.proquiz.json): a Norwegian quiz for children aged 5 to 9, about animals, food, fairy tales, numbers, Norway and the world, and nature and space, with six pictures.
 
@@ -78,7 +80,11 @@ Download the zip for your computer from the [latest release](https://github.com/
 
 ### Crazy mode (Kaosmodus)
 
-Turn it on in the lobby's settings: **A little** hides about 3 special tiles on a 5×5 board, and **Lots** about 6. They land anywhere, and nobody (except you, on the laptop) knows where. Untick any specials you don't want under **Specials to use**. When a team picks one, the TV spins a reel and lands on the special. Press **Space** to go on.
+Turn it on in the lobby's settings: **A little** hides about 3 special tiles on a 5×5 board, and **Lots** about 6. They land anywhere, and nobody (except you, on the laptop) knows where. Untick any specials you don't want under **Specials to use**.
+
+**Place specials yourself:** in the editor, open a question and choose a **Special tile**. Its icon shows on the tile in the editor (and on your laptop's board), never on the TV. A quiz's own specials always play, even with Crazy mode off; untick **Use this quiz's own special tiles** in the lobby to play without them. With Crazy mode on, the random specials are added on other tiles.
+
+When a team picks one, the TV spins a reel and lands on the special. Press **Space** to go on.
 
 | Special | What happens |
 |---|---|
@@ -88,7 +94,8 @@ Turn it on in the lobby's settings: **A little** hides about 3 special tiles on 
 | 🛟 **Rescue** | The team in last place answers alone, and a wrong answer costs nothing |
 | ⚡ **Turbo** | The picking team gets three questions in a row, 5 seconds each, with no penalty |
 | 💰 **Jackpot** | Every point lost to wrong answers and bombs has gone into a secret pot. Answer right to win it |
-| 🧊 **Freeze** | The picking team chooses a team that can't buzz on this question (you click it on the laptop) |
+| 🧊 **Freeze** | The picking team chooses, on its phone, a team that can't buzz on this question (you can also click it on the laptop) |
+| 🎲 **Daily Double** | The picking team bets on its phone first: up to its score, or the board's top value if that's more. Then it answers alone. Right wins the bet, wrong loses all of it (whatever the wrong-answer setting says). If nobody bets, the tile's value is played, and you can also type the bet on the laptop |
 
 ### Playing
 

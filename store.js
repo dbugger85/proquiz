@@ -9,6 +9,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { validateSet, FILE_NAME, IMAGE_NAME, AUDIO_NAME } from './lib/validate.js';
+import { KINDS } from './lib/crazy.js';
 
 const ROOT = new URL('./', import.meta.url);
 export const SAMPLE_ID = 'sample';
@@ -209,6 +210,7 @@ function clean(set) {
     if (x.audio) out.audio = x.audio;
     if (x.audio && Number(x.audioStart) > 0) out.audioStart = Number(x.audioStart);
     if (x.image && Number(x.unveil) > 0) out.unveil = Number(x.unveil);
+    if (KINDS.includes(x.special)) out.special = x.special;
     return out;
   };
   const out = {
@@ -220,6 +222,7 @@ function clean(set) {
     const f = set.final;
     out.final = { category: String(f.category ?? ''), ...q(f) };
     delete out.final.value;
+    delete out.final.special;
   }
   return out;
 }

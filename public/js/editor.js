@@ -1,8 +1,10 @@
 // The question editor (laptop only). Quizzes save themselves a moment after each change.
 import { validateSet, MAX_CATEGORIES, MAX_QUESTIONS } from '/lib/validate.js';
-import { buildRequest, parseReply, splitTopics, AiQuizError, DIFFICULTIES, MIN_SIZE } from '/lib/aiquiz.js';
+import { buildRequest, parseReply, splitTopics, AiQuizError, DIFFICULTIES, FILL_DIFFICULTIES, MIN_SIZE, gapsOf, guessLanguage, buildFillRequest, parseFill } from '/lib/aiquiz.js';
 import { t, setLang, getLang, translatePage } from './i18n.js';
 import { $, h, fill } from './ui.js';
+import { KINDS } from '/lib/crazy.js';
+import { ICONS } from './specials.js';
 
 let quizzes = []; // the list on the left
 let currentId = null;
@@ -11,7 +13,7 @@ let builtIn = false;
 let problems = [];
 let saveTimer = null;
 let savePromise = Promise.resolve();
-let aiNote = null; // { id, duplicates } for a quiz just made with AI (shown until another quiz is opened)
+let aiNote = null; // { id, duplicates, filled?, left? } for a quiz just made or filled with AI (shown until another quiz is opened)
 
 // ----- talking to the server -----
 
@@ -159,7 +161,8 @@ function renderMain() {
           h(
             'div',
             {},
-            h('p', {}, t('aiMadeNote')),
+            h('p', {}, aiNote.filled ? t('aiFilledNote', { n: aiNote.filled.size }) : t('aiMadeNote')),
+            aiNote.left ? h('p', { class: 'muted' }, t('aiFillLeft', { n: aiNote.left })) : null,
             aiNote.duplicates.length ? h('p', { class: 'muted' }, t('aiDuplicates', { list: aiNote.duplicates.join(', ') })) : null,
           ),
           h('button', { class: 'btn', type: 'button', onclick: () => ((aiNote = null), renderMain()) }, t('aiDismiss')),
@@ -273,9 +276,16 @@ function renderBoard() {
         cat.questions.map((q, i) =>
           h(
             'button',
-            { class: `ed-tile${hasProblem(c, i) ? ' bad' : ''}${q.question || q.image || q.audio ? '' : ' blank'}`, type: 'button', 'data-c': c, 'data-i': i, onclick: () => openQuestion(c, i) },
+            {
+              class: `ed-tile${hasProblem(c, i) ? ' bad' : ''}${q.question || q.image || q.audio ? '' : ' blank'}${aiNote?.id === currentId && aiNote.filled?.has(`${c}-${i}`) ? ' ai-filled' : ''}`,
+              type: 'button',
+              'data-c': c,
+              'data-i': i,
+              onclick: () => openQuestion(c, i),
+            },
             h('b', {}, String(q.value || '?')),
             h('span', {}, snippet(q)),
+            KINDS.includes(q.special) ? h('span', { class: `ed-special k-${q.special}`, title: t(`n-${q.special}`) }, ICONS[q.special]) : null,
           ),
         ),
       ),
@@ -330,6 +340,7 @@ function renderBoard() {
           },
           t('edRemoveRow'),
         ),
+        h('button', { class: 'btn ai-fill-open', type: 'button', onclick: openFillDialog }, `✨ ${t('aiFillButton')}`),
       );
   fill($('#ed-board'), board, tools ?? '');
   renderFinal();
@@ -576,6 +587,18 @@ function openQuestion(c, i) {
         ),
     field(t('edQuestion'), question),
     field(t('edAnswer'), text('answer', { max: 120 })),
+    isFinal
+      ? null
+      : field(
+          t('edSpecial'),
+          h(
+            'select',
+            { name: 'special', disabled: builtIn, onchange: (e) => upd('special', e.target.value) },
+            h('option', { value: '', selected: !q.special }, t('edSpecialNone')),
+            KINDS.map((kind) => h('option', { value: kind, selected: q.special === kind }, `${ICONS[kind]}  ${t(`n-${kind}`)}`)),
+          ),
+        ),
+    isFinal ? null : h('small', { class: 'muted ed-special-hint' }, t('edSpecialHint')),
     h('div', { class: 'ed-media-grid' }, h('div', {}, picQ.box, unveilBox), picA.box, h('div', {}, clip.box, startBox)),
     h('div', { class: 'ed-dialog-actions' }, h('button', { class: 'btn btn-primary', value: 'done' }, t('edDone'))),
   );
@@ -699,6 +722,113 @@ function openAiDialog() {
 }
 
 $('#ai-quiz').addEventListener('click', openAiDialog);
+
+// ----- filling only the empty spots of the open quiz with AI -----
+
+const fillOpts = { difficulty: 'match', topics: '', lang: null };
+
+function openFillDialog() {
+  const dialog = $('#ai-dialog');
+  const form = $('#ai-form');
+  const gaps = gapsOf(set);
+  fillOpts.lang = guessLanguage(set) ?? fillOpts.lang ?? getLang();
+  const field = (label, input, hint) => h('label', { class: 'field' }, h('span', {}, label), input, hint ? h('small', {}, hint) : null);
+  const choice = (name, options) =>
+    h(
+      'select',
+      { name, onchange: (e) => update(name, e.target.value) },
+      options.map(([value, label]) => h('option', { value, selected: fillOpts[name] === value }, label)),
+    );
+  const request = h('textarea', { id: 'ai-request', class: 'ai-request', readonly: true, rows: 8 });
+  const copied = h('span', { class: 'ed-status', role: 'status' });
+  const reply = h('textarea', { id: 'ai-reply', rows: 6, placeholder: t('aiReplyPlaceholder'), oninput: () => (error.textContent = '') });
+  const error = h('p', { id: 'ai-error', class: 'ed-media-status bad', role: 'alert' });
+  const topics = h('textarea', { name: 'topics', rows: 3, oninput: (e) => update('topics', e.target.value) });
+  topics.value = fillOpts.topics;
+  function update(key, value) {
+    fillOpts[key] = value;
+    request.value = buildFillRequest(set, fillOpts);
+  }
+
+  // Categories with nothing at all in them: only then are topics asked for.
+  const emptyCats = gaps.names.filter((c) => set.categories[c].questions.every(isBlank)).length;
+  const count = (need) => gaps.tiles.filter((g) => g.need === need).length;
+  const missing = [
+    count('both') && t('aiGapBoth', { n: count('both') }),
+    count('answer') && t('aiGapAnswer', { n: count('answer') }),
+    count('question') && t('aiGapQuestion', { n: count('question') }),
+    gaps.names.length && t('aiGapName', { n: gaps.names.length }),
+    gaps.final && t('aiGapFinal'),
+  ].filter(Boolean);
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(request.value);
+    } catch {
+      request.select();
+      document.execCommand('copy');
+    }
+    copied.textContent = t('aiCopied');
+    setTimeout(() => (copied.textContent = ''), 2000);
+  }
+
+  function fillGaps() {
+    error.textContent = '';
+    let made;
+    try {
+      made = parseFill(reply.value, set);
+    } catch (err) {
+      if (!(err instanceof AiQuizError)) throw err;
+      error.textContent = t(`ai-${err.code}`);
+      return;
+    }
+    set = made.set;
+    aiNote = { id: currentId, duplicates: made.duplicates, filled: new Set(made.filled), left: made.left };
+    reply.value = '';
+    dialog.close();
+    changed();
+    renderMain();
+  }
+
+  const head = [
+    h('h2', {}, t('aiFillTitle')),
+    h('p', { class: 'muted' }, t('aiFillIntro')),
+    gaps.count ? h('div', { class: 'ai-gaps' }, h('p', {}, t('aiFillMissing')), h('ul', {}, missing.map((line) => h('li', {}, line)))) : h('p', { class: 'ai-gaps' }, t('aiFillNothing')),
+    gaps.skipped ? h('p', { class: 'muted' }, t('aiFillSkipped', { n: gaps.skipped })) : null,
+  ];
+  if (!gaps.count) {
+    fill(form, ...head, h('div', { class: 'ed-dialog-actions' }, h('button', { class: 'btn btn-primary', value: 'cancel' }, t('aiDismiss'))));
+    dialog.showModal();
+    return;
+  }
+  fill(
+    form,
+    ...head,
+    h('h3', {}, t('aiStep1Fill')),
+    h(
+      'div',
+      { class: 'ai-opts' },
+      field(t('aiDifficulty'), choice('difficulty', FILL_DIFFICULTIES.map((d) => [d, d === 'match' ? t('aiFillLevelMatch') : t(`aiLevel-${d}`)]))),
+      field(t('aiLang'), choice('lang', [['en', 'English'], ['no', 'Norsk']])),
+    ),
+    emptyCats ? field(t('aiFillTopics'), topics, t('aiFillTopicsHint')) : null,
+    h('h3', {}, t('aiStep2')),
+    request,
+    h('div', { class: 'row' }, h('button', { class: 'btn btn-primary ai-copy', type: 'button', onclick: copy }, t('aiCopy')), copied),
+    h('h3', {}, t('aiStep3')),
+    reply,
+    h('p', { class: 'ai-warn' }, t('aiWarn')),
+    error,
+    h(
+      'div',
+      { class: 'ed-dialog-actions' },
+      h('button', { class: 'btn btn-quiet', value: 'cancel' }, t('aiCancel')),
+      h('button', { class: 'btn btn-primary ai-fill-gaps', type: 'button', onclick: fillGaps }, t('aiFillGo')),
+    ),
+  );
+  request.value = buildFillRequest(set, fillOpts);
+  dialog.showModal();
+}
 
 // ----- start -----
 

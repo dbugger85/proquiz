@@ -2,7 +2,7 @@
 //
 // Keys: Space = turn buzzers on / back to the board, Y = correct, N = wrong, R = show answer,
 // Esc = put the question back, U = undo.
-import { ranking, COLORS, KINDS, unveilProgress, MUSIC_MOODS } from '/lib/game.js';
+import { ranking, COLORS, KINDS, unveilProgress, MUSIC_MOODS, maxBet } from '/lib/game.js';
 import { connect } from './net.js';
 import { t, setLang, translatePage } from './i18n.js';
 import { $, h, fill, qrSvg, shortUrl, countdown, runCountdowns, teamStyle } from './ui.js';
@@ -10,6 +10,7 @@ import { unlockAudio, audioReady, playEvent, playSound, startTicks } from './sou
 import { syncClip, stopClip } from './clip.js';
 import { syncMusic, stopMusic } from './music.js';
 import { ICONS, ruleFor, badgeFor } from './specials.js';
+import { ownSpecials } from '/lib/crazy.js';
 
 let view = null;
 let connected = new Set();
@@ -197,6 +198,10 @@ function renderCrazyKinds() {
   }
   for (const input of box.querySelectorAll('input[name=crazyKind]')) input.checked = !excluded.includes(input.value);
   $('#crazy-none').hidden = excluded.length < KINDS.length;
+  // Specials placed by hand in the quiz: only offered when the quiz has some.
+  const own = Object.keys(ownSpecials(view.set)).length;
+  $('#quiz-specials').hidden = own === 0;
+  $('#quiz-specials-label').textContent = t('quizSpecials', { n: own });
 }
 
 $('#settings').addEventListener('change', (e) => {
@@ -442,11 +447,12 @@ function renderSpecialHost() {
     { class: 'host-q host-special' },
     h('p', { class: 'where' }, `${view.set.categories[q.c].name} `, h('b', {}, String(q.value))),
     h('div', { class: `special-card k-${kind}` }, h('span', { class: 'special-icon' }, ICONS[kind]), h('div', {}, h('h2', {}, t(`k-${kind}`)), h('p', {}, ruleFor(view)))),
+    kind === 'double' ? doubleBetForm() : null,
     kind === 'freeze'
       ? h(
           'div',
           { class: 'freeze-pick' },
-          h('p', {}, t('freezePick')),
+          h('p', {}, t(connected.has(view.picker) ? 'freezePickPhone' : 'freezePick')),
           h(
             'div',
             { class: 'row' },
@@ -462,6 +468,29 @@ function renderSpecialHost() {
           ),
         )
       : null,
+  );
+}
+
+// Daily Double: the team bets on its phone; the host can type it in as well (or just go on with the tile's value).
+function doubleBetForm() {
+  const q = view.q;
+  const picker = view.teams.find((tm) => tm.id === view.picker);
+  const max = maxBet(view.set, picker?.score ?? 0);
+  const input = h('input', { id: 'double-bet', type: 'number', min: 0, max, step: 1, value: q.bet ?? '', 'aria-label': t('doubleBet') });
+  return h(
+    'form',
+    {
+      class: 'double-bet',
+      onsubmit: (e) => {
+        e.preventDefault();
+        const amount = Math.round(Number(input.value));
+        if (input.value !== '' && Number.isFinite(amount)) cmd({ type: 'bet', amount });
+      },
+    },
+    h('p', {}, t('doubleBetHint', { name: picker?.name ?? '', n: max })),
+    h('label', { class: 'field' }, h('span', {}, t('doubleBet')), input),
+    h('button', { class: 'btn', type: 'submit' }, t('doubleBetSet')),
+    q.bet == null ? h('p', { class: 'muted' }, t('doubleNoBet', { n: q.value })) : null,
   );
 }
 
@@ -486,7 +515,9 @@ function statusLine() {
           ? t('jackpotWon', { name: teamName(r.teamId), n: q.value, pot: q.won })
           : r.type === 'correct'
             ? t('resultCorrect', { name: teamName(r.teamId), n: q.value })
-            : r.type === 'timeout'
+            : q.fullPenalty && q.lockedOut.includes(q.solo)
+              ? t('doubleLost', { name: teamName(q.solo), n: q.value })
+              : r.type === 'timeout'
               ? t('resultTimeout')
               : t('resultNobody');
     return h('p', { class: 'host-status' }, text);

@@ -136,6 +136,8 @@ function stage() {
   }
   // Kaosmodus
   if (s === 'special') return [h('div', { class: 'big' }, '👀'), h('div', { class: 'big' }, t('lookTv'))];
+  if (s === 'bet') return doubleStage();
+  if (s === 'freezeChoose') return freezeStage();
   if (s === 'frozen') return [h('div', { class: 'big' }, '🧊'), h('div', { class: 'big' }, t('frozenBig')), h('p', { class: 'small' }, t('frozenSmall'))];
   if (s === 'standBack') {
     return [view.turbo ? h('p', { class: 'kicker' }, t('turboOf', { n: view.turbo.n, total: view.turbo.total })) : null, h('div', { class: 'big' }, t('standBack', { name: nameOf(view.solo) }))];
@@ -223,6 +225,64 @@ function pickStage() {
   ];
 }
 
+// ----- Kaosmodus: the picking team's choices -----
+
+// Daily Double: bet up to your score (or the board's top value), before the question shows.
+function doubleStage() {
+  const b = view.betting;
+  const input = h('input', { id: 'double-bet', type: 'number', inputmode: 'numeric', min: 0, max: b.max, step: 1, value: b.bet ?? '', 'aria-label': t('yourBet') });
+  const quick = (label, amount) => h('button', { class: 'chip', type: 'button', onclick: () => ((input.value = amount), input.focus()) }, label);
+  return [
+    h('p', { class: 'kicker' }, `🎲 ${t('doubleTitle')}`),
+    h(
+      'form',
+      {
+        class: 'final-form',
+        onsubmit: (e) => {
+          e.preventDefault();
+          const amount = Math.round(Number(input.value));
+          if (input.value === '' || !Number.isFinite(amount) || amount < 0 || amount > b.max) return ($('#final-error').textContent = t('err-bad-wager'));
+          net.send({ type: 'bet', amount });
+          input.blur();
+        },
+      },
+      h('label', { for: 'double-bet' }, t('doubleAsk'), ' ', h('span', { class: 'muted' }, t('doubleUpTo', { n: b.max }))),
+      input,
+      h('div', { class: 'chips' }, quick(t('doubleTile', { n: b.value }), b.value), quick(t('betHalf'), Math.floor(b.max / 2)), quick(t('betAll'), b.max)),
+      h('p', { id: 'final-error', class: 'error', role: 'alert' }),
+      h('button', { class: 'btn btn-ink', type: 'submit' }, t('placeBet')),
+    ),
+    b.bet != null ? h('p', { class: 'small' }, t('doubleBetPlaced', { n: b.bet })) : null,
+  ];
+}
+
+// Freeze: tap the team whose buzzer is off for this question (tap it again to take it back).
+function freezeStage() {
+  return [
+    h('div', { class: 'big' }, `🧊 ${t('freezeChoose')}`),
+    h('p', { class: 'small' }, view.frozen ? t('freezeChosen', { name: nameOf(view.frozen) }) : t('freezeChooseSmall')),
+    h(
+      'div',
+      { class: 'freeze-teams' },
+      view.teams
+        .filter((tm) => tm.id !== view.you.id)
+        .map((tm) =>
+          h(
+            'button',
+            {
+              class: `freeze-team${view.frozen === tm.id ? ' on' : ''}`,
+              type: 'button',
+              style: `--team: ${tm.color}; --team-ink: ${inkFor(tm.color)}`,
+              'aria-pressed': String(view.frozen === tm.id),
+              onclick: () => net.send({ type: 'freezePick', target: tm.id }),
+            },
+            view.frozen === tm.id ? `🧊 ${tm.name}` : tm.name,
+          ),
+        ),
+    ),
+  ];
+}
+
 // ----- final round -----
 
 function wagerStage() {
@@ -290,7 +350,8 @@ function stageKeyFor() {
   if (!view.canPick) pickCat = null;
   return JSON.stringify([
     view.lang, view.status, view.phase, view.buzzedTeam, view.event?.seq, view.you.score, view.deadline, f?.wager, f?.answer, f?.judged, f?.maxWager,
-    view.picker, view.settings.phonePick, view.board, pickCat,
+    view.picker, view.settings.phonePick, view.board, pickCat, view.betting, view.frozen,
+    view.status === 'freezeChoose' ? view.teams.map((tm) => [tm.id, tm.name, tm.color]) : null,
   ]);
 }
 

@@ -41,5 +41,10 @@ A Jeopardy-style quiz for teams in one room. The host laptop runs the game, a TV
 - Pictures in questions (asked for by the user): `image` shows with the question, `answerImage` only when the answer is revealed. This works for the final question too, and a picture can replace the question text.
 - A modern redesign (2026-09-26, asked for by the user): ink-violet stage, glass tiles, the Unbounded font.
 
+- Daily Double as a Kaosmodus special (decided by the user on 2026-10-05): the picking team bets on its phone (up to its score or the board's top value), answers alone, and a wrong answer loses the whole bet whatever the penalty setting is. No bet means the tile's value. The host can type the bet too.
+- The picking phone chooses who to freeze (2026-10-05). The host can still click a team.
+- AI fills only the empty spots (2026-10-05, "make it smart to adjust to what's already there"): the request shows the quiz so far, fills empty tiles, missing answers, missing questions for a given answer, category names and the final, matches the existing difficulty, style and language (or a chosen level), takes topics for empty categories, and never changes what is there. Picture and sound questions without text are left alone.
+- Placing specials by hand in the editor (2026-10-05): a `special` per question. They always play (a lobby tick turns them off), and Kaosmodus adds random ones on other tiles.
+
 ## Later
-Daily Double, a round 2 with doubled values, a time limit for picking, letting the picking phone choose who to freeze, AI filling only the empty tiles of a quiz, sound files instead of synthesized sounds, correcting for phone clock differences.
+A round 2 with doubled values, a time limit for picking, sound files instead of synthesized sounds, correcting for phone clock differences.

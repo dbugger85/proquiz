@@ -2,7 +2,7 @@
 import { lastPlace, TURBO_COUNT } from '/lib/crazy.js';
 import { t } from './i18n.js';
 
-export const ICONS = { triple: '×3', bomb: '💣', hotseat: '🔥', rescue: '🛟', turbo: '⚡', jackpot: '💰', freeze: '🧊' };
+export const ICONS = { triple: '×3', bomb: '💣', hotseat: '🔥', rescue: '🛟', turbo: '⚡', jackpot: '💰', freeze: '🧊', double: '🎲' };
 
 const nameOf = (view, id) => view.teams.find((tm) => tm.id === id)?.name ?? '';
 
@@ -26,6 +26,8 @@ export function ruleFor(view) {
       return t('r-jackpot', { n: q.pot ?? 0 });
     case 'freeze':
       return q.frozen ? t('frozenTeam', { name: nameOf(view, q.frozen) }) : t('r-freeze', { name: picker });
+    case 'double':
+      return q.bet != null ? t('r-double-bet', { name: picker, n: q.bet }) : t('r-double', { name: picker });
     default:
       return '';
   }

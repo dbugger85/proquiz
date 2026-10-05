@@ -1196,6 +1196,30 @@ select option {
   --bar: var(--team-ink);
   background: rgb(0 0 0 / 0.18);
 }
+/* Freeze on the phone: each other team as a big button in its own colour. */
+.freeze-teams {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+.freeze-team {
+  min-height: 56px;
+  padding: 0.6rem 1rem;
+  border: 3px solid rgb(0 0 0 / 0.25);
+  border-radius: 18px;
+  background: var(--team);
+  color: var(--team-ink);
+  font: inherit;
+  font-weight: 700;
+  font-size: 1.15rem;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.freeze-team.on {
+  border-color: #b9e8ff;
+  box-shadow: 0 0 0 4px rgb(185 232 255 / 0.5);
+}
 /* Picking the next question on the phone: categories first, then their points. */
 .pick-board {
   width: 100%;
@@ -1980,6 +2004,28 @@ select option {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+.ed-tile {
+  position: relative;
+}
+/* A special placed by hand: its icon in the corner, in the special's colour. */
+.ed-tile .ed-special {
+  position: absolute;
+  top: 0.55rem;
+  right: 0.7rem;
+  display: block;
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 1rem;
+  color: var(--k);
+}
+/* Filled in by AI just now: a dashed edge until another quiz is opened. */
+.ed-tile.ai-filled {
+  border: 1px dashed #7fe1ff;
+}
+.ed-special-hint {
+  display: block;
+  margin: -0.4rem 0 0.8rem;
+}
 .ed-tile.blank span {
   color: var(--muted);
 }
@@ -2238,6 +2284,7 @@ kbd {
 .k-turbo { --k: #7fe1ff; --k-ink: #032733; }
 .k-jackpot { --k: #ffc233; --k-ink: #2b1d00; }
 .k-freeze { --k: #b9e8ff; --k-ink: #06283a; }
+.k-double { --k: #c99bff; --k-ink: #1d0638; }
 
 .special-badge {
   font-family: var(--display);
@@ -2420,6 +2467,21 @@ kbd {
   box-shadow: 0 0 0 3px var(--bg), 0 0 0 6px #b9e8ff;
 }
 
+/* Daily Double: the host can type the bet too. */
+.double-bet {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.75rem;
+}
+.double-bet p {
+  flex-basis: 100%;
+  margin: 0;
+}
+.double-bet input {
+  width: 9rem;
+}
+
 /* Kaosmodus: which specials to use (lobby settings). */
 .crazy-kinds {
   border: 1px solid var(--edge);
@@ -2552,4 +2614,14 @@ body.display.embedded {
 }
 :fullscreen .stage-area {
   height: 100vh;
+}
+
+/* Filling the empty spots with AI: what is missing. */
+.ai-gaps p {
+  margin: 0;
+  font-weight: 700;
+}
+.ai-gaps ul {
+  margin: 0.3rem 0 0.8rem;
+  padding-left: 1.2rem;
 }
