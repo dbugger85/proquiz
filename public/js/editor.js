@@ -211,6 +211,7 @@ function renderMain() {
           ),
     ),
     h('div', { id: 'ed-board' }),
+    h('div', { id: 'ed-round2' }),
     h('div', { id: 'ed-final' }),
     h('div', { id: 'ed-problems' }),
   );
@@ -218,12 +219,19 @@ function renderMain() {
   renderProblems();
 }
 
+// The categories of a board: r = 1 is the main board, r = 2 the round 2 board.
+const catsOf = (r) => (r === 2 ? (set.round2?.categories ?? []) : set.categories);
+const tileKey = (c, i, r = 1) => (r === 2 ? `2:${c}-${i}` : `${c}-${i}`); // for the AI-filled marks
+
 // A question nobody has started on yet: not shown in red, just counted.
 const isBlank = (q) => !q.question?.trim() && !q.answer?.trim() && !q.image && !q.answerImage && !q.audio;
 const blankCategory = (cat) => !cat?.name?.trim() && (cat?.questions ?? []).every(isBlank);
-const blankProblem = (p) =>
-  p.i !== undefined ? isBlank(set.categories[p.c]?.questions[p.i] ?? {}) : p.code === 'no-category-name' && blankCategory(set.categories[p.c]);
-const hasProblem = (c, i) => problems.some((p) => p.c === c && (i === undefined ? p.i === undefined : p.i === i) && !blankProblem(p));
+const blankProblem = (p) => {
+  const cats = catsOf(p.r ?? 1);
+  return p.i !== undefined ? isBlank(cats[p.c]?.questions[p.i] ?? {}) : p.code === 'no-category-name' && blankCategory(cats[p.c]);
+};
+const hasProblem = (c, i, r = 1) =>
+  problems.some((p) => (p.r ?? 1) === r && p.c === c && (i === undefined ? p.i === undefined : p.i === i) && !blankProblem(p));
 
 function snippet(q) {
   const icons = `${q.image || q.answerImage ? '🖼 ' : ''}${q.audio ? '♪ ' : ''}`;
@@ -232,17 +240,25 @@ function snippet(q) {
 }
 
 function renderBoard() {
-  const rows = Math.max(0, ...set.categories.map((c) => c.questions.length));
+  fill($('#ed-board'), ...boardParts(1));
+  renderRound2();
+  renderFinal();
+}
+
+// One board (r = 1 the main board, r = 2 round 2): the tiles, and the tools to change its size.
+function boardParts(r) {
+  const cats = catsOf(r);
+  const rows = Math.max(0, ...cats.map((c) => c.questions.length));
   const board = h(
     'div',
-    { class: 'ed-board', style: `--cols: ${set.categories.length}` },
-    set.categories.map((cat, c) =>
+    { class: 'ed-board', style: `--cols: ${cats.length}` },
+    cats.map((cat, c) =>
       h(
         'div',
         { class: 'ed-col' },
         h(
           'div',
-          { class: `ed-cat${hasProblem(c) ? ' bad' : ''}`, 'data-c': c },
+          { class: `ed-cat${hasProblem(c, undefined, r) ? ' bad' : ''}`, 'data-c': c, 'data-r': r },
           h('input', {
             type: 'text',
             value: cat.name,
@@ -255,7 +271,7 @@ function renderBoard() {
               changed();
             },
           }),
-          builtIn || set.categories.length <= 1
+          builtIn || cats.length <= 1
             ? null
             : h(
                 'button',
@@ -266,7 +282,7 @@ function renderBoard() {
                   'aria-label': t('edRemoveCategory'),
                   onclick: () => {
                     if (!confirm(t('edConfirmRemoveCategory', { name: cat.name || t('edCategory', { n: c + 1 }) }))) return;
-                    set.categories.splice(c, 1);
+                    cats.splice(c, 1);
                     changed({ board: true });
                   },
                 },
@@ -277,11 +293,12 @@ function renderBoard() {
           h(
             'button',
             {
-              class: `ed-tile${hasProblem(c, i) ? ' bad' : ''}${q.question || q.image || q.audio ? '' : ' blank'}${aiNote?.id === currentId && aiNote.filled?.has(`${c}-${i}`) ? ' ai-filled' : ''}`,
+              class: `ed-tile${hasProblem(c, i, r) ? ' bad' : ''}${q.question || q.image || q.audio ? '' : ' blank'}${aiNote?.id === currentId && aiNote.filled?.has(tileKey(c, i, r)) ? ' ai-filled' : ''}`,
               type: 'button',
               'data-c': c,
               'data-i': i,
-              onclick: () => openQuestion(c, i),
+              'data-r': r,
+              onclick: () => openQuestion(c, i, r),
             },
             h('b', {}, String(q.value || '?')),
             h('span', {}, snippet(q)),
@@ -301,10 +318,10 @@ function renderBoard() {
           {
             class: 'btn',
             type: 'button',
-            disabled: set.categories.length >= MAX_CATEGORIES,
+            disabled: cats.length >= MAX_CATEGORIES,
             onclick: () => {
-              const values = set.categories[0]?.questions.map((q) => q.value) ?? [100, 200, 300, 400, 500];
-              set.categories.push({ name: '', questions: values.map(blankQuestion) });
+              const values = cats[0]?.questions.map((q) => q.value) ?? [100, 200, 300, 400, 500].map((v) => v * r);
+              cats.push({ name: '', questions: values.map(blankQuestion) });
               changed({ board: true });
             },
           },
@@ -317,9 +334,9 @@ function renderBoard() {
             type: 'button',
             disabled: rows >= MAX_QUESTIONS,
             onclick: () => {
-              for (const cat of set.categories) {
+              for (const cat of cats) {
                 const last = cat.questions.at(-1)?.value ?? 0;
-                cat.questions.push(blankQuestion(last + 100));
+                cat.questions.push(blankQuestion(last + 100 * r));
               }
               changed({ board: true });
             },
@@ -334,21 +351,54 @@ function renderBoard() {
             disabled: rows <= 1,
             onclick: () => {
               if (!confirm(t('edConfirmRemoveRow'))) return;
-              for (const cat of set.categories) if (cat.questions.length > 1) cat.questions.pop();
+              for (const cat of cats) if (cat.questions.length > 1) cat.questions.pop();
               changed({ board: true });
             },
           },
           t('edRemoveRow'),
         ),
-        h('button', { class: 'btn ai-fill-open', type: 'button', onclick: openFillDialog }, `✨ ${t('aiFillButton')}`),
+        r === 1 ? h('button', { class: 'btn ai-fill-open', type: 'button', onclick: openFillDialog }, `✨ ${t('aiFillButton')}`) : null,
       );
-  fill($('#ed-board'), board, tools ?? '');
-  renderFinal();
+  return [board, tools ?? ''];
+}
+
+// Round 2: an optional second board, the same size as the first, with double points to start with.
+function renderRound2() {
+  const on = Boolean(set.round2);
+  fill(
+    $('#ed-round2'),
+    h('h2', {}, t('edRound2')),
+    h(
+      'label',
+      { class: 'check' },
+      h('input', {
+        type: 'checkbox',
+        name: 'hasRound2',
+        checked: on,
+        disabled: builtIn,
+        onchange: (e) => {
+          if (e.target.checked) {
+            set.round2 = {
+              categories: set.categories.map((cat) => ({ name: '', questions: cat.questions.map((q) => blankQuestion((q.value || 0) * 2)) })),
+            };
+          } else {
+            const started = set.round2.categories.some((cat) => !blankCategory(cat));
+            if (started && !confirm(t('edConfirmRemoveRound2'))) return (e.target.checked = true);
+            delete set.round2;
+          }
+          changed({ board: true });
+        },
+      }),
+      h('span', {}, t('edHasRound2')),
+    ),
+    on ? h('small', { class: 'muted' }, t('edRound2Hint')) : null,
+    ...(on ? boardParts(2) : []),
+  );
 }
 
 function renderFinal() {
   const f = set.final;
-  const finalProblem = problems.some((p) => p.c === undefined && /final|bad-/.test(p.code));
+  const finalProblem = problems.some((p) => !p.r && p.c === undefined && /final|bad-/.test(p.code));
   fill($('#ed-final'), 
     h('h2', {}, t('edFinal')),
     h(
@@ -379,22 +429,24 @@ function renderFinal() {
 
 // Update just the red marks (keeps the cursor where it is while typing a category name).
 function markTiles() {
-  for (const el of document.querySelectorAll('.ed-tile[data-c]')) el.classList.toggle('bad', hasProblem(Number(el.dataset.c), Number(el.dataset.i)));
-  for (const el of document.querySelectorAll('.ed-cat[data-c]')) el.classList.toggle('bad', hasProblem(Number(el.dataset.c)));
+  for (const el of document.querySelectorAll('.ed-tile[data-c]')) el.classList.toggle('bad', hasProblem(Number(el.dataset.c), Number(el.dataset.i), Number(el.dataset.r)));
+  for (const el of document.querySelectorAll('.ed-cat[data-c]')) el.classList.toggle('bad', hasProblem(Number(el.dataset.c), undefined, Number(el.dataset.r)));
   const ft = document.querySelector('.ed-final-tile');
-  if (ft) ft.classList.toggle('bad', problems.some((p) => p.c === undefined && /final|bad-/.test(p.code)));
+  if (ft) ft.classList.toggle('bad', problems.some((p) => !p.r && p.c === undefined && /final|bad-/.test(p.code)));
 }
 
 function problemText(p) {
-  const cat = p.c !== undefined ? set.categories[p.c]?.name || t('edCategory', { n: p.c + 1 }) : t('edFinal');
-  const where = p.i !== undefined ? `${cat} ${set.categories[p.c]?.questions[p.i]?.value ?? ''}`.trim() : cat;
-  return t(`p-${p.code}`, { cat, where });
+  const cats = catsOf(p.r ?? 1);
+  const cat = p.c !== undefined ? cats[p.c]?.name || t('edCategory', { n: p.c + 1 }) : t('edFinal');
+  const where = p.i !== undefined ? `${cat} ${cats[p.c]?.questions[p.i]?.value ?? ''}`.trim() : cat;
+  const text = t(`p-${p.code}`, { cat, where });
+  return p.r === 2 ? `${t('edRound2')}: ${text}` : text;
 }
 
 function renderProblems() {
   const box = $('#ed-problems');
   if (!box) return;
-  const blanks = set.categories.reduce((n, c) => n + c.questions.filter(isBlank).length, 0);
+  const blanks = [...catsOf(1), ...catsOf(2)].reduce((n, c) => n + c.questions.filter(isBlank).length, 0);
   const lines = problems.filter((p) => !blankProblem(p)).map(problemText);
   if (blanks) lines.unshift(t('edBlanks', { n: blanks }));
   fill(
@@ -407,9 +459,10 @@ function renderProblems() {
 
 // ----- editing one question -----
 
-function openQuestion(c, i) {
+function openQuestion(c, i, r = 1) {
   const isFinal = c === null;
-  const q = isFinal ? set.final : set.categories[c].questions[i];
+  const cats = catsOf(r);
+  const q = isFinal ? set.final : cats[c].questions[i];
   const dialog = $('#q-dialog');
   const form = $('#q-form');
   const upd = (key, value) => {
@@ -568,7 +621,7 @@ function openQuestion(c, i) {
   question.value = q.question ?? '';
 
   fill(form, 
-    h('h2', {}, isFinal ? t('edFinal') : `${set.categories[c].name || t('edCategory', { n: c + 1 })}`),
+    h('h2', {}, isFinal ? t('edFinal') : `${r === 2 ? `${t('edRound2')}: ` : ''}${cats[c].name || t('edCategory', { n: c + 1 })}`),
     isFinal
       ? field(t('edFinalCategory'), text('category', { max: 40 }))
       : field(
@@ -616,7 +669,7 @@ function openQuestion(c, i) {
 
 // ----- making a quiz with AI (copy and paste, ProQuiz itself stays offline) -----
 
-const aiOpts = { topics: '', examples: '', difficulty: 'medium', categories: 5, rows: 5, final: true, lang: null };
+const aiOpts = { topics: '', examples: '', difficulty: 'medium', categories: 5, rows: 5, final: true, round2: false, round2Topics: '', lang: null };
 
 function openAiDialog() {
   const dialog = $('#ai-dialog');
@@ -635,6 +688,8 @@ function openAiDialog() {
   const copied = h('span', { class: 'ed-status', role: 'status' });
   const reply = h('textarea', { id: 'ai-reply', rows: 6, placeholder: t('aiReplyPlaceholder'), oninput: () => (error.textContent = '') });
   const error = h('p', { id: 'ai-error', class: 'ed-media-status bad', role: 'alert' });
+  // Round 2's own topics, only shown when round 2 is ticked.
+  const round2Box = h('div', { hidden: !aiOpts.round2 });
 
   // Only the request text and the hint change while typing, so the cursor stays where it is.
   function redraw() {
@@ -667,7 +722,7 @@ function openAiDialog() {
     error.textContent = '';
     let made;
     try {
-      made = parseReply(reply.value, { final: aiOpts.final, title: t('aiDefaultTitle') });
+      made = parseReply(reply.value, { final: aiOpts.final, round2: aiOpts.round2, title: t('aiDefaultTitle') });
     } catch (err) {
       if (!(err instanceof AiQuizError)) throw err;
       error.textContent = t(`ai-${err.code}`);
@@ -701,7 +756,22 @@ function openAiDialog() {
       field(t('aiRows'), choice('rows', sizes)),
       field(t('aiLang'), choice('lang', [['en', 'English'], ['no', 'Norsk']])),
       h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'final', checked: aiOpts.final, onchange: (e) => update('final', e.target.checked) }), h('span', {}, t('aiFinal'))),
+      h(
+        'label',
+        { class: 'check' },
+        h('input', {
+          type: 'checkbox',
+          name: 'round2',
+          checked: aiOpts.round2,
+          onchange: (e) => {
+            update('round2', e.target.checked);
+            round2Box.hidden = !e.target.checked;
+          },
+        }),
+        h('span', {}, t('aiRound2')),
+      ),
     ),
+    round2Box,
     h('h3', {}, t('aiStep2')),
     request,
     h('div', { class: 'row' }, h('button', { class: 'btn btn-primary ai-copy', type: 'button', onclick: copy }, t('aiCopy')), copied),
@@ -716,6 +786,7 @@ function openAiDialog() {
       h('button', { class: 'btn btn-primary ai-fill', type: 'button', onclick: fillBoard }, t('aiFill')),
     ),
   );
+  fill(round2Box, field(t('aiRound2Topics'), text('round2Topics', 3), t('aiRound2TopicsHint')));
   redraw();
   dialog.showModal();
   form.querySelector('textarea').focus();
@@ -751,13 +822,15 @@ function openFillDialog() {
   }
 
   // Categories with nothing at all in them: only then are topics asked for.
-  const emptyCats = gaps.names.filter((c) => set.categories[c].questions.every(isBlank)).length;
+  const emptyCats = [...gaps.names.map((c) => set.categories[c]), ...gaps.names2.map((c) => set.round2.categories[c])].filter((cat) =>
+    cat.questions.every(isBlank),
+  ).length;
   const count = (need) => gaps.tiles.filter((g) => g.need === need).length;
   const missing = [
     count('both') && t('aiGapBoth', { n: count('both') }),
     count('answer') && t('aiGapAnswer', { n: count('answer') }),
     count('question') && t('aiGapQuestion', { n: count('question') }),
-    gaps.names.length && t('aiGapName', { n: gaps.names.length }),
+    gaps.names.length + gaps.names2.length && t('aiGapName', { n: gaps.names.length + gaps.names2.length }),
     gaps.final && t('aiGapFinal'),
   ].filter(Boolean);
 

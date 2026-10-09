@@ -274,8 +274,8 @@ test('daily double: the picking team bets on its phone, answers alone, wins the 
   assert.equal(phoneView(s, 'b').betting, undefined);
   // Up to the score or the board's top value (500), whichever is more.
   assert.deepEqual(phoneView(s, 'r').betting, { bet: null, max: 500, value: 300 });
-  assert.equal(maxBet(sample, 900), 900);
-  assert.equal(maxBet(sample, -200), 500);
+  assert.equal(maxBet(sample.categories, 900), 900);
+  assert.equal(maxBet(sample.categories, -200), 500);
   assert.throws(() => apply(s, { type: 'bet', teamId: 'r', amount: 501 }), { code: 'bad-wager' });
   assert.throws(() => apply(s, { type: 'bet', teamId: 'r', amount: -1 }), { code: 'bad-wager' });
   assert.throws(() => apply(s, { type: 'bet', teamId: 'r', amount: 1.5 }), { code: 'bad-wager' });

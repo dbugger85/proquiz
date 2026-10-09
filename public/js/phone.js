@@ -106,7 +106,10 @@ let lastSeq = 0; // last event we reacted to
 
 function buzz(e) {
   e.preventDefault();
-  if (net.send({ type: 'buzz' })) {
+  // When the finger touched the screen, on this phone's stopwatch (for fair buzzing).
+  const now = net.stamp();
+  const at = e.timeStamp > 0 && Math.abs(now - e.timeStamp) < 1000 ? e.timeStamp : now;
+  if (net.send({ type: 'buzz', at })) {
     e.currentTarget.classList.add('pressed');
   }
 }
@@ -136,6 +139,10 @@ function stage() {
   }
   // Kaosmodus
   if (s === 'special') return [h('div', { class: 'big' }, '👀'), h('div', { class: 'big' }, t('lookTv'))];
+  if (s === 'round2') {
+    const mine = view.picker === me.id;
+    return [h('div', { class: 'big' }, t('round2Phone')), h('p', { class: 'small' }, mine ? t('round2YouPick') : t('round2PicksFirst', { name: nameOf(view.picker) }))];
+  }
   if (s === 'bet') return doubleStage();
   if (s === 'freezeChoose') return freezeStage();
   if (s === 'frozen') return [h('div', { class: 'big' }, '🧊'), h('div', { class: 'big' }, t('frozenBig')), h('p', { class: 'small' }, t('frozenSmall'))];
@@ -149,7 +156,8 @@ function stage() {
   if (view.phase === 'revealed' && ev?.type === 'boom' && ev.teamId === me.id) {
     return [h('div', { class: 'big' }, '💥'), h('div', { class: 'big' }, t('boomYou', { n: ev.amount ?? 0 }))];
   }
-  if (s === 'armed') return [buzzer(true)];
+  // Fair buzzing can find that a press came before the buzzers were on: too early, like while the host reads.
+  if (s === 'armed') return [buzzer(true), ev?.type === 'early' && ev.teamId === me.id ? h('div', { class: 'big' }, t('tooEarly')) : null];
   if (s === 'first') return [h('div', { class: 'big' }, t('youreFirst')), h('p', { class: 'small' }, t('answerNow')), countdown(view)];
   if (s === 'other') return [h('div', { class: 'big' }, t('otherFirst', { name: nameOf(view.buzzedTeam) }))];
   if (s === 'locked') return [h('p', { class: 'small' }, t('lockedOut'))];

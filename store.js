@@ -186,7 +186,8 @@ export function apiHandler(store, { onSetSaved = () => {}, getLang = () => 'en' 
 // ----- helpers -----
 
 function summary(id, set, builtIn, updated) {
-  const questions = (set.categories ?? []).reduce((n, c) => n + (c.questions?.length ?? 0), 0);
+  const count = (cats) => (cats ?? []).reduce((n, c) => n + (c.questions?.length ?? 0), 0);
+  const questions = count(set.categories) + count(set.round2?.categories);
   return { id, title: set.title || '', builtIn, updated, questions, problems: validateSet(set).length };
 }
 
@@ -196,7 +197,7 @@ export function filesOf(set) {
   const add = (q) => {
     for (const k of ['image', 'answerImage', 'audio']) if (q?.[k]) names.add(q[k]);
   };
-  for (const c of set.categories ?? []) for (const q of c.questions ?? []) add(q);
+  for (const c of [...(set.categories ?? []), ...(set.round2?.categories ?? [])]) for (const q of c.questions ?? []) add(q);
   add(set.final);
   return [...names];
 }
@@ -213,11 +214,9 @@ function clean(set) {
     if (KINDS.includes(x.special)) out.special = x.special;
     return out;
   };
-  const out = {
-    v: 1,
-    title: String(set?.title ?? ''),
-    categories: (set?.categories ?? []).map((c) => ({ name: String(c?.name ?? ''), questions: (c?.questions ?? []).map(q) })),
-  };
+  const board = (cats) => (Array.isArray(cats) ? cats : []).map((c) => ({ name: String(c?.name ?? ''), questions: (c?.questions ?? []).map(q) }));
+  const out = { v: 1, title: String(set?.title ?? ''), categories: board(set?.categories) };
+  if (set?.round2) out.round2 = { categories: board(set.round2.categories) };
   if (set?.final) {
     const f = set.final;
     out.final = { category: String(f.category ?? ''), ...q(f) };

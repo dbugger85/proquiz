@@ -124,6 +124,11 @@ try {
     el.dispatchEvent(new Event('change', { bubbles: true }));
   });
   await waitFor(() => srv.hub.getState().settings.musicVolume === 60);
+  // Fairer buzzing: the lobby shows each phone's measured delay, and the rest of this game is played with it on.
+  await host.check('input[name=fairBuzz]');
+  await waitFor(() => srv.hub.getState().settings.fairBuzz === true);
+  await host.waitForSelector('.team-list .ping', { timeout: 4000 });
+  await shot(host, 'host-2b-fair-buzz');
 
   host.on('dialog', (d) => d.accept());
   const score = (name) => srv.hub.getState().teams.find((tm) => tm.name === name).score;
@@ -132,7 +137,17 @@ try {
   // The flag question (Capitals 300) gets a slowly appearing picture: 6 seconds from blocks to clear.
   const withUnveil = structuredClone(srv.hub.getState().set);
   withUnveil.categories[0].questions[2].unveil = 6;
+  // And a round 2: the same board with new names, double points and its own questions.
+  withUnveil.round2 = {
+    categories: withUnveil.categories.map((cat) => ({
+      name: `${cat.name} II`,
+      questions: cat.questions.map((q, i) => ({ value: q.value * 2, question: `Round 2 question ${i + 1}?`, answer: `Round 2 answer ${i + 1}` })),
+    })),
+  };
   srv.hub.dispatch({ type: 'loadSet', set: withUnveil, setId: 'sample' });
+  await host.waitForSelector('#round2-setting:not([hidden])');
+  assert.match(await host.textContent('#round2-setting'), /Play round 2 \(25 questions/);
+  assert.equal(await host.isChecked('#round2-setting input'), true);
 
   await host.click('#start');
   await host.waitForSelector('.host-board');
@@ -313,8 +328,37 @@ try {
   await host.waitForSelector('body[data-phase=board]');
   assert.equal(srv.hub.getState().media, null);
 
-  // End the board: on to the final round.
+  // End the board: round 2 comes first. Blue has the fewest points, so Blue picks first.
   await host.waitForSelector('.controls button:has-text("End the board")');
+  await host.keyboard.press('e');
+  await host.waitForSelector('body[data-phase=round2]');
+  await tv.waitForSelector('.tv-round2');
+  assert.match(await tv.textContent('.tv-round2'), /Round 2[\s\S]*up to 1000 points[\s\S]*Blue Steel has the fewest points/);
+  await blue.waitForFunction(() => document.body.textContent.includes('you pick first'));
+  await red.waitForFunction(() => document.body.textContent.includes('Blue Steel has the fewest points'));
+  await tv.waitForTimeout(600);
+  await shot(tv, 'tv-18-round2');
+  await shot(host, 'host-12-round2');
+  await shot(blue, 'phone-12-round2');
+  await host.keyboard.press('Space');
+  await host.waitForSelector('body[data-phase=board]');
+  await tv.waitForSelector('.tv-picks .round-tag');
+  assert.match(await tv.textContent('.tv-board'), /Capitals II[\s\S]*1000/);
+  assert.doesNotMatch(await tv.textContent('body'), /Round 2 answer/);
+  // Blue picks a round 2 question on its phone.
+  await blue.click('.pick-board button:has-text("Capitals II")');
+  await blue.click('.pick-values button:has-text("1000")');
+  await host.waitForSelector('body[data-phase=reading]');
+  assert.match(await host.textContent('.host-q'), /Round 2 question 5\?[\s\S]*Round 2 answer 5/);
+  assert.match(await tv.textContent('.tv-q'), /Round 2 question 5\?/);
+  await shot(tv, 'tv-19-round2-question');
+  await host.keyboard.press('r');
+  await host.waitForSelector('body[data-phase=revealed]');
+  await host.keyboard.press('Space');
+  await host.waitForSelector('body[data-phase=board]');
+  await shot(tv, 'tv-20-round2-board');
+
+  // End round 2: on to the final round.
   await host.keyboard.press('e');
   await host.waitForSelector('body[data-phase=finalWager]');
   await tv.waitForSelector('.tv-final');
@@ -431,6 +475,31 @@ try {
   assert.equal(saved.categories[0].questions[0].audioStart, 1.5);
   assert.equal(saved.categories[0].questions[0].unveil, 20);
   assert.equal(saved.categories[0].questions[0].special, 'double');
+
+  // Round 2: tick it, and a second board appears with double points. Its tiles open like the others.
+  await ed.check('#ed-round2 input[name=hasRound2]');
+  await ed.waitForSelector('#ed-round2 .ed-tile[data-r="2"]');
+  assert.match(await ed.textContent('#ed-round2 .ed-col:nth-child(1)'), /200[\s\S]*400[\s\S]*600[\s\S]*800[\s\S]*1000/);
+  await ed.fill('#ed-round2 .ed-col:nth-child(2) .ed-cat input', 'Bands');
+  await ed.click('#ed-round2 .ed-col:nth-child(2) .ed-tile:nth-of-type(1)');
+  await ed.waitForSelector('#q-dialog[open]');
+  assert.match(await ed.textContent('#q-form h2'), /Round 2: Bands/);
+  await ed.fill('#q-form textarea', 'Who sang Yellow Submarine?');
+  await ed.click('#q-form button[value=done]');
+  await ed.waitForSelector('#q-dialog:not([open])', { state: 'attached' });
+  await ed.waitForFunction(() => document.querySelector('#ed-status').textContent === 'Saved');
+  assert.match(await ed.textContent('.ed-problems'), /Round 2: Bands 200/); // it still needs an answer
+  await ed.locator('#ed-round2').scrollIntoViewIfNeeded();
+  await shot(ed, 'editor-8-round2');
+  const withR2 = (await (await fetch(`${base}/api/sets/${mine.id}`)).json()).set;
+  assert.equal(withR2.round2.categories[1].name, 'Bands');
+  assert.equal(withR2.round2.categories[1].questions[0].question, 'Who sang Yellow Submarine?');
+  assert.equal(withR2.round2.categories[1].questions[0].value, 200);
+  // Unticking removes it again (after asking, since it has a question).
+  await ed.uncheck('#ed-round2 input[name=hasRound2]');
+  await ed.waitForSelector('#ed-round2 .ed-tile', { state: 'detached' });
+  await ed.waitForFunction(() => document.querySelector('#ed-status').textContent === 'Saved');
+  assert.equal((await (await fetch(`${base}/api/sets/${mine.id}`)).json()).set.round2, undefined);
 
   // Make a quiz with AI: choose topics and size, copy the request, paste a (messy) answer, and the board fills in.
   await ed.click('#ai-quiz');

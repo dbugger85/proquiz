@@ -53,6 +53,60 @@
       ]
     }
   ],
+  "round2": {
+    "categories": [
+      {
+        "name": "Verden",
+        "questions": [
+          { "value": 200, "question": "Hva heter verdens største hav?", "answer": "Stillehavet" },
+          { "value": 400, "question": "Hva heter verdens minste land?", "answer": "Vatikanstaten" },
+          { "value": 600, "question": "Hvilken elv renner gjennom Paris?", "answer": "Seinen" },
+          { "value": 800, "question": "Hvilken fjellkjede regnes som grensen mellom Europa og Asia i Russland?", "answer": "Uralfjellene" },
+          { "value": 1000, "question": "I hvilket land ligger byen Timbuktu?", "answer": "Mali" }
+        ]
+      },
+      {
+        "name": "Historie",
+        "questions": [
+          { "value": 200, "question": "Hvilken dato er Norges nasjonaldag?", "answer": "17. mai" },
+          { "value": 400, "question": "Hvilket år ble Norges grunnlov skrevet?", "answer": "1814" },
+          { "value": 600, "question": "Hvem var den første som nådde Sydpolen?", "answer": "Roald Amundsen (1911)" },
+          { "value": 800, "question": "Hvem var Norges konge under andre verdenskrig?", "answer": "Haakon VII" },
+          { "value": 1000, "question": "Hvilket år sank Titanic?", "answer": "1912" }
+        ]
+      },
+      {
+        "name": "Kroppen",
+        "questions": [
+          { "value": 200, "question": "Hva er kroppens største organ?", "answer": "Huden" },
+          { "value": 400, "question": "Hvor mange kamre har hjertet?", "answer": "Fire" },
+          { "value": 600, "question": "Hva er det hardeste stoffet i kroppen?", "answer": "Tannemaljen" },
+          { "value": 800, "question": "Hvor i kroppen sitter det minste beinet?", "answer": "I øret (stigbøylen)" },
+          { "value": 1000, "question": "Hvilken blodtype kalles universalgiver?", "answer": "O negativ" }
+        ]
+      },
+      {
+        "name": "Pop og rock",
+        "questions": [
+          { "value": 200, "question": "Hvilket band var John, Paul, George og Ringo med i?", "answer": "The Beatles" },
+          { "value": 400, "question": "Hvilken norsk DJ fikk en verdenshit med «Firestone» i 2014?", "answer": "Kygo" },
+          { "value": 600, "question": "Hvilken svensk gruppe vant Eurovision i 1974 med «Waterloo»?", "answer": "ABBA" },
+          { "value": 800, "question": "Hvilket band hadde Freddie Mercury som vokalist?", "answer": "Queen" },
+          { "value": 1000, "question": "Hvem sang «Purple Rain»?", "answer": "Prince" }
+        ]
+      },
+      {
+        "name": "Sportsmiks",
+        "questions": [
+          { "value": 200, "question": "Hvor mange ringer er det i det olympiske flagget?", "answer": "Fem" },
+          { "value": 400, "question": "I hvilken sport kan man få «strike» og «spare»?", "answer": "Bowling" },
+          { "value": 600, "question": "Hvilket land har vunnet flest VM-titler i fotball?", "answer": "Brasil (5)" },
+          { "value": 800, "question": "I hvilken by ble de første moderne olympiske leker holdt i 1896?", "answer": "Athen" },
+          { "value": 1000, "question": "Hvilken nordmann ble toppscorer i Premier League sesongen 2022–23?", "answer": "Erling Braut Haaland" }
+        ]
+      }
+    ]
+  },
   "final": {
     "category": "Norsk natur",
     "question": "Hva heter Norges lengste fjord?",

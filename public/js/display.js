@@ -116,7 +116,7 @@ function renderBoard() {
       ),
     ),
     view.picker
-      ? h('p', { class: 'tv-picks' }, h('b', {}, t(view.settings.phonePick && connected.has(view.picker) ? 'picksOnPhone' : 'picks', { name: teamById(view.picker)?.name ?? '' })))
+      ? h('p', { class: 'tv-picks' }, view.round === 2 ? h('span', { class: 'round-tag' }, t('round2Title')) : null, h('b', {}, t(view.settings.phonePick && connected.has(view.picker) ? 'picksOnPhone' : 'picks', { name: teamById(view.picker)?.name ?? '' })))
       : null,
   ];
 }
@@ -362,6 +362,23 @@ function renderFinal() {
   );
 }
 
+// Round 2's intro: a new board, bigger points, and the team with the fewest points picks first.
+function renderRound2() {
+  const zoom = lastScreen !== 'round2';
+  lastScreen = 'round2';
+  const top = Math.max(0, ...view.set.categories.flatMap((cat) => cat.questions.map((q) => q.value)));
+  const picker = teamById(view.picker);
+  return h(
+    'div',
+    { class: 'tv-final tv-round2', style: zoom ? '' : 'animation: none' },
+    h('p', { class: 'final-kicker' }, t('round2Kicker')),
+    h('h1', { class: 'final-cat' }, t('round2Title')),
+    h('p', { class: 'final-note' }, t('round2UpTo', { n: top })),
+    h('ul', { class: 'round2-cats' }, view.set.categories.map((cat) => h('li', {}, cat.name))),
+    picker ? h('p', { class: 'plate round2-picker', style: teamStyle(picker) }, t('round2PicksFirst', { name: picker.name })) : null,
+  );
+}
+
 function renderOver() {
   const ranked = ranking(view.teams);
   const tie = ranked.length > 1 && ranked[0].score === ranked[1].score;
@@ -404,7 +421,8 @@ function renderGame() {
     lastScreen = 'board';
     preloadImages();
     stage = renderBoard();
-  } else if (p === 'special') stage = renderSpecialTv();
+  } else if (p === 'round2') stage = renderRound2();
+  else if (p === 'special') stage = renderSpecialTv();
   else if (view.q) stage = renderQuestion();
   else if (p === 'over') stage = renderOver();
   else stage = renderFinal();
@@ -428,7 +446,7 @@ function render() {
   document.querySelector('.display > .wordmark').hidden = !inLobby;
   if (inLobby) renderLobby();
   else renderGame();
-  syncClip(view, view.q ? `q${view.q.c}-${view.q.i}` : 'final');
+  syncClip(view, view.q ? `q${view.round}-${view.q.c}-${view.q.i}` : 'final');
   syncMusic(view, net.now());
   showUnlock();
 }

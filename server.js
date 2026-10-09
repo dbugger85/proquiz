@@ -13,7 +13,7 @@ import { FILE_NAME, validateSet } from './lib/validate.js';
 import { createStore, apiHandler, SAMPLE_ID } from './store.js';
 import { randomUUID } from 'node:crypto';
 import { WebSocketServer } from 'ws';
-import { apply, newGame, hostView, displayView, phoneView, GameError, DEFAULT_SETTINGS } from './lib/game.js';
+import { apply, newGame, hostView, displayView, phoneView, GameError, DEFAULT_SETTINGS, nextTimerAt, MAX_SLACK_MS } from './lib/game.js';
 
 const ROOT = new URL('./', import.meta.url);
 const START_PORT = Number(process.env.PORT) || 3000;
@@ -140,6 +140,12 @@ const HOST_ACTIONS = new Set([
 ]);
 const PHONE_ACTIONS = new Set(['buzz', 'wager', 'finalAnswer', 'pick', 'freezePick', 'bet']);
 
+// Fair buzzing: how the server measures each phone's clock (see clockSample() and pressTime() below).
+const CLOCK_EVERY_MS = 5000; // one measurement per phone this often, while the setting is on
+const CLOCK_BURST = 5; // measurements right after a phone connects (or the setting is turned on)
+const CLOCK_KEEP_MS = 20_000; // older measurements are forgotten
+const CLOCK_MAX_RTT_MS = 2000; // a reply slower than this is useless
+
 const isLocal = (addr) => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(addr);
 
 // Settings from a save, but only the ones this version knows (so an old save can't break a new game).
@@ -165,6 +171,7 @@ function summary(saved) {
     played: st.used?.flat().filter(Boolean).length ?? 0,
     total: st.used?.flat().length ?? 0,
     phase: st.phase,
+    round: st.round ?? 1,
   };
 }
 
@@ -208,8 +215,9 @@ export function createHub({ set, info, saved = null, save = () => {}, store = nu
   const lastSet = saved?.state?.set && validateSet(saved.state.set).length === 0 ? saved.state : null;
   let state = newGame(lastSet ? lastSet.set : set, pickSettings(saved?.state?.settings), lastSet ? lastSet.setId : SAMPLE_ID);
   let resumable = saved?.state?.teams?.length ? saved : null;
-  const clients = new Set(); // { ws, role: 'host' | 'display' | 'phone', local, teamId, askedTeamId, alive }
+  const clients = new Set(); // { ws, role: 'host' | 'display' | 'phone', local, teamId, askedTeamId, alive, pings, samples }
   let timer = null;
+  let pingId = 0;
 
   const send = (ws, msg) => ws.readyState === 1 && ws.send(JSON.stringify(msg));
 
@@ -217,6 +225,66 @@ export function createHub({ set, info, saved = null, save = () => {}, store = nu
     const ids = new Set();
     for (const c of clients) if (c.role === 'phone' && c.teamId) ids.add(c.teamId);
     return [...ids];
+  }
+
+  // ----- fair buzzing: measuring each phone's clock -----
+  // The server asks "what does your stopwatch say?" and times the answer. Half the round trip after asking is
+  // roughly when the phone answered, which gives the gap between the phone's stopwatch and the server's clock.
+  // The quickest answer of the last few is the most trustworthy one.
+
+  function ping(c) {
+    if (c.ws.readyState !== 1) return;
+    const now = Date.now();
+    for (const [id, sent] of c.pings) if (now - sent > CLOCK_MAX_RTT_MS) c.pings.delete(id);
+    pingId += 1;
+    c.pings.set(pingId, now);
+    send(c.ws, { type: 'clock', id: pingId });
+  }
+
+  function burst(c) {
+    for (let k = 0; k < CLOCK_BURST; k++) setTimeout(() => clients.has(c) && ping(c), k * 150);
+    setTimeout(sendLatency, CLOCK_BURST * 150 + 400);
+  }
+
+  const phones = () => [...clients].filter((c) => c.role === 'phone');
+
+  function clockSample(c, { id, t }) {
+    const sent = c.pings.get(id);
+    if (sent === undefined || !Number.isFinite(t)) return;
+    c.pings.delete(id);
+    const now = Date.now();
+    const rtt = now - sent;
+    if (rtt > CLOCK_MAX_RTT_MS) return;
+    c.samples = [...c.samples.filter((x) => now - x.at < CLOCK_KEEP_MS), { offset: t - (sent + rtt / 2), rtt, at: now }].slice(-8);
+  }
+
+  function bestSample(c) {
+    const now = Date.now();
+    const fresh = c.samples.filter((x) => now - x.at < CLOCK_KEEP_MS);
+    return fresh.length ? fresh.reduce((a, b) => (b.rtt < a.rtt ? b : a)) : null;
+  }
+
+  // A buzz's press time on the server clock, and how much earlier than its arrival it may count
+  // (the rules check both). A phone that hasn't been measured counts by arrival.
+  function pressTime(c, at) {
+    const best = bestSample(c);
+    if (!Number.isFinite(at) || !best) return {};
+    return { at: at - best.offset, slack: Math.min(Math.ceil(best.rtt) + 5, MAX_SLACK_MS) };
+  }
+
+  // The host lobby shows each phone's measured delay (round trip, ms) while the setting is on.
+  function latency() {
+    const out = {};
+    for (const c of phones()) {
+      const best = c.teamId && bestSample(c);
+      if (best) out[c.teamId] = Math.round(best.rtt);
+    }
+    return out;
+  }
+
+  function sendLatency() {
+    if (!state.settings.fairBuzz) return;
+    for (const c of clients) if (c.role === 'host') send(c.ws, { type: 'latency', latency: latency() });
   }
 
   function viewFor(c) {
@@ -237,6 +305,7 @@ export function createHub({ set, info, saved = null, save = () => {}, store = nu
       if (!c.role) continue;
       const msg = { type: 'state', view: viewFor(c), connected, displays, tvs, serverNow };
       if (c.role === 'host' && resume) msg.resume = resume;
+      if (c.role === 'host' && state.settings.fairBuzz) msg.latency = latency();
       send(c.ws, msg);
     }
   }
@@ -265,7 +334,7 @@ export function createHub({ set, info, saved = null, save = () => {}, store = nu
   // Continue the saved game. Phones that are already back get their team again.
   function resume() {
     if (!resumable) return;
-    state = { ...resumable.state, deadline: null };
+    state = { round: 1, ...resumable.state, deadline: null }; // games saved before round 2 existed are in round 1
     // A picture that was appearing carries on from where it was, not from the old clock.
     if (state.q?.unveil?.since != null) state.q = { ...state.q, unveil: { ...state.q.unveil, since: Date.now() } };
     resumable = null;
@@ -284,6 +353,8 @@ export function createHub({ set, info, saved = null, save = () => {}, store = nu
   function dispatch(action) {
     const before = state;
     state = apply(state, { ...action, now: Date.now() });
+    // Fair buzzing was just turned on: measure every phone now rather than in a few seconds.
+    if (state.settings.fairBuzz && !before.settings.fairBuzz) phones().forEach(burst);
     schedule();
     if (state !== before) {
       save(state);
@@ -295,8 +366,9 @@ export function createHub({ set, info, saved = null, save = () => {}, store = nu
   function schedule() {
     clearTimeout(timer);
     timer = null;
-    if (state.deadline !== null) {
-      timer = setTimeout(() => dispatch({ type: 'timeout' }), Math.max(0, state.deadline - Date.now()) + 5);
+    const at = nextTimerAt(state); // the end of a fair-buzz wait, or the running timer
+    if (at != null) {
+      timer = setTimeout(() => dispatch({ type: 'timeout' }), Math.max(0, at - Date.now()) + 5);
     }
   }
 
@@ -311,6 +383,8 @@ export function createHub({ set, info, saved = null, save = () => {}, store = nu
         const known = state.teams.some((t) => t.id === msg.teamId);
         c.teamId = known ? msg.teamId : null;
         send(c.ws, { type: 'welcome', teamId: c.teamId });
+        c.samples = []; // a new connection, maybe a reloaded page: measure the clock again
+        if (state.settings.fairBuzz) burst(c);
       } else {
         send(c.ws, { type: 'welcome', info });
       }
@@ -336,6 +410,16 @@ export function createHub({ set, info, saved = null, save = () => {}, store = nu
     }
     if (c.role === 'host' && msg.type === 'testSound') return soundToRoom({ name: 'fanfare' });
     if (c.role === 'host' && msg.type === 'chooseSet' && store) return chooseSet(c, msg.id);
+    if (c.role === 'phone' && msg.type === 'clock') return clockSample(c, msg);
+    if (c.role === 'phone' && msg.type === 'resync') {
+      c.samples = [];
+      if (state.settings.fairBuzz) burst(c);
+      return;
+    }
+    if (c.role === 'phone' && msg.type === 'buzz' && c.teamId) {
+      // Only the server's own measurement decides how early a press may count, never the phone.
+      return dispatch({ type: 'buzz', teamId: c.teamId, ...pressTime(c, msg.at) });
+    }
     if (c.role === 'phone' && PHONE_ACTIONS.has(msg.type) && c.teamId) {
       return dispatch({ ...msg, teamId: c.teamId });
     }
@@ -351,12 +435,14 @@ export function createHub({ set, info, saved = null, save = () => {}, store = nu
         action.seed = Math.floor(Math.random() * 2 ** 32); // Kaosmodus: where the specials go
         delete action.specials; // only tests place specials by hand
       }
+      // Fair buzzing: a fresh measurement of every phone just as the buzzers open.
+      if (action.type === 'arm' && state.settings.fairBuzz) phones().forEach(ping);
       return dispatch(action);
     }
   }
 
   function connect(ws, req) {
-    const c = { ws, role: null, local: isLocal(req.socket.remoteAddress), teamId: null, alive: true };
+    const c = { ws, role: null, local: isLocal(req.socket.remoteAddress), teamId: null, alive: true, pings: new Map(), samples: [] };
     clients.add(c);
     ws.on('pong', () => (c.alive = true));
     ws.on('message', (raw) => {
@@ -390,6 +476,13 @@ export function createHub({ set, info, saved = null, save = () => {}, store = nu
     }
   }, 10_000);
 
+  // Fair buzzing: keep every phone's clock measurement fresh.
+  const clockTimer = setInterval(() => {
+    if (!state.settings.fairBuzz) return;
+    phones().forEach(ping);
+    sendLatency(); // for the host's lobby
+  }, CLOCK_EVERY_MS);
+
   return {
     connect,
     setSaved,
@@ -398,6 +491,7 @@ export function createHub({ set, info, saved = null, save = () => {}, store = nu
     stop() {
       clearTimeout(timer);
       clearInterval(heartbeat);
+      clearInterval(clockTimer);
     },
   };
 }

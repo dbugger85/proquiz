@@ -316,6 +316,11 @@ select option {
   background: rgb(0 0 0 / 0.3);
   color: #fff;
 }
+.team-list .conn .ping {
+  opacity: 0.75;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
 .team-list .remove {
   width: 48px;
   min-height: 48px;
@@ -1474,6 +1479,47 @@ select option {
   margin-top: 0.3rem;
 }
 
+/* ---------- round 2 ---------- */
+
+.round-tag {
+  display: inline-block;
+  margin-right: 0.6em;
+  padding: 0.15em 0.75em;
+  border-radius: var(--pill);
+  background: linear-gradient(90deg, var(--light), var(--flare));
+  color: #fff;
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 0.85em;
+}
+.round2-cats {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1.2vh 1vw;
+  max-width: 80vw;
+}
+.round2-cats li {
+  padding: 1.1vh 1.8vw;
+  border-radius: var(--pill);
+  background: rgb(255 255 255 / 0.08);
+  border: 1px solid rgb(255 255 255 / 0.14);
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 2.6vh;
+}
+.round2-picker {
+  margin: 1vh 0 0;
+  padding: 1.4vh 2.4vw;
+  border-radius: var(--pill);
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 3vh;
+}
+
 /* ---------- final round ---------- */
 
 .tv-final {
@@ -2624,4 +2670,9 @@ body.display.embedded {
 .ai-gaps ul {
   margin: 0.3rem 0 0.8rem;
   padding-left: 1.2rem;
+}
+
+#ed-round2 > small {
+  display: block;
+  margin: 0.3rem 0 1rem;
 }

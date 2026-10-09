@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { apply, newGame, COLORS, MAX_TEAMS, displayView, phoneView, hostView, GameError, unveilProgress } from '../lib/game.js';
+import { apply, newGame, COLORS, MAX_TEAMS, displayView, phoneView, hostView, phoneStatus, clipFor, GameError, unveilProgress, nextTimerAt, BUZZ_WINDOW_MS } from '../lib/game.js';
 import { validateSet } from '../lib/validate.js';
 
 const sample = JSON.parse(readFileSync(new URL('../sets/sample.json', import.meta.url)));
@@ -133,6 +133,115 @@ test('buzzes before arming lock that team for a moment', () => {
   // With earlyLockMs 0 early buzzes are simply ignored.
   const off = run(started({ earlyLockMs: 0 }), { type: 'pick', c: 0, i: 0 });
   assert.equal(apply(off, { type: 'buzz', teamId: 'r', now: 900 }), off);
+});
+
+// ----- fair buzzing (phone clocks corrected) -----
+
+const fairArmed = () => armedAt(started({ fairBuzz: true }));
+const press = (teamId, now, at, slack = 100) => ({ type: 'buzz', teamId, now, at, slack });
+
+test('fair buzzing off: the press time sent by the phone is ignored', () => {
+  let s = armedAt(started());
+  s = apply(s, press('g', 1100, 1100));
+  s = apply(s, press('r', 1150, 1020));
+  assert.equal(s.q.buzzedTeam, 'g');
+  assert.equal(s.phase, 'answering');
+  assert.equal(s.q.decideAt, null);
+});
+
+test('fair buzzing: an earlier press that arrives later wins after the short wait', () => {
+  let s = fairArmed();
+  s = apply(s, press('g', 1100, 1095));
+  assert.equal(s.phase, 'armed'); // waiting for slower phones
+  assert.equal(s.q.decideAt, 1100 + BUZZ_WINDOW_MS);
+  assert.equal(nextTimerAt(s), 1100 + BUZZ_WINDOW_MS);
+  s = apply(s, press('r', 1180, 1090));
+  assert.equal(s.phase, 'armed');
+  assert.equal(apply(s, { type: 'timeout', now: 1200 }), s); // too soon
+  s = apply(s, { type: 'timeout', now: 1100 + BUZZ_WINDOW_MS });
+  assert.equal(s.phase, 'answering');
+  assert.equal(s.q.buzzedTeam, 'r');
+  assert.equal(s.event.type, 'buzz');
+  assert.equal(s.deadline, 1250 + 15_000);
+  assert.deepEqual(s.q.buzzes.map((b) => [b.teamId, b.at]), [['r', 1090], ['g', 1095]]);
+  assert.equal(nextTimerAt(s), s.deadline);
+  // A buzz after the decision is shown as late, never before the winner.
+  s = apply(s, press('b', 1260, 1000, 250));
+  assert.deepEqual(s.q.buzzes.at(-1), { teamId: 'b', at: 1090 });
+});
+
+test('fair buzzing: when every team has buzzed, it decides at once', () => {
+  let s = fairArmed();
+  s = apply(s, press('g', 1100, 1080));
+  s = apply(s, press('r', 1110, 1090));
+  s = apply(s, press('b', 1120, 1070));
+  assert.equal(s.phase, 'answering');
+  assert.equal(s.q.buzzedTeam, 'b');
+});
+
+test('fair buzzing: a phone can only claim its own network delay', () => {
+  let s = fairArmed();
+  // Claims to have pressed an hour ago: counted as at most `slack` before arriving.
+  s = apply(s, press('g', 1400, 1400 - 3_600_000, 80));
+  assert.equal(s.event.type, 'early'); // that's before the buzzers were on: too early
+  s = apply(s, press('r', 1400, 1350, 80));
+  s = apply(s, press('b', 1420, 1200, 80)); // 220 ms back, only 80 allowed → 1340
+  assert.equal(s.q.buzzes.find((b) => b.teamId === 'b').at, 1340);
+  // A press in the future counts as the arrival time, and a huge slack is capped.
+  let t = fairArmed();
+  t = apply(t, press('g', 1500, 9999, 100));
+  assert.equal(t.q.buzzes[0].at, 1500);
+  t = apply(t, press('r', 1600, 1200, 10_000));
+  assert.equal(t.q.buzzes[1].at, 1600 - 250);
+});
+
+test('fair buzzing: just before the buzzers opened counts as the opening moment', () => {
+  let s = fairArmed(); // armed at 1000
+  s = apply(s, press('r', 1060, 960, 100)); // within the measuring margin
+  assert.equal(s.q.buzzes[0].at, 1000);
+  assert.notEqual(s.event.type, 'early');
+  s = apply(s, press('g', 1070, 850, 100)); // clearly before: too early, locked for 0.5 s from the press
+  assert.equal(s.event.type, 'early');
+  assert.equal(s.q.buzzes.length, 1);
+  assert.equal(s.q.early.g, 970 + 500);
+});
+
+test('fair buzzing: a phone without a clock measurement counts by arrival', () => {
+  let s = fairArmed();
+  s = apply(s, { type: 'buzz', teamId: 'g', now: 1100 });
+  s = apply(s, { type: 'buzz', teamId: 'r', now: 1120, at: 900 }); // no slack: not measured
+  s = apply(s, { type: 'timeout', now: 1100 + BUZZ_WINDOW_MS });
+  assert.equal(s.q.buzzedTeam, 'g');
+  assert.deepEqual(s.q.buzzes.map((b) => b.at), [1100, 1120]);
+});
+
+test('fair buzzing: the wait wins over a running-out buzz timer, and reveal or leaving clears it', () => {
+  let s = run(started({ fairBuzz: true, buzzSeconds: 1 }), { type: 'pick', c: 0, i: 0 }, { type: 'arm', now: 1000 });
+  s = apply(s, press('g', 1990, 1985));
+  s = apply(s, { type: 'timeout', now: 2000 }); // the buzz time is up, but g pressed in time
+  assert.equal(s.phase, 'armed');
+  s = apply(s, { type: 'timeout', now: 1990 + BUZZ_WINDOW_MS });
+  assert.equal(s.q.buzzedTeam, 'g');
+  // Wrong answer: the buzzers open again with a fresh wait.
+  s = apply(s, { type: 'wrong', now: 3000 });
+  assert.equal(s.phase, 'armed');
+  assert.equal(s.q.armedAt, 3000);
+  assert.equal(s.q.decideAt, null);
+  const waiting = apply(s, press('r', 3100, 3090));
+  const revealed = apply(waiting, { type: 'reveal' });
+  assert.equal(revealed.phase, 'revealed');
+  assert.equal(nextTimerAt(revealed), null);
+  const left = apply(waiting, { type: 'removeTeam', teamId: 'r' });
+  assert.equal(left.q.decideAt, null);
+  assert.equal(left.q.buzzes.length, 0);
+});
+
+test('fair buzzing: undo during the wait goes back to before the buzzers opened', () => {
+  let s = fairArmed();
+  s = apply(s, press('g', 1100, 1095));
+  s = apply(s, { type: 'undo' });
+  assert.equal(s.phase, 'reading');
+  assert.equal(nextTimerAt(s), null);
 });
 
 test('wrong answer penalties: half (default), full, none', () => {
@@ -580,4 +689,92 @@ test('music settings: on by default at 35%, own files only as sound file names f
   for (const bad of [{ musicVolume: 101 }, { musicVolume: -1 }, { musicFiles: { lobby: 'virus.exe' } }, { musicFiles: { dance: 'a.mp3' } }, { musicFiles: 'a.mp3' }]) {
     assert.throws(() => apply(s, { type: 'settings', settings: bad }), { code: 'bad-settings' }, JSON.stringify(bad));
   }
+});
+
+// ----- round 2 -----
+
+// The small set plus a round 2 board: 2 categories × 2 questions, worth double.
+const withRound2 = {
+  ...small,
+  round2: {
+    categories: [
+      { name: 'C', questions: [{ value: 200, question: 'c1', answer: 'C1' }, { value: 400, question: 'c2', answer: 'C2', audio: 'c2.mp3' }] },
+      { name: 'D', questions: [{ value: 200, question: 'd1', answer: 'D1' }, { value: 400, question: 'd2', answer: 'D2', image: 'd2.png' }] },
+    ],
+  },
+};
+
+test('a round 2 board is checked like the main one, and its problems say so', () => {
+  assert.deepEqual(validateSet(withRound2), []);
+  const bad = structuredClone(withRound2);
+  bad.round2.categories[1].questions[0].answer = '';
+  bad.round2.categories[0].name = ' ';
+  assert.deepEqual(validateSet(bad), [
+    { code: 'no-category-name', c: 0, r: 2 },
+    { code: 'no-answer', c: 1, i: 0, r: 2 },
+  ]);
+  assert.deepEqual(validateSet({ ...small, round2: { categories: [] } }), [{ code: 'no-categories', r: 2 }]);
+});
+
+test('round 2: after the first board comes an intro, the last team picks first, and the points are new', () => {
+  let s = run(started({}, withRound2), { type: 'adjust', teamId: 'b', delta: 50 });
+  s = playBoard(s); // Red answers everything: r 600, b 50, g 0
+  assert.equal(s.phase, 'round2');
+  assert.equal(s.round, 2);
+  assert.equal(s.picker, 'g');
+  assert.deepEqual(s.event, { seq: s.seq, type: 'round2', teamId: 'g' });
+  assert.deepEqual(s.used, [[false, false], [false, false]]);
+  assert.equal(phoneStatus(s, 'r'), 'round2');
+  // Every screen now sees round 2's board.
+  assert.deepEqual(hostView(s).set.categories.map((c) => c.name), ['C', 'D']);
+  assert.ok(hostView(s).set.round2);
+  assert.deepEqual(displayView(s).set.categories.map((c) => c.name), ['C', 'D']);
+  assert.equal(displayView(s).set.round2, undefined);
+  assert.equal(JSON.stringify(displayView(s)).includes('C1'), false); // no round 2 answers on the TV
+  // Undo goes back to the end of round 1; Space starts round 2.
+  assert.equal(apply(s, { type: 'undo' }).round, 1);
+  s = apply(s, { type: 'next', now: 0 });
+  assert.equal(s.phase, 'board');
+  const phone = phoneView(s, 'g');
+  assert.deepEqual(phone.board.map((c) => c.values), [[200, 400], [200, 400]]);
+  assert.equal(JSON.stringify(phone).includes('c1'), false);
+  s = run(s, { type: 'pick', c: 0, i: 1 });
+  assert.equal(s.q.value, 400);
+  assert.deepEqual(clipFor(s), { file: 'c2.mp3', start: 0 });
+  assert.equal(displayView(s).q.question, 'c2');
+  s = run(s, { type: 'arm', now: 0 }, { type: 'buzz', teamId: 'g', now: 1 }, { type: 'correct' });
+  assert.equal(score(s, 'g'), 400);
+  assert.equal(s.picker, 'g');
+  // Ending round 2 goes to the final.
+  s = run(s, { type: 'next', now: 2 }, { type: 'end' });
+  assert.equal(s.phase, 'finalWager');
+  // A new game starts in round 1 again.
+  s = apply(s, { type: 'restart' });
+  assert.equal(s.round, 1);
+  assert.deepEqual(hostView(s).set.categories.map((c) => c.name), ['A', 'B']);
+});
+
+test('round 2 is skipped when the setting is off or the quiz has none', () => {
+  assert.equal(playBoard(started({ round2: false }, withRound2)).phase, 'finalWager');
+  assert.equal(playBoard(started({}, small)).phase, 'finalWager');
+  assert.equal(apply(started({}, withRound2), { type: 'end' }).phase, 'round2'); // E ends round 1 early
+  assert.equal(apply(started({ round2: false, finalRound: false }, withRound2), { type: 'end' }).phase, 'over');
+});
+
+test('round 2 gets its own specials, and the jackpot pot carries over', () => {
+  const set = structuredClone(withRound2);
+  set.round2.categories[1].questions[0].special = 'double';
+  let s = started({ crazy: 'lots' }, set);
+  s = { ...s, pot: 300 };
+  s = apply(s, { type: 'end' });
+  assert.equal(s.specials['1-0'], 'double'); // placed by hand on round 2's board
+  for (const key of Object.keys(s.specials)) {
+    const [c, i] = key.split('-').map(Number);
+    assert.ok(c < 2 && i < 2, key);
+  }
+  assert.equal(s.pot, 300);
+  // The Daily Double's top bet uses round 2's values.
+  s = run(s, { type: 'next', now: 0 }, { type: 'pick', c: 1, i: 0 });
+  assert.equal(s.phase, 'special');
+  assert.equal(phoneView(s, s.picker).betting.max, 400);
 });

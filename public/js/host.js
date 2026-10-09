@@ -20,6 +20,7 @@ let tvs = 0; // separate TV screens (not the one shown inside this page)
 let peek = false; // single-screen mode: showing the host view (with the answers) instead of the TV view
 let soundSeq = null;
 let resume = null; // a saved game the host can continue
+let latency = {}; // fair buzzing: teamId → the phone's measured delay (ms)
 
 const net = connect({
   role: 'host',
@@ -33,10 +34,14 @@ const net = connect({
       displays = msg.displays;
       tvs = msg.tvs ?? msg.displays;
       resume = msg.resume ?? null;
+      latency = msg.latency ?? {};
       const ev = view.event;
       if (ev && soundSeq !== null && ev.seq !== soundSeq && displays === 0) playEvent(view, ev, COLORS);
       soundSeq = ev?.seq ?? 0;
       render();
+    } else if (msg.type === 'latency') {
+      latency = msg.latency;
+      if (view?.phase === 'lobby') renderTeams();
     } else if (msg.type === 'sound') {
       playSound(view, msg, COLORS);
     } else if (msg.type === 'error') {
@@ -92,11 +97,18 @@ function renderTeams() {
   $('#teams').replaceChildren(
     ...teams.map((team) => {
       const on = connected.has(team.id);
+      const ms = view.settings.fairBuzz && on ? latency[team.id] : undefined;
       return h(
         'li',
         { class: 'plate', style: teamStyle(team) },
         h('span', { class: 'name' }, team.name),
-        h('span', { class: 'conn' }, h('span', { class: `dot${on ? ' on' : ''}` }), on ? t('online') : t('offline')),
+        h(
+          'span',
+          { class: 'conn' },
+          h('span', { class: `dot${on ? ' on' : ''}` }),
+          on ? t('online') : t('offline'),
+          ms !== undefined ? h('span', { class: 'ping', title: t('pingHint') }, t('pingMs', { ms })) : null,
+        ),
         h(
           'button',
           {
@@ -199,9 +211,13 @@ function renderCrazyKinds() {
   for (const input of box.querySelectorAll('input[name=crazyKind]')) input.checked = !excluded.includes(input.value);
   $('#crazy-none').hidden = excluded.length < KINDS.length;
   // Specials placed by hand in the quiz: only offered when the quiz has some.
-  const own = Object.keys(ownSpecials(view.set)).length;
+  const own = Object.keys(ownSpecials(view.set.categories)).length + Object.keys(ownSpecials(view.set.round2?.categories)).length;
   $('#quiz-specials').hidden = own === 0;
   $('#quiz-specials-label').textContent = t('quizSpecials', { n: own });
+  // Round 2: only offered when the quiz has one.
+  const r2 = view.set.round2?.categories ?? [];
+  $('#round2-setting').hidden = r2.length === 0;
+  $('#round2-label').textContent = t('round2Setting', { n: r2.reduce((n, c) => n + c.questions.length, 0) });
 }
 
 $('#settings').addEventListener('change', (e) => {
@@ -254,7 +270,7 @@ function renderResume() {
   $('#resume').hidden = !resume;
   if (!resume) return;
   const time = new Date(resume.savedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  $('#resume-text').textContent = t('resumeText', { title: resume.title, time, played: resume.played, total: resume.total });
+  $('#resume-text').textContent = t(resume.round === 2 ? 'resumeTextRound2' : 'resumeText', { title: resume.title, time, played: resume.played, total: resume.total });
   $('#resume-teams').replaceChildren(
     ...resume.teams.map((tm) => h('li', { class: 'plate', style: teamStyle(tm) }, h('span', {}, tm.name), h('b', {}, String(tm.score)))),
   );
@@ -282,6 +298,8 @@ function controls() {
     add('n', t('wrongBtn'), { type: 'wrong' }, 'btn-bad');
   } else if (p === 'revealed') {
     add(' ', t('nextBtn'), { type: 'next' }, 'btn-primary');
+  } else if (p === 'round2') {
+    add(' ', t('startRound2'), { type: 'next' }, 'btn-primary');
   } else if (p === 'board') {
     add('e', t('endBoardBtn'), () => confirm(t('confirmEnd')) && cmd({ type: 'end' }));
   } else if (p === 'finalWager') {
@@ -413,7 +431,7 @@ function renderBoard() {
   return h(
     'div',
     {},
-    h('p', { class: 'board-hint' }, boardHint()),
+    h('p', { class: 'board-hint' }, view.round === 2 ? h('span', { class: 'round-tag' }, t('round2Title')) : null, boardHint()),
     h(
       'div',
       { class: 'host-board' },
@@ -475,7 +493,7 @@ function renderSpecialHost() {
 function doubleBetForm() {
   const q = view.q;
   const picker = view.teams.find((tm) => tm.id === view.picker);
-  const max = maxBet(view.set, picker?.score ?? 0);
+  const max = maxBet(view.set.categories, picker?.score ?? 0);
   const input = h('input', { id: 'double-bet', type: 'number', min: 0, max, step: 1, value: q.bet ?? '', 'aria-label': t('doubleBet') });
   return h(
     'form',
@@ -530,7 +548,13 @@ function buzzOrder() {
   const b = view.q.buzzes;
   if (view.phase !== 'answering' || b.length < 2) return null;
   const first = b[0].at;
-  return h('p', { class: 'buzz-order' }, `${t('alsoBuzzed')} `, b.slice(1).map((x) => t('lateBy', { name: teamName(x.teamId), ms: x.at - first })).join(', '));
+  return h(
+    'p',
+    { class: 'buzz-order' },
+    `${t('alsoBuzzed')} `,
+    b.slice(1).map((x) => t('lateBy', { name: teamName(x.teamId), ms: Math.round(x.at - first) })).join(', '),
+    view.settings.fairBuzz ? h('small', {}, ` ${t('buzzCorrected')}`) : null,
+  );
 }
 
 const img = (name, cls, label) =>
@@ -617,6 +641,18 @@ function renderFinal() {
   return h('div', { class: 'host-q host-final' }, head, h('ul', { class: 'final-rows' }, rows));
 }
 
+// Round 2's intro: who picks first, and the scores so far.
+function renderRound2Host() {
+  const top = Math.max(0, ...view.set.categories.flatMap((cat) => cat.questions.map((q) => q.value)));
+  return h(
+    'div',
+    { class: 'host-over' },
+    h('h2', {}, t('round2Title')),
+    h('p', { class: 'board-hint' }, `${t('round2PicksFirst', { name: teamName(view.picker) })}. ${t('round2UpTo', { n: top })}.`),
+    h('ol', { class: 'rank-list' }, ranking(view.teams).map((tm) => h('li', { class: 'plate', style: teamStyle(tm) }, h('span', {}, tm.name), h('span', {}, String(tm.score))))),
+  );
+}
+
 function renderOver() {
   const ranked = ranking(view.teams);
   const tie = ranked.length > 1 && ranked[0].score === ranked[1].score;
@@ -697,6 +733,7 @@ function renderGame() {
   const p = view.phase;
   let main;
   if (p === 'board') main = renderBoard();
+  else if (p === 'round2') main = renderRound2Host();
   else if (p === 'special') main = renderSpecialHost();
   else if (view.q) main = renderQuestion();
   else if (p === 'over') main = renderOver();
@@ -729,7 +766,7 @@ function render() {
   }
   // With no TV screen open, this laptop plays the question's sound clip.
   if (displays === 0) {
-    syncClip(view, view.q ? `q${view.q.c}-${view.q.i}` : 'final');
+    syncClip(view, view.q ? `q${view.round}-${view.q.c}-${view.q.i}` : 'final');
     syncMusic(view, net.now());
   } else {
     stopClip();

@@ -9,7 +9,9 @@ A Jeopardy-style quiz for teams in the same room. A laptop runs the game, a TV s
 - Game-show sounds, a different buzz note for each team, and timers.
 - Background music, Kahoot style: a lobby tune, thinking music while the buzzers are on, suspense in the final, and party music at the end. You can swap in your own music files.
 - Pictures and sound clips in questions ("Which song is this?"). A picture can start as big blocks and slowly become clear.
+- An optional round 2: a second board with new questions and double points, played before the final. The team with the fewest points picks first.
 - A final round: teams bet, type their answers on their phones, and you judge each one.
+- Fairer buzzing (optional): the team that pressed first wins, even if its phone has slower Wi-Fi.
 - A question editor, English and Norwegian, and an autosave that survives a crash.
 - **Crazy mode (Kaosmodus):** hidden special tiles, revealed on the TV with a spinning reel. They include bombs, triple points, a hot seat, a rescue for the team in last place, a three-question turbo, a jackpot, a freeze and a Daily Double. You can also place specials yourself in the editor.
 
@@ -57,12 +59,13 @@ Download the zip for your computer from the [latest release](https://github.com/
 ## Before the night
 
 1. Start ProQuiz. Your browser opens the **host screen**.
-2. Click **Edit questions** to make your quiz. Click a tile to write its question and answer, and add a picture or sound clip if you like. The editor saves by itself, and a list under the board tells you what's missing. Two sample quizzes are included, in English and Norwegian.
+2. Click **Edit questions** to make your quiz. Click a tile to write its question and answer, and add a picture or sound clip if you like. The editor saves by itself, and a list under the board tells you what's missing. Two sample quizzes are included, in English and Norwegian, each with a round 2.
+   - **Round 2:** tick **This quiz has a round 2** under the board. A second board appears, the same size, with double points (you can change them). Write its questions like the first board's.
 3. Try it once with two phones, so you know how it feels.
 
-**Make a quiz with AI:** in the editor, click **Make questions with AI**. Type a few topics (one per line, each becomes a category), add example questions if you like, and choose the difficulty (kids 5–9, easy, medium, hard or expert), the board size, the final question and the language. Click **Copy the request**, paste it into Claude or ChatGPT, then copy the AI's whole answer back into the box and click **Fill the board**. Your new quiz opens in the editor. **Check every answer: AI can get facts wrong.** ProQuiz itself never goes on the internet.
+**Make a quiz with AI:** in the editor, click **Make questions with AI**. Type a few topics (one per line, each becomes a category), add example questions if you like, and choose the difficulty (kids 5–9, easy, medium, hard or expert), the board size, the final question, a round 2 (with its own topics if you like) and the language. Click **Copy the request**, paste it into Claude or ChatGPT, then copy the AI's whole answer back into the box and click **Fill the board**. Your new quiz opens in the editor. **Check every answer: AI can get facts wrong.** ProQuiz itself never goes on the internet.
 
-**Fill the empty spots with AI:** started a quiz but ran out of ideas? Open it in the editor and click **Fill empty spots with AI** under the board. ProQuiz shows what is missing (empty questions, questions without an answer, answers without a question, category names, the final). The request includes everything you have already written, so the AI matches its topics, difficulty and language and avoids repeating your answers. You can choose a difficulty yourself, and give topics for categories that are completely empty. Paste the answer back and only the empty spots are filled: nothing you wrote changes, and the new tiles get a dashed edge so you can check them. Picture and sound questions without an answer are left for you, because the AI can't see them.
+**Fill the empty spots with AI:** started a quiz but ran out of ideas? Open it in the editor and click **Fill empty spots with AI** under the board. ProQuiz shows what is missing (empty questions, questions without an answer, answers without a question, category names, the final), on both boards if the quiz has a round 2. The request includes everything you have already written, so the AI matches its topics, difficulty and language and avoids repeating your answers. You can choose a difficulty yourself, and give topics for categories that are completely empty. Paste the answer back and only the empty spots are filled: nothing you wrote changes, and the new tiles get a dashed edge so you can check them. Picture and sound questions without an answer are left for you, because the AI can't see them.
 
 **Ready-made quizzes to import** (download the file, then **Import** in the editor):
 - [Barnequiz 2 (5–9 år)](examples/barnequiz-2.proquiz.json): a Norwegian quiz for children aged 5 to 9, about animals, food, fairy tales, numbers, Norway and the world, and nature and space, with six pictures.
@@ -75,8 +78,10 @@ Download the zip for your computer from the [latest release](https://github.com/
    - **Only one screen** (just the laptop, or the laptop mirrored to the TV)? Skip "Open TV screen". Once the game starts, the laptop shows the TV view itself, with the controls underneath: click the tiles on the board, and the answers stay hidden until you reveal them. Press **H** to peek at the host view (with the answer and score changes), and **H** again to go back. **F** is full screen.
 4. **Teams join:** they scan the QR code on the TV, type a team name and pick a colour. They can press **Try your buzzer** to hear their tone.
 5. **Settings:** in the lobby, choose the quiz, the language, what a wrong answer costs, the timers, and the music: on or off, the volume, and optionally your own music file for each moment (lobby, between questions, thinking, final, after the game).
-6. **Picking on the phone:** with **Teams pick the next question on their phone** ticked (it is by default), the team whose turn it is chooses a category and then the points on its phone, and the question opens on the TV at once. You can always click a tile on the laptop instead, for example if their phone has run out of battery.
-7. **Start game.**
+6. **Round 2:** if the quiz has a round 2, **Play round 2** is ticked in the lobby. Untick it to skip it tonight.
+7. **Fairer buzzing:** tick it if close calls matter. Normally the laptop goes by whose buzz *arrives* first, so a phone with weak Wi-Fi can lose by a few hundredths of a second. With this on, ProQuiz measures how slow each phone's Wi-Fi is (you'll see it in milliseconds next to each team) and goes by who *pressed* first. The winner shows a tiny moment later (0.15 s), which most people won't notice.
+8. **Picking on the phone:** with **Teams pick the next question on their phone** ticked (it is by default), the team whose turn it is chooses a category and then the points on its phone, and the question opens on the TV at once. You can always click a tile on the laptop instead, for example if their phone has run out of battery.
+9. **Start game.**
 
 ### Crazy mode (Kaosmodus)
 
@@ -111,10 +116,10 @@ When a team picks one, the TV spins a reel and lands on the special. Press **Spa
 | **M** | Sound effects on or off |
 | **B** | Background music on or off |
 | **H** | Without a separate TV screen: switch between the TV view and the host view |
-| **E** | End the board early and go to the final round |
+| **E** | End the board early and go to round 2 (if it's on) or the final round |
 | **?** | Show all the keys |
 
-You also have buttons to **Change score** and **Let them pick** for each team. In the final round, the teams bet on their phones, then type their answers. You mark each one **Correct** or **Wrong**, and it flips up on the TV.
+You also have buttons to **Change score** and **Let them pick** for each team. When the first board is done (or you press **E**), round 2 starts with a big intro on the TV: the team with the fewest points picks first, and **Space** opens the new board. Crazy mode gets new hidden specials on it, and an unwon jackpot carries over. In the final round, the teams bet on their phones, then type their answers. You mark each one **Correct** or **Wrong**, and it flips up on the TV.
 
 ## If something goes wrong
 

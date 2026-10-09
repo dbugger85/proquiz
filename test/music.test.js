@@ -8,6 +8,7 @@ const view = (phase, extra = {}) => ({ phase, settings: { music: true }, clip: n
 test('the music follows the game', () => {
   assert.equal(moodFor(view('lobby')), 'lobby');
   assert.equal(moodFor(view('board')), 'board');
+  assert.equal(moodFor(view('round2')), 'board'); // round 2's intro keeps the board music going
   assert.equal(moodFor(view('special')), 'silent'); // the Kaosmodus reel
   assert.equal(moodFor(view('reading')), 'thinking');
   assert.equal(moodFor(view('armed', { deadline: 10_000 }), 1000), 'thinking');

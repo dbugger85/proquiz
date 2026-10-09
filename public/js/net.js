@@ -17,6 +17,8 @@ export function connect({ role, teamId = () => null, onMessage, onStatus = () =>
     };
     ws.onmessage = (e) => {
       const msg = JSON.parse(e.data);
+      // Fair buzzing: the server measures our clock. Answer at once with a stopwatch that never jumps.
+      if (msg.type === 'clock') return ws.send(JSON.stringify({ type: 'clock', id: msg.id, t: performance.now() }));
       if (msg.serverNow) clockOffset = msg.serverNow - Date.now();
       onMessage(msg);
     };
@@ -32,6 +34,8 @@ export function connect({ role, teamId = () => null, onMessage, onStatus = () =>
     if (!document.hidden && ws && ws.readyState === WebSocket.CLOSED) {
       delay = 500;
       open();
+    } else if (!document.hidden && ws?.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'resync' })); // the stopwatch may have paused while the page was hidden
     }
   });
 
@@ -42,6 +46,8 @@ export function connect({ role, teamId = () => null, onMessage, onStatus = () =>
       ws.send(JSON.stringify(msg));
       return true;
     },
+    // Our stopwatch, sent with a buzz so the server can tell when the button was really pressed.
+    stamp: () => performance.now(),
     // Server-clock "now", so a deadline from the server counts down correctly here.
     now: () => Date.now() + clockOffset,
   };

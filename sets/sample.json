@@ -156,6 +156,160 @@
       ]
     }
   ],
+  "round2": {
+    "categories": [
+      {
+        "name": "Geography",
+        "questions": [
+          {
+            "value": 200,
+            "question": "What is the largest ocean on Earth?",
+            "answer": "The Pacific Ocean"
+          },
+          {
+            "value": 400,
+            "question": "What is the smallest country in the world?",
+            "answer": "Vatican City"
+          },
+          {
+            "value": 600,
+            "question": "Which river flows through Paris?",
+            "answer": "The Seine"
+          },
+          {
+            "value": 800,
+            "question": "Which mountain range is seen as the border between Europe and Asia in Russia?",
+            "answer": "The Ural Mountains"
+          },
+          {
+            "value": 1000,
+            "question": "In which country is the city of Timbuktu?",
+            "answer": "Mali"
+          }
+        ]
+      },
+      {
+        "name": "TV Series",
+        "questions": [
+          {
+            "value": 200,
+            "question": "In which town do the Simpsons live?",
+            "answer": "Springfield"
+          },
+          {
+            "value": 400,
+            "question": "Which series is set in the land of Westeros?",
+            "answer": "Game of Thrones"
+          },
+          {
+            "value": 600,
+            "question": "What is the name of the coffee shop in Friends?",
+            "answer": "Central Perk"
+          },
+          {
+            "value": 800,
+            "question": "In Breaking Bad, which subject does Walter White teach?",
+            "answer": "Chemistry"
+          },
+          {
+            "value": 1000,
+            "question": "Which British series follows the Shelby family in Birmingham?",
+            "answer": "Peaky Blinders"
+          }
+        ]
+      },
+      {
+        "name": "The Human Body",
+        "questions": [
+          {
+            "value": 200,
+            "question": "What is the largest organ of the human body?",
+            "answer": "The skin"
+          },
+          {
+            "value": 400,
+            "question": "How many chambers does the human heart have?",
+            "answer": "Four"
+          },
+          {
+            "value": 600,
+            "question": "What is the hardest substance in the human body?",
+            "answer": "Tooth enamel"
+          },
+          {
+            "value": 800,
+            "question": "In which part of the body is the smallest bone?",
+            "answer": "The ear (the stirrup)"
+          },
+          {
+            "value": 1000,
+            "question": "Which blood type is known as the universal donor?",
+            "answer": "O negative"
+          }
+        ]
+      },
+      {
+        "name": "Pop & Rock",
+        "questions": [
+          {
+            "value": 200,
+            "question": "Which band were John, Paul, George and Ringo in?",
+            "answer": "The Beatles"
+          },
+          {
+            "value": 400,
+            "question": "Who sang “Purple Rain”?",
+            "answer": "Prince"
+          },
+          {
+            "value": 600,
+            "question": "Which band had Freddie Mercury as its singer?",
+            "answer": "Queen"
+          },
+          {
+            "value": 800,
+            "question": "Which Swedish band won Eurovision in 1974 with “Waterloo”?",
+            "answer": "ABBA"
+          },
+          {
+            "value": 1000,
+            "question": "What was Elton John’s first name at birth?",
+            "answer": "Reginald"
+          }
+        ]
+      },
+      {
+        "name": "Sports Mix",
+        "questions": [
+          {
+            "value": 200,
+            "question": "How many rings are on the Olympic flag?",
+            "answer": "Five"
+          },
+          {
+            "value": 400,
+            "question": "In which sport can you score a strike or a spare?",
+            "answer": "Bowling"
+          },
+          {
+            "value": 600,
+            "question": "Which country has won the most football World Cups?",
+            "answer": "Brazil (5)"
+          },
+          {
+            "value": 800,
+            "question": "In which city were the first modern Olympic Games held, in 1896?",
+            "answer": "Athens"
+          },
+          {
+            "value": 1000,
+            "question": "Which Norwegian was the Premier League’s top scorer in 2022–23?",
+            "answer": "Erling Haaland"
+          }
+        ]
+      }
+    ]
+  },
   "final": {
     "category": "Norway",
     "question": "What is the longest fjord in Norway?",

@@ -257,6 +257,15 @@ test('editor API: create, save, list, upload a file, export and import, choose i
   assert.equal(back.categories[0].questions[0].audioStart, 3);
   assert.equal(back.categories[0].questions[2].unveil, 12);
   assert.equal(back.categories[1].questions[0].unveil, undefined);
+
+  // A round 2 board is kept, with its own pictures listed for export, and its problems are marked as round 2.
+  const withRound2 = { ...set, round2: { categories: [{ name: 'Extra', questions: [{ value: 200, question: 'q', answer: '', image: 'flag.svg', hint: 'x' }] }] } };
+  saved = await call('PUT', `/api/sets/${id}`, { set: withRound2 });
+  assert.deepEqual(saved.data.problems.at(-1), { code: 'no-answer', c: 0, i: 0, r: 2 });
+  assert.deepEqual((await call('GET', `/api/sets/${id}`)).data.set.round2, { categories: [{ name: 'Extra', questions: [{ value: 200, question: 'q', answer: '', image: 'flag.svg' }] }] });
+  const { round2, ...without } = set;
+  saved = await call('PUT', `/api/sets/${id}`, { set: without });
+  assert.equal((await call('GET', `/api/sets/${id}`)).data.set.round2, undefined);
   list = (await call('GET', '/api/sets')).data;
   assert.equal(list.find((x) => x.id === id).problems, 1);
 

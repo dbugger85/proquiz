@@ -358,6 +358,17 @@ export const sounds = {
     }
     noiseHit('white', { filter: 'highpass', freq: [6000], levels: [[1.4, 0.1], [2.2, 0.0001]], wet: 0.5 });
   },
+  // Round 2: a rising whoosh into a bright, climbing brass fanfare, one step up from the first board.
+  round2() {
+    whoosh({ dur: 0.6, gain: 0.5, from: 300, to: 4000, wet: 0.2 });
+    thump(110, 55, { at: 0.55, dur: 0.5, gain: 0.55, wet: 0.2 });
+    [[67, 0.55], [71, 0.7], [74, 0.85], [79, 1.0]].forEach(([m, at], i) => {
+      const dur = i === 3 ? 1.2 : 0.18;
+      for (const x of [m, m - 12]) stack(hz(x), { at, dur, gain: 0.16, filter: [600, 3200, 1200], drive: 1.5, wet: 0.3 });
+    });
+    bell(hz(91), { at: 1.0, dur: 1.6, gain: 0.16, ratio: 3.5, index: 1.2 });
+    noiseHit('white', { at: 1.0, filter: 'highpass', freq: [7000], levels: [[0.05, 0.12], [1.2, 0.0001]], wet: 0.5 });
+  },
   // Kaosmodus reveal: the reel ticks, slowing down over ~1.9 s (as long as the TV's reel animation),
   // then the special's own sting as it lands.
   mystery(kind) {
@@ -532,6 +543,9 @@ export function playEvent(view, ev, colors) {
       break;
     case 'finalWager':
       sounds.final();
+      break;
+    case 'round2':
+      sounds.round2();
       break;
     case 'finalQuestion':
       sounds.armed();

@@ -249,3 +249,75 @@ test('fill: an answer with nothing usable is refused, and duplicates are listed'
   assert.deepEqual(made.duplicates, ['En ku']);
   assert.ok(STRINGS.en['ai-nothing-filled'] && STRINGS.no['ai-nothing-filled']);
 });
+
+// ----- round 2 -----
+
+test('round 2: the request asks for a second board with double points and its own topics', () => {
+  const text = buildRequest({ categories: 3, rows: 3, round2: true, round2Topics: 'Music\nFilm' });
+  assert.match(text, /ROUND 2/);
+  assert.match(text, /exactly 3 new categories with exactly 3 questions each/);
+  assert.match(text, /200, 400, 600/);
+  assert.match(text, /"Music", "Film"\. Then add 1 more of your own/);
+  assert.match(text, /"round2": \{/);
+  assert.ok(text.indexOf('"round2"') < text.indexOf('"final"')); // the example is in playing order
+  assert.ok(!buildRequest({}).includes('round2'));
+});
+
+test('round 2: a reply with a round 2 board becomes a quiz with one', () => {
+  const data = quiz({ cats: 3, rows: 3 });
+  data.round2 = { categories: quiz({ cats: 3, rows: 3 }).categories.map((cat, c) => ({ ...cat, name: `Round 2 topic ${c}` })) };
+  for (const cat of data.round2.categories) for (const q of cat.questions) (q.answer += ' (2)'), delete q.value;
+  const { set, problems, duplicates } = parseReply(JSON.stringify(data));
+  assert.deepEqual(problems, []);
+  assert.deepEqual(duplicates, []);
+  assert.equal(set.round2.categories.length, 3);
+  assert.deepEqual(set.round2.categories[0].questions.map((q) => q.value), [200, 400, 600]); // missing values start at double
+  assert.equal(parseReply(JSON.stringify(data), { round2: false }).set.round2, undefined);
+  // The same answer on both boards is reported.
+  data.round2.categories[0].questions[0].answer = 'Answer 0-0';
+  assert.deepEqual(parseReply(JSON.stringify(data)).duplicates, ['Answer 0-0']);
+});
+
+test('round 2: filling finds and fills the gaps on both boards, without touching the rest', () => {
+  const set = {
+    title: 'Quiz',
+    categories: [{ name: 'Animals', questions: [{ value: 100, question: 'Which animal says moo?', answer: 'A cow' }, { value: 200, question: '', answer: '' }] }],
+    round2: {
+      categories: [
+        { name: 'Space', questions: [{ value: 200, question: 'Which planet is red?', answer: 'Mars' }, { value: 400, question: 'Which planet has the most moons?', answer: '' }] },
+        { name: '', questions: [{ value: 200, question: '', answer: '' }, { value: 400, question: '', answer: '' }] },
+      ],
+    },
+  };
+  const gaps = gapsOf(set);
+  assert.deepEqual(gaps.tiles, [
+    { c: 0, i: 1, need: 'both' },
+    { c: 0, i: 1, need: 'answer', r: 2 },
+    { c: 1, i: 0, need: 'both', r: 2 },
+    { c: 1, i: 1, need: 'both', r: 2 },
+  ]);
+  assert.deepEqual(gaps.names2, [1]);
+  assert.equal(gaps.count, 5);
+  const text = buildFillRequest(set, { topics: 'Rivers' });
+  assert.match(text, /"round2": \{/);
+  assert.match(text, /two boards/);
+  assert.match(text, /1 category is completely empty. Use these topics for them, in order: "Rivers"/);
+  const reply = {
+    title: 'Quiz',
+    categories: [{ name: 'Animals', questions: [{ value: 100, question: 'Changed', answer: 'Changed' }, { value: 200, question: 'How many legs has a spider?', answer: 'Eight' }] }],
+    round2: {
+      categories: [
+        { name: 'Space', questions: [{ value: 200, question: 'Changed', answer: 'Changed' }, { value: 400, question: 'Changed', answer: 'Saturn' }] },
+        { name: 'Rivers', questions: [{ value: 200, question: 'Which river flows through Cairo?', answer: 'The Nile' }, { value: 400, question: 'Which river flows through London?', answer: 'The Thames' }] },
+      ],
+    },
+  };
+  const made = parseFill(JSON.stringify(reply), set);
+  assert.deepEqual(made.filled, ['0-1', '2:0-1', '2:1-0', '2:1-1']);
+  assert.equal(made.names, 1);
+  assert.equal(made.left, 0);
+  assert.equal(made.set.categories[0].questions[0].question, 'Which animal says moo?');
+  assert.deepEqual(made.set.round2.categories[0].questions[1], { value: 400, question: 'Which planet has the most moons?', answer: 'Saturn' });
+  assert.equal(made.set.round2.categories[1].name, 'Rivers');
+  assert.deepEqual(validateSet(made.set), []);
+});

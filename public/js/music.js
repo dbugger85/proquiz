@@ -17,6 +17,7 @@ export function moodFor(view, now = 0) {
     case 'lobby':
       return 'lobby';
     case 'board':
+    case 'round2':
       return 'board';
     case 'reading':
       return 'thinking';
