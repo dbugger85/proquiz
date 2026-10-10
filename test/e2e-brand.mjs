@@ -23,6 +23,17 @@ const base = `http://127.0.0.1:${srv.info.port}`;
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM || '/usr/bin/chromium' });
 const errors = [];
 
+// Only the part under the top bar scrolls (the lobby, the game, the editor's quiz): scroll that, to a position or 'end'.
+const scrollArea = (page, y) =>
+  page.evaluate((y) => {
+    const el =
+      [...document.querySelectorAll('.host > .lobby, .host > #game, .ed-main, .ed-layout')].find(
+        (e) => !e.hidden && e.scrollHeight > e.clientHeight + 1 && /auto|scroll/.test(getComputedStyle(e).overflowY),
+      ) ?? document.scrollingElement;
+    el.scrollTop = y === 'end' ? el.scrollHeight : y;
+    return el.scrollTop;
+  }, y);
+
 async function open(path, viewport, label) {
   const ctx = await browser.newContext({ viewport, deviceScaleFactor: viewport.width < 500 ? 2 : 1 });
   const page = await ctx.newPage();
@@ -145,7 +156,7 @@ try {
   }
   await tv.waitForFunction(() => document.querySelectorAll('#teams li').length === 3);
   await tv.waitForTimeout(600);
-  await host.evaluate(() => scrollTo(0, 0));
+  await scrollArea(host, 0);
   await shot(host, 'brand-host-lobby');
   await glassPairs([[tv, 'tv-lobby']]);
 

@@ -78,6 +78,7 @@ try {
   await host.waitForSelector('#quiz-specials[hidden]', { state: 'attached' });
 
   // The lobby setting.
+  await host.click('#group-crazy summary'); // the settings sections start folded
   await host.click('label:has(> input[name=crazy][value=lots])');
   await waitFor(() => state().settings.crazy === 'lots');
   // Leave the jackpot out.

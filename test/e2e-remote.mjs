@@ -33,6 +33,17 @@ const base = `http://127.0.0.1:${srv.info.port}`;
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM || '/usr/bin/chromium' });
 const errors = [];
 
+// Only the part under the top bar scrolls (the lobby, the game, the editor's quiz): scroll that, to a position or 'end'.
+const scrollArea = (page, y) =>
+  page.evaluate((y) => {
+    const el =
+      [...document.querySelectorAll('.host > .lobby, .host > #game, .ed-main, .ed-layout')].find(
+        (e) => !e.hidden && e.scrollHeight > e.clientHeight + 1 && /auto|scroll/.test(getComputedStyle(e).overflowY),
+      ) ?? document.scrollingElement;
+    el.scrollTop = y === 'end' ? el.scrollHeight : y;
+    return el.scrollTop;
+  }, y);
+
 async function open(url, viewport, label) {
   const ctx = await browser.newContext({ viewport, deviceScaleFactor: viewport.width < 500 ? 2 : 1 });
   const page = await ctx.newPage();
@@ -86,7 +97,7 @@ try {
   await tv.waitForSelector('#tv-wait:not([hidden])');
   assert.match(await tv.textContent('#tv-wait'), /isn’t working/);
   assert.equal(await tv.textContent('#qr-label'), 'On this Wi-Fi, for now');
-  await host.evaluate(() => window.scrollTo(0, 0));
+  await scrollArea(host, 0);
   await host.waitForTimeout(300); // let the bar's blur catch up before the picture
   await shot(host, 'remote-host-missing');
   await host.evaluate(() => document.querySelector('#group-remote').scrollIntoView({ block: 'start' }));
@@ -105,7 +116,7 @@ try {
   // Starting: the TV and the laptop say so where the code will be.
   await tv.waitForFunction(() => /Getting the internet address ready/.test(document.querySelector('#tv-wait').textContent));
   await host.waitForSelector('.join-wait[data-status=starting]');
-  await host.evaluate(() => window.scrollTo(0, 0));
+  await scrollArea(host, 0);
   await host.waitForTimeout(300); // let the bar's blur catch up before the picture
   await shot(host, 'remote-host-starting');
   await shot(tv, 'remote-tv-starting');
@@ -134,7 +145,7 @@ try {
   await tv.waitForSelector('#remote-pin:not([hidden])');
   assert.equal(await tv.textContent('#remote-pin'), `PIN ${pin}`);
   assert.equal(await host.textContent('#remote-pin'), `PIN: ${pin}`);
-  await host.evaluate(() => window.scrollTo(0, 0));
+  await scrollArea(host, 0);
   await host.waitForTimeout(300); // let the bar's blur catch up before the picture
   await shot(host, 'remote-host-on');
   await host.evaluate(() => document.querySelector('#group-remote').scrollIntoView({ block: 'start' }));

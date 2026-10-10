@@ -57,10 +57,22 @@ const noBrowserDialogs = (page, label) =>
     errors.push(`${label}: a browser ${d.type()} appeared: ${d.message()}`);
     d.dismiss().catch(() => {});
   });
-// The top bar is still at the top of the window after scrolling down.
-async function barStaysOnTop(page) {
+// Only the part under the top bar scrolls (the lobby, the game, the editor's quiz): scroll that, to a position or 'end'.
+const scrollArea = (page, y) =>
+  page.evaluate((y) => {
+    const el =
+      [...document.querySelectorAll('.host > .lobby, .host > #game, .ed-main, .ed-layout')].find(
+        (e) => !e.hidden && e.scrollHeight > e.clientHeight + 1 && /auto|scroll/.test(getComputedStyle(e).overflowY),
+      ) ?? document.scrollingElement;
+    el.scrollTop = y === 'end' ? el.scrollHeight : y;
+    return el.scrollTop;
+  }, y);
+// After scrolling down: the bar is still at the top, the window itself didn't scroll (the scroll bar is only
+// beside the part under the bar), and that part did.
+async function barStaysOnTop(page, scrolled) {
   const { y, top } = await page.evaluate(() => ({ y: window.scrollY, top: document.querySelector('.host-bar').getBoundingClientRect().top }));
-  assert.ok(y > 100, `the page should have scrolled (scrollY ${y})`);
+  assert.ok(scrolled > 100, `the part under the bar should have scrolled (${scrolled})`);
+  assert.equal(y, 0, 'the window itself does not scroll');
   assert.equal(top, 0, 'the top bar stays at the top');
 }
 
@@ -188,14 +200,14 @@ try {
   // The glass look is on by default, and the Look section's tick turns it off (and on) for every screen at once.
   await host.waitForSelector('#look-status:has-text("Glass on")');
   for (const p of [host, tv, phones[0]]) await p.waitForSelector('body.glass');
-  await host.evaluate(() => window.scrollTo(0, 0));
+  await scrollArea(host, 0);
   await host.waitForTimeout(300); // headless Chromium repaints the blurred bar a moment after a scroll
   await shot(host, 'glass-on-host-lobby');
   await host.uncheck('input[name=glass]');
   await waitFor(() => srv.hub.getState().settings.glass === false);
   for (const p of [host, tv, phones[0]]) await p.waitForSelector('body:not(.glass)');
   await host.waitForSelector('#look-status:has-text("Glass off")');
-  await host.evaluate(() => window.scrollTo(0, 0));
+  await scrollArea(host, 0);
   await host.waitForTimeout(300);
   await shot(host, 'glass-off-host-lobby');
   await shot(tv, 'glass-off-tv-lobby');
@@ -226,11 +238,10 @@ try {
 
   noBrowserDialogs(host, 'host');
   // The top bar stays on screen while the lobby's settings scroll under it.
-  await host.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
-  await barStaysOnTop(host);
+  await barStaysOnTop(host, await scrollArea(host, 'end'));
   await host.waitForTimeout(300); // headless Chromium repaints the blurred bar a moment after a scroll
   await shot(host, 'host-sticky-lobby');
-  await host.evaluate(() => window.scrollTo(0, 0));
+  await scrollArea(host, 0);
 
   // Removing a team asks first, in ProQuiz's own pop-up: red Remove, Cancel focused, and Cancel keeps the team.
   await host.click('#teams li:nth-child(1) .remove');
@@ -260,8 +271,7 @@ try {
   );
   assert.deepEqual(wide, [], 'nothing sticks out sideways');
   assert.ok((await narrow.evaluate(() => document.querySelector('.host-bar').offsetHeight)) < 80, 'the bar stays one row');
-  await narrow.evaluate(() => window.scrollTo(0, 1400));
-  await barStaysOnTop(narrow);
+  await barStaysOnTop(narrow, await scrollArea(narrow, 1400));
   await narrow.waitForTimeout(300);
   await shot(narrow, 'host-narrow-sticky');
   await narrow.click('#teams li:nth-child(2) .remove');
@@ -710,8 +720,7 @@ try {
   assert.equal(withR2.round2.categories[1].questions[0].question, 'Who sang Yellow Submarine?');
   assert.equal(withR2.round2.categories[1].questions[0].value, 200);
   // The top bar stays while the editor scrolls.
-  await ed.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
-  await barStaysOnTop(ed);
+  await barStaysOnTop(ed, await scrollArea(ed, 'end'));
   await ed.waitForTimeout(300);
   await shot(ed, 'editor-sticky-bar');
   // Unticking removes it again, after asking, since it has a question. Cancel keeps it ticked and kept.
@@ -796,7 +805,7 @@ try {
   await shot(ed, 'editor-7-ai-filled');
 
   // Deleting a quiz asks first (red Delete); Cancel keeps it. Shown with the glass look on and off.
-  await ed.evaluate(() => window.scrollTo(0, 0));
+  await scrollArea(ed, 0);
   await ed.click('.ed-head button:has-text("Delete")');
   await ed.waitForSelector(`${MODAL}.danger`);
   assert.match(await ed.textContent(MODAL), /Delete quiz\?[\s\S]*can’t be undone[\s\S]*Cancel[\s\S]*Delete/);
