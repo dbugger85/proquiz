@@ -59,6 +59,8 @@ async function phone(name, color) {
 test('host and display get the phone address; phones join and show up as connected', async () => {
   const host = await client('host');
   assert.match(host.msgs.find((m) => m.type === 'welcome').info.phoneUrl ?? 'http://x/', /^http:\/\//);
+  const info = host.msgs.find((m) => m.type === 'welcome').info;
+  if (info.phoneUrl) assert.equal(info.tvUrl, info.phoneUrl + 'display'); // the TV page's Wi-Fi address
 
   const red = await phone('Red', COLORS[0]);
   const blue = await phone('Blue', COLORS[1]);
@@ -202,6 +204,54 @@ test('the host can turn down the saved game', async () => {
   const s = await host.wait((m) => m.type === 'state' && !m.resume);
   assert.equal(s.view.teams.length, 0);
   host.close();
+});
+
+test('the host can go back to the main menu mid-game, let a new team join, and continue', async () => {
+  // Waits for a message that arrives from now on (wait() also looks at earlier ones).
+  const fresh = (c, check) => {
+    const from = c.msgs.length;
+    return c.wait((m) => c.msgs.indexOf(m) >= from && check(m));
+  };
+  const host = await client('host');
+  await host.wait((m) => m.type === 'state');
+  const red = await phone('Menu Red', COLORS[0]);
+  const blue = await phone('Menu Blue', COLORS[1]);
+  const started = fresh(host, (m) => m.type === 'state' && m.view.phase === 'board');
+  host.send({ type: 'cmd', action: { type: 'start', picker: red.teamId } });
+  await started;
+  const adjusted = fresh(host, (m) => m.type === 'state' && m.view.teams.some((t) => t.score === 300));
+  host.send({ type: 'cmd', action: { type: 'adjust', teamId: red.teamId, delta: 300 } });
+  await adjusted;
+
+  // Main menu: an empty lobby with the game offered, as after closing and starting ProQuiz again.
+  const toMenu = fresh(host, (m) => m.type === 'state' && m.view.phase === 'lobby' && m.resume);
+  const redOut = fresh(red, (m) => m.type === 'welcome' && m.teamId === null);
+  host.send({ type: 'mainMenu' });
+  const menu = await toMenu;
+  assert.equal(menu.view.teams.length, 0);
+  assert.equal(menu.resume.teams.find((t) => t.name === 'Menu Red').score, 300);
+  await redOut;
+
+  // Red joins again with its saved id; a new team takes Blue's colour.
+  const rejoined = fresh(red, (m) => m.type === 'joined');
+  red.send({ type: 'join', name: 'Menu Red', color: COLORS[0], teamId: red.teamId });
+  await rejoined;
+  const green = await phone('Menu Green', COLORS[1]);
+
+  const resumed = fresh(host, (m) => m.type === 'state' && !m.resume && m.view.phase === 'board');
+  const blueBack = fresh(blue, (m) => m.type === 'welcome' && m.teamId === blue.teamId);
+  host.send({ type: 'resume' });
+  const back = await resumed;
+  const teams = back.view.teams;
+  assert.equal(teams.length, 3);
+  assert.equal(teams.find((t) => t.id === red.teamId).score, 300);
+  const g = teams.find((t) => t.id === green.teamId);
+  assert.equal(g.score, 0);
+  assert.notEqual(g.color, COLORS[1]); // Blue still has it, so Green gets a free colour
+  // Blue (never rejoined) is put back in its team, and Green plays on.
+  await blueBack;
+  assert.equal((await green.wait((m) => m.type === 'state' && m.view.you)).view.you.id, green.teamId);
+  for (const c of [host, red, blue, green]) c.close();
 });
 
 test('question pictures are served, and only plain file names are allowed', async () => {

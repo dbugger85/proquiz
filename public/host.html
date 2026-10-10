@@ -13,6 +13,7 @@
       <span class="wordmark">ProQuiz</span>
       <span id="set-title" class="set-title"></span>
       <span class="spacer"></span>
+      <button id="menu-btn" class="btn" type="button" data-t="mainMenuBtn" hidden></button>
       <button id="help-btn" class="btn" type="button"><span data-t="helpBtn"></span> <kbd>?</kbd></button>
       <a class="btn" href="/display" target="proquiz-display" data-t="openDisplay">Open TV screen</a>
     </header>
@@ -24,6 +25,7 @@
         <div>
           <h2 data-t="resumeTitle"></h2>
           <p id="resume-text"></p>
+          <p class="resume-note" data-t="resumeNewTeams"></p>
           <ul id="resume-teams" class="resume-teams"></ul>
         </div>
         <div class="row">
@@ -36,6 +38,7 @@
         <div id="qr" class="qr"></div>
         <p id="url" class="url"></p>
         <p class="hint" data-t="hostOnLaptopHint"></p>
+        <p id="tv-url" class="hint" hidden></p>
       </div>
 
       <div>
@@ -50,72 +53,83 @@
 
       <form id="settings" class="settings">
         <h2 data-t="settings">Settings</h2>
-        <label class="field">
-          <span data-t="questionSet">Questions</span>
-          <select id="set-picker"></select>
-        </label>
-        <a class="btn" href="/editor" data-t="editQuestions"></a>
-        <label class="field">
-          <span data-t="language">Language</span>
-          <select name="lang">
-            <option value="en">English</option>
-            <option value="no">Norsk</option>
-          </select>
-        </label>
-        <label class="field">
-          <span data-t="wrongAnswer">Wrong answer costs</span>
-          <select name="penalty">
-            <option value="none" data-t="penaltyNone"></option>
-            <option value="half" data-t="penaltyHalf"></option>
-            <option value="full" data-t="penaltyFull"></option>
-          </select>
-        </label>
-        <label class="check"><input type="checkbox" name="allowNegative"> <span data-t="allowNegative"></span></label>
-        <label class="check"><input type="checkbox" name="phonePick"> <span data-t="phonePick"></span></label>
-        <label class="check"><input type="checkbox" name="fairBuzz"> <span><span data-t="fairBuzz"></span><br><small data-t="fairBuzzHint"></small></span></label>
-        <label class="field">
-          <span data-t="buzzSeconds"></span>
-          <span class="row"><input type="number" name="buzzSeconds" min="0" max="120" step="1"> <small data-t="zeroOff"></small></span>
-        </label>
-        <label class="field">
-          <span data-t="answerSeconds"></span>
-          <span class="row"><input type="number" name="answerSeconds" min="0" max="120" step="1"> <small data-t="zeroOff"></small></span>
-        </label>
-        <div class="row">
-          <label class="check"><input type="checkbox" name="sound"> <span data-t="soundOn"></span></label>
-          <button id="test-sound" class="btn" type="button" data-t="testSound"></button>
+
+        <!-- Quiz: what changes from game to game. Always open. -->
+        <div class="settings-group quiz-group">
+          <label class="field">
+            <span data-t="questionSet">Questions</span>
+            <span class="row picker-row"><select id="set-picker"></select> <a class="btn btn-small" href="/editor" data-t="editShort"></a></span>
+          </label>
+          <fieldset class="field pill-field">
+            <legend data-t="language">Language</legend>
+            <div class="pills">
+              <label><input type="radio" name="lang" value="en"><span>English</span></label>
+              <label><input type="radio" name="lang" value="no"><span>Norsk</span></label>
+            </div>
+          </fieldset>
+          <label class="check" id="round2-setting" hidden><input type="checkbox" name="round2"> <span id="round2-label"></span></label>
+          <div class="row final-setting" id="final-setting">
+            <label class="check"><input type="checkbox" name="finalRound"> <span data-t="finalRound"></span></label>
+            <label class="seconds" id="final-seconds"><input type="number" name="finalSeconds" min="0" max="300" step="1" data-t-aria-label="finalSeconds"> <span data-t="secondsShort"></span></label>
+          </div>
+          <label class="check quiz-specials" id="quiz-specials" hidden><input type="checkbox" name="quizSpecials"> <span><span id="quiz-specials-label"></span><br><small data-t="quizSpecialsHint"></small></span></label>
         </div>
-        <label class="check"><input type="checkbox" name="music"> <span data-t="musicOn"></span></label>
-        <label class="field">
-          <span data-t="musicVolume"></span>
-          <input type="range" name="musicVolume" min="0" max="100" step="5">
-        </label>
-        <fieldset id="music-files" class="crazy-kinds music-files">
-          <legend data-t="musicFiles"></legend>
-          <small data-t="musicHint"></small>
-          <div id="music-file-list"></div>
-        </fieldset>
-        <label class="field">
-          <span data-t="crazyMode"></span>
-          <select name="crazy">
-            <option value="off" data-t="crazyOff"></option>
-            <option value="some" data-t="crazySome"></option>
-            <option value="lots" data-t="crazyLots"></option>
-          </select>
-          <small data-t="crazyHint"></small>
-        </label>
-        <fieldset id="crazy-kinds" class="crazy-kinds">
-          <legend data-t="crazyKinds"></legend>
-          <div id="crazy-kind-list"></div>
-          <small id="crazy-none" class="error" data-t="crazyNone" hidden></small>
-        </fieldset>
-        <label class="check quiz-specials" id="quiz-specials" hidden><input type="checkbox" name="quizSpecials"> <span><span id="quiz-specials-label"></span><br><small data-t="quizSpecialsHint"></small></span></label>
-        <label class="check" id="round2-setting" hidden><input type="checkbox" name="round2"> <span id="round2-label"></span></label>
-        <label class="check"><input type="checkbox" name="finalRound"> <span data-t="finalRound"></span></label>
-        <label class="field">
-          <span data-t="finalSeconds"></span>
-          <span class="row"><input type="number" name="finalSeconds" min="0" max="300" step="1"> <small data-t="zeroOff"></small></span>
-        </label>
+
+        <details class="settings-group" id="group-crazy" open>
+          <summary><span class="group-title" data-t="crazyMode"></span> <span class="group-status" id="crazy-status"></span></summary>
+          <div class="pills" role="radiogroup" data-t-aria-label="crazyMode">
+            <label><input type="radio" name="crazy" value="off"><span data-t="crazyOff"></span></label>
+            <label><input type="radio" name="crazy" value="some"><span data-t="crazySome"></span></label>
+            <label><input type="radio" name="crazy" value="lots"><span data-t="crazyLots"></span></label>
+          </div>
+          <small class="hint" data-t="crazyHint"></small>
+          <fieldset id="crazy-kinds" class="crazy-kinds">
+            <legend data-t="crazyKinds"></legend>
+            <div id="crazy-kind-list"></div>
+            <small id="crazy-none" class="error" data-t="crazyNone" hidden></small>
+          </fieldset>
+        </details>
+
+        <details class="settings-group" id="group-rules">
+          <summary><span class="group-title" data-t="groupRules"></span> <span class="group-status" id="rules-status"></span></summary>
+          <fieldset class="field pill-field">
+            <legend data-t="wrongAnswer">Wrong answer costs</legend>
+            <div class="pills">
+              <label><input type="radio" name="penalty" value="none"><span data-t="penaltyNoneShort"></span></label>
+              <label><input type="radio" name="penalty" value="half"><span data-t="penaltyHalfShort"></span></label>
+              <label><input type="radio" name="penalty" value="full"><span data-t="penaltyFullShort"></span></label>
+            </div>
+          </fieldset>
+          <label class="check" id="negative-setting"><input type="checkbox" name="allowNegative"> <span data-t="allowNegative"></span></label>
+          <div class="field">
+            <span data-t="timers"></span>
+            <div class="row timers-row">
+              <label class="seconds"><span data-t="timerBuzz"></span> <input type="number" name="buzzSeconds" min="0" max="120" step="1"> <span data-t="secondsShort"></span></label>
+              <label class="seconds"><span data-t="timerAnswer"></span> <input type="number" name="answerSeconds" min="0" max="120" step="1"> <span data-t="secondsShort"></span></label>
+            </div>
+            <small data-t="zeroOff"></small>
+          </div>
+          <label class="check"><input type="checkbox" name="phonePick"> <span data-t="phonePick"></span></label>
+          <label class="check with-hint"><input type="checkbox" name="fairBuzz"> <span><span data-t="fairBuzz"></span><br><small data-t="fairBuzzHint"></small></span></label>
+        </details>
+
+        <details class="settings-group" id="group-sound">
+          <summary><span class="group-title" data-t="groupSound"></span> <span class="group-status" id="sound-status"></span></summary>
+          <div class="row">
+            <label class="check"><input type="checkbox" name="sound"> <span data-t="soundOn"></span></label>
+            <button id="test-sound" class="btn btn-small" type="button" data-t="testSound"></button>
+          </div>
+          <label class="check"><input type="checkbox" name="music"> <span data-t="musicOn"></span></label>
+          <label class="field" id="volume-setting">
+            <span data-t="musicVolume"></span>
+            <input type="range" name="musicVolume" min="0" max="100" step="5">
+          </label>
+          <details id="music-files" class="settings-group nested music-files">
+            <summary><span class="group-title" data-t="musicFilesTitle"></span> <span class="group-status" id="music-files-status"></span></summary>
+            <small data-t="musicHint"></small>
+            <div id="music-file-list"></div>
+          </details>
+        </details>
       </form>
     </section>
 

@@ -95,6 +95,32 @@ try {
   await host.waitForSelector('.stage-area:not([hidden]) iframe');
 
   assert.equal(state().teams.find((t) => t.name === 'Quizzy Rascals').score, 200);
+
+  // Main menu in the middle of the game: the lobby offers to continue, the phones are asked to join again,
+  // and a new team that joins now plays on with zero points.
+  await host.click('#menu-btn');
+  await host.waitForSelector('body[data-phase=lobby]');
+  await host.waitForSelector('#resume:not([hidden])');
+  await host.waitForSelector('#menu-btn[hidden]', { state: 'attached' });
+  await red.waitForSelector('#join:not([hidden])');
+  assert.equal(await red.inputValue('#name'), 'Quizzy Rascals'); // the form remembers the team
+  await red.click('#join-btn');
+  await red.waitForSelector('#team:not([hidden])');
+  const green = await open('/', { width: 390, height: 844 }, 'green');
+  await green.waitForSelector('#join:not([hidden])');
+  await green.fill('#name', 'Late Greens');
+  await green.click('#swatches label:nth-child(3)');
+  await green.click('#join-btn');
+  await green.waitForSelector('#team:not([hidden])');
+  await host.screenshot({ path: `${shots}/single-3-main-menu.png` });
+  await host.click('#resume-yes');
+  await host.waitForSelector('body[data-phase=board]');
+  assert.equal(state().teams.find((t) => t.name === 'Quizzy Rascals').score, 200);
+  assert.equal(state().teams.find((t) => t.name === 'Late Greens').score, 0);
+  assert.equal(state().teams.length, 3);
+  await blue.waitForSelector('#team:not([hidden])'); // Blue never re-joined, and is back in its team
+  await green.screenshot({ path: `${shots}/single-4-late-team.png` });
+
   assert.deepEqual(errors, []);
   console.log('e2e single screen: all good. Screenshots in test/screenshots/single-*');
 } catch (err) {

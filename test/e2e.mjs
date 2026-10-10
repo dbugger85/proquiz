@@ -39,10 +39,13 @@ async function waitFor(check, ms = 3000) {
 // Every screenshot also checks that no "null"/"undefined" leaked onto the screen.
 async function shot(page, name) {
   const text = await page.evaluate(() => document.body.innerText);
-  const bad = text.match(/[^\n]*(\b(null|undefined|NaN)\b|\[object \w+\])[^\n]*/);
+  const bad = text.match(/[^\n]*(\b((?<!under )null|undefined|NaN)\b|\[object \w+\])[^\n]*/); // \"under null\" is Norwegian for \"below zero\"
   assert.equal(bad, null, `${name} shows a broken value: ${JSON.stringify(bad?.[0])}`);
   await page.screenshot({ path: `${shots}/${name}.png` });
 }
+
+// Choose one of the lobby's pill buttons (language, wrong answer, Crazy mode).
+const pickPill = (page, name, value) => page.click(`label:has(> input[name=${name}][value=${value}])`);
 
 try {
   const host = await open('/host', { width: 1366, height: 768 }, 'host');
@@ -108,16 +111,27 @@ try {
   assert.equal(await phones[1].textContent('#me'), 'Blue Steel');
 
   // Switching to Norwegian changes the phones and the TV.
-  await host.selectOption('select[name=lang]', 'no');
+  await shot(host, 'host-1b-settings');
+  await pickPill(host, 'lang', 'no');
   await phones[0].waitForFunction(() => document.body.textContent.includes('Du er med!'));
   await tv.waitForFunction(() => document.body.textContent.includes('Skann for å bli med'));
   await shot(tv, 'tv-2-lobby-no');
-  await host.selectOption('select[name=lang]', 'en');
+  // The folded sections open, and the Norwegian texts fit.
+  await host.click('#group-rules summary');
+  await host.click('#group-sound summary');
+  await host.click('#music-files summary');
+  await host.evaluate(() => document.querySelector('#settings').scrollIntoView({ block: 'start' }));
+  await shot(host, 'host-1c-settings-open-no');
+  await pickPill(host, 'lang', 'en');
 
   // A setting changed on the host reaches the game.
-  await host.selectOption('select[name=penalty]', 'full');
+  await pickPill(host, 'penalty', 'none');
+  await waitFor(() => srv.hub.getState().settings.penalty === 'none');
+  await host.waitForSelector('#negative-setting[hidden]', { state: 'attached' }); // nothing to lose, so no "below zero"
+  await pickPill(host, 'penalty', 'full');
   await waitFor(() => srv.hub.getState().settings.penalty === 'full');
-  await host.selectOption('select[name=penalty]', 'half');
+  await pickPill(host, 'penalty', 'half');
+  await host.waitForSelector('#rules-status:has-text("Half the points")');
   // The music volume slider.
   await host.$eval('input[name=musicVolume]', (el) => {
     el.value = '60';
@@ -238,6 +252,13 @@ try {
   await red.click('.pick-cat >> nth=1');
   await red.waitForSelector('.pick-values');
   await shot(red, 'phone-10-pick-values');
+  // A category with a question already played shows an empty slot there, like the TV board.
+  await red.click('.pick-values ~ button.btn-quiet');
+  await red.click('.pick-cat >> nth=0');
+  await red.waitForSelector('.pick-tile.used');
+  await shot(red, 'phone-10b-pick-used');
+  await red.click('.pick-values ~ button.btn-quiet');
+  await red.click('.pick-cat >> nth=1');
   await red.click('.pick-tile >> nth=0');
   await host.waitForSelector('.host-q');
   await red.waitForSelector('.pick-board', { state: 'detached' });
@@ -584,7 +605,7 @@ try {
   await host.waitForSelector('#help[hidden]', { state: 'attached' });
 
   // ----- The same game in Norwegian -----
-  await host.selectOption('select[name=lang]', 'no');
+  await pickPill(host, 'lang', 'no');
   await tv.waitForFunction(() => document.body.textContent.includes('Skann for å bli med'));
   await host.click('#start');
   await host.waitForSelector('body[data-phase=board]');

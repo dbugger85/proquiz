@@ -75,12 +75,13 @@ try {
   await host.waitForSelector('#quiz-specials[hidden]', { state: 'attached' });
 
   // The lobby setting.
-  await host.selectOption('select[name=crazy]', 'lots');
+  await host.click('label:has(> input[name=crazy][value=lots])');
   await waitFor(() => state().settings.crazy === 'lots');
   // Leave the jackpot out.
   await host.waitForSelector('#crazy-kinds:not([hidden])');
   await host.uncheck('#crazy-kind-list input[value=jackpot]');
   await waitFor(() => state().settings.crazyExclude.join() === 'jackpot');
+  await host.waitForSelector('#crazy-status:has-text("7 of 8")');
   await host.evaluate(() => document.querySelector('#settings').scrollIntoView({ block: 'end' }));
   await shot(host, 'crazy-0-lobby');
   await host.check('#crazy-kind-list input[value=jackpot]'); // back on: the game below uses every special

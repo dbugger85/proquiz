@@ -394,6 +394,150 @@ select option {
   gap: 0.75rem;
 }
 
+/* Settings: folding sections with a one-line status, so the panel fits on one screen. */
+.settings-group {
+  display: grid;
+  gap: 0.75rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--edge);
+  min-width: 0;
+}
+details.settings-group:not([open]) {
+  gap: 0;
+}
+.settings-group > summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.2rem 0.75rem;
+  min-height: 48px;
+  align-content: center;
+  list-style: none;
+  cursor: pointer;
+}
+.settings-group > summary::-webkit-details-marker {
+  display: none;
+}
+.settings-group > summary::before {
+  content: '▸';
+  color: var(--muted);
+  transition: transform 120ms;
+}
+.settings-group[open] > summary::before {
+  transform: rotate(90deg);
+}
+.group-title {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+}
+.group-status {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+.group-status.bad {
+  color: var(--bad);
+}
+.settings-group.nested {
+  padding-top: 0.25rem;
+}
+.settings-group.nested .group-title {
+  font-family: var(--text);
+  font-size: 1rem;
+}
+.settings .hint {
+  color: var(--muted);
+}
+.picker-row select {
+  flex: 1;
+  min-width: 0;
+}
+.btn-small {
+  min-height: 48px;
+  padding: 0 1rem;
+  font-size: 0.9rem;
+}
+.check.with-hint {
+  align-items: flex-start;
+  padding-top: 0.7rem;
+}
+.check.with-hint input {
+  margin-top: 0.2rem;
+}
+.check small {
+  color: var(--muted);
+}
+.final-setting {
+  flex-wrap: wrap;
+  gap: 0 1rem;
+}
+.timers-row {
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+}
+.seconds {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+.seconds input {
+  width: 4.5rem;
+}
+
+fieldset.pill-field {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+fieldset.pill-field legend {
+  padding: 0;
+  margin-bottom: 0.35rem;
+  font-weight: 700;
+}
+
+/* Pill buttons for a choice of a few (language, wrong answer, Crazy mode). The radio itself is hidden. */
+.pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.pills label {
+  position: relative;
+  flex: 1 1 auto;
+}
+.pills input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.pills span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0 1rem;
+  border: 1px solid var(--edge);
+  border-radius: var(--pill);
+  background: var(--glass);
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 120ms;
+}
+.pills span:hover {
+  background: var(--glass-hi);
+}
+.pills input:checked + span {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-ink);
+}
+.pills input:focus-visible + span {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
 @media (max-width: 900px) {
   .lobby {
     grid-template-columns: 1fr;
@@ -1267,24 +1411,28 @@ select option {
 }
 .pick-values {
   width: 100%;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
-  gap: 0.6rem;
+  display: flex;
+  flex-direction: column; /* one column, lowest points on top, like a column on the TV board */
+  gap: 0.55rem;
 }
 .pick-tile {
-  min-height: 64px;
+  min-height: 60px;
   border: 0;
   border-radius: 18px;
-  background: rgb(255 255 255 / 0.24);
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.3), rgb(255 255 255 / 0.14));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35), inset 0 0 0 1px rgb(255 255 255 / 0.18);
   color: inherit;
   font-family: var(--display);
   font-weight: 800;
-  font-size: 1.4rem;
+  font-size: 1.6rem;
+  letter-spacing: -0.03em;
   cursor: pointer;
 }
+/* Already played: an empty slot, as on the TV. */
 .pick-tile.used {
-  opacity: 0.35;
-  text-decoration: line-through;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.2);
+  color: transparent;
   cursor: default;
 }
 .pick-cat:active:not(:disabled),
@@ -2117,6 +2265,7 @@ select option {
 .ed-dialog {
   width: min(860px, calc(100vw - 2rem));
   max-height: calc(100vh - 2rem);
+  overflow: hidden; /* only the form inside scrolls, or there are two scroll bars */
   padding: 0;
   border: 1px solid var(--edge);
   border-radius: var(--r-l);
@@ -2205,7 +2354,7 @@ select option {
   }
 }
 .ed-dialog form {
-  max-height: calc(100vh - 2rem);
+  max-height: calc(100vh - 2rem - 2px); /* inside the dialog's border */
   overflow-y: auto;
   padding-bottom: 0;
 }
@@ -2542,11 +2691,13 @@ kbd {
 }
 #crazy-kind-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(13rem, 100%), 1fr)); /* one column when the panel is narrow */
+  grid-template-columns: repeat(auto-fill, minmax(min(7.25rem, 100%), 1fr)); /* two columns in the lobby panel */
   gap: 0 0.75rem;
 }
 #crazy-kind-list .check {
-  min-height: 40px;
+  min-height: 48px;
+  gap: 0.4rem;
+  line-height: 1.2;
 }
 .kind-icon {
   display: inline-grid;
@@ -2572,9 +2723,24 @@ input[type='range'] {
 }
 .music-row {
   display: grid;
-  gap: 0.35rem;
+  grid-template-columns: 1fr auto; /* the moment and its tune on the left, the buttons on the right */
+  align-items: center;
+  gap: 0.2rem 0.75rem;
   padding: 0.6rem 0;
   border-top: 1px solid var(--edge);
+}
+.music-row > .row {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.music-row audio,
+.music-row .music-status {
+  grid-column: 1 / -1;
+}
+.music-row audio {
+  grid-row: 3;
 }
 .music-row:first-child {
   border-top: 0;
@@ -2591,7 +2757,7 @@ input[type='range'] {
   height: 36px;
 }
 .music-row .btn {
-  min-height: 38px;
+  min-height: 48px;
   padding: 0 0.9rem;
   font-size: 0.85rem;
 }

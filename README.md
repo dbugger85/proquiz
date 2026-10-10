@@ -74,10 +74,18 @@ Download the zip for your computer from the [latest release](https://github.com/
 
 1. **Wi-Fi:** connect the laptop and all the phones to the **same Wi-Fi**.
 2. **Start** ProQuiz. Keep its black (or Terminal) window open while you play.
-3. **TV:** connect the laptop to the TV as a **second screen** (extend, not mirror). On the host screen click **Open TV screen**, drag that window onto the TV, and press **F** for full screen. Click the TV screen once so it's allowed to play sound.
+3. **TV:** the TV screen is a web page, so you can show it in two ways.
+   - **With a cable:** connect the laptop to the TV as a **second screen** (extend, not mirror). On the host screen click **Open TV screen**, drag that window onto the TV, and press **F** for full screen. Click the TV screen once so it's allowed to play sound.
+   - **On another device on the same Wi-Fi** (an iPad, another computer, or a smart TV with a web browser): open the TV address in its browser. ProQuiz prints that address when it starts, and the host lobby shows it under the QR code (something like `192.168.1.23:3000/display`). Tap the screen once to turn on the sound. As soon as it connects, the laptop shows the host view with the answers, instead of the TV view.
+     - **Apple TV** has no web browser. Open the TV address on an iPhone, iPad or Mac, then use **Screen Mirroring** (AirPlay) to send it to the Apple TV. Turn the iPhone or iPad sideways, and keep it plugged in. Mirroring shows the picture a split second late, but that doesn't change who buzzed first.
+     - Smart TV browsers differ, and ProQuiz hasn't been tested on them. If the sound or the board doesn't work there, use a cable or an iPad instead.
    - **Only one screen** (just the laptop, or the laptop mirrored to the TV)? Skip "Open TV screen". Once the game starts, the laptop shows the TV view itself, with the controls underneath: click the tiles on the board, and the answers stay hidden until you reveal them. Press **H** to peek at the host view (with the answer and score changes), and **H** again to go back. **F** is full screen.
 4. **Teams join:** they scan the QR code on the TV, type a team name and pick a colour. They can press **Try your buzzer** to hear their tone.
-5. **Settings:** in the lobby, choose the quiz, the language, what a wrong answer costs, the timers, and the music: on or off, the volume, and optionally your own music file for each moment (lobby, between questions, thinking, final, after the game).
+5. **Settings:** the lobby's settings come in folding sections, and a closed section shows a short summary of what's set.
+   - **At the top:** choose the quiz and the language, and tick round 2 and the final round on or off (with the time for the final answer).
+   - **Crazy mode** (already open): off, a little or lots, and which specials to use.
+   - **Rules:** what a wrong answer costs, the timers, picking on the phone and fairer buzzing.
+   - **Sound:** effects, music and the volume. **Your own music**, at the very end, lets you choose a music file for each moment (lobby, between questions, thinking, final, after the game).
 6. **Round 2:** if the quiz has a round 2, **Play round 2** is ticked in the lobby. Untick it to skip it tonight.
 7. **Fairer buzzing:** tick it if close calls matter. Normally the laptop goes by whose buzz *arrives* first, so a phone with weak Wi-Fi can lose by a few hundredths of a second. With this on, ProQuiz measures how slow each phone's Wi-Fi is (you'll see it in milliseconds next to each team) and goes by who *pressed* first. The winner shows a tiny moment later (0.15 s), which most people won't notice.
 8. **Picking on the phone:** with **Teams pick the next question on their phone** ticked (it is by default), the team whose turn it is chooses a category and then the points on its phone, and the question opens on the TV at once. You can always click a tile on the laptop instead, for example if their phone has run out of battery.
@@ -121,6 +129,8 @@ When a team picks one, the TV spins a reel and lands on the special. Press **Spa
 
 You also have buttons to **Change score** and **Let them pick** for each team. When the first board is done (or you press **E**), round 2 starts with a big intro on the TV: the team with the fewest points picks first, and **Space** opens the new board. Crazy mode gets new hidden specials on it, and an unwon jackpot carries over. In the final round, the teams bet on their phones, then type their answers. You mark each one **Correct** or **Wrong**, and it flips up on the TV.
 
+**Main menu** (top right, during a game) leaves the game for the lobby, just like closing ProQuiz and starting it again: the game is saved, and the lobby asks **Continue the last game?** Teams' phones show the join form, filled in; they tap **Join** to come back, or are put back in their team when you continue. New teams can join first, and they play on with zero points.
+
 ## If something goes wrong
 
 - **Phones can't connect.**
@@ -128,7 +138,8 @@ You also have buttons to **Change score** and **Let them pick** for each team. W
   - Guest or hotel Wi-Fi often stops devices seeing each other. Turn on a hotspot on one phone and put the laptop and all the phones on it.
   - On Windows, check ProQuiz is allowed through the firewall.
 - **A phone went to sleep or lost its connection.** Unlock it or reload the page. It comes back as the same team, with the same score.
-- **The laptop crashed, or you closed ProQuiz.** Start it again. The host screen asks **Continue the last game?**
+- **The laptop crashed, or you closed ProQuiz.** Start it again. The host screen asks **Continue the last game?** (So does **Main menu** during a game.)
+- **The TV screen on an iPad or smart TV won't open.** Check it's on the same Wi-Fi as the laptop, and type the address exactly as the lobby shows it, including the part after the colon (like `:3000/display`; the number can differ). Guest networks often keep devices apart, so use the main Wi-Fi.
 - **No sound.** Click the TV screen once. Check **Sound effects** is on and the TV isn't muted. Sound clips play from the TV screen, or from the laptop when no TV screen is open.
 
 Your quizzes, their pictures and clips, and the autosave are kept in a **ProQuiz** folder in your home folder. Use **Export** in the editor to share a quiz, pictures and clips included, and **Import** to open one.

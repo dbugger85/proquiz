@@ -13,7 +13,7 @@ import { FILE_NAME, validateSet } from './lib/validate.js';
 import { createStore, apiHandler, SAMPLE_ID } from './store.js';
 import { randomUUID } from 'node:crypto';
 import { WebSocketServer } from 'ws';
-import { apply, newGame, hostView, displayView, phoneView, GameError, DEFAULT_SETTINGS, nextTimerAt, MAX_SLACK_MS } from './lib/game.js';
+import { apply, newGame, hostView, displayView, phoneView, GameError, DEFAULT_SETTINGS, nextTimerAt, MAX_SLACK_MS, COLORS, MAX_TEAMS } from './lib/game.js';
 
 const ROOT = new URL('./', import.meta.url);
 const START_PORT = Number(process.env.PORT) || 3000;
@@ -331,10 +331,37 @@ export function createHub({ set, info, saved = null, save = () => {}, store = nu
     broadcast(); // the host's list of quizzes may have changed
   }
 
+  // Back to the main menu in the middle of a game, just as if ProQuiz had been closed and started again:
+  // the game is kept as the one to continue, and the lobby starts empty with the same quiz and settings.
+  function mainMenu() {
+    if (state.phase === 'lobby') return;
+    resumable = { v: 1, savedAt: Date.now(), state: { ...state, history: [] } };
+    state = newGame(state.set, state.settings, state.setId);
+    for (const c of clients) {
+      if (c.role !== 'phone') continue;
+      c.askedTeamId = c.teamId ?? c.askedTeamId; // so "Continue" puts the phone back in its team
+      c.teamId = null;
+      send(c.ws, { type: 'welcome', teamId: null });
+    }
+    schedule();
+    broadcast(); // not saved: the file keeps the game until something new happens in the lobby
+  }
+
   // Continue the saved game. Phones that are already back get their team again.
   function resume() {
     if (!resumable) return;
+    const lobbyTeams = state.teams;
     state = { round: 1, ...resumable.state, deadline: null }; // games saved before round 2 existed are in round 1
+    // Teams that joined in the lobby meanwhile play on with zero points (a free colour if theirs is taken).
+    for (const t of lobbyTeams) {
+      if (state.teams.length >= MAX_TEAMS) break;
+      if (state.teams.some((o) => o.id === t.id || o.name.toLowerCase() === t.name.toLowerCase())) continue;
+      const color = state.teams.some((o) => o.color === t.color) ? COLORS.find((col) => !state.teams.some((o) => o.color === col)) : t.color;
+      state.teams = [...state.teams, { ...t, color, score: 0 }];
+      if (state.final) state.final = { ...state.final, base: { ...state.final.base, [t.id]: 0 } };
+    }
+    const playing = new Set(state.teams.map((t) => t.id));
+    for (const c of clients) if (c.role === 'phone' && c.teamId && !playing.has(c.teamId)) c.teamId = null;
     // A picture that was appearing carries on from where it was, not from the old clock.
     if (state.q?.unveil?.since != null) state.q = { ...state.q, unveil: { ...state.q.unveil, since: Date.now() } };
     resumable = null;
@@ -424,6 +451,7 @@ export function createHub({ set, info, saved = null, save = () => {}, store = nu
       return dispatch({ ...msg, teamId: c.teamId });
     }
     if (c.role === 'host' && msg.type === 'resume') return resume();
+    if (c.role === 'host' && msg.type === 'mainMenu') return mainMenu();
     if (c.role === 'host' && msg.type === 'discardSave') {
       resumable = null;
       return broadcast();
@@ -431,6 +459,7 @@ export function createHub({ set, info, saved = null, save = () => {}, store = nu
     if (c.role === 'host' && msg.type === 'cmd' && HOST_ACTIONS.has(msg.action?.type)) {
       const action = { ...msg.action };
       if (action.type === 'start') {
+        resumable = null; // a new game replaces the one waiting to be continued
         if (!action.picker && state.teams.length) action.picker = state.teams[Math.floor(Math.random() * state.teams.length)].id;
         action.seed = Math.floor(Math.random() * 2 ** 32); // Kaosmodus: where the specials go
         delete action.specials; // only tests place specials by hand
@@ -513,6 +542,8 @@ export async function startServer({ port = START_PORT, quiet = false, dataDir = 
     hostUrl: `http://localhost:${actual}/host`,
     displayUrl: `http://localhost:${actual}/display`,
     phoneUrl: ip ? `http://${ip}:${actual}/` : null,
+    // The TV page also works on any other device on the same Wi-Fi (an iPad, a smart TV's browser, another computer).
+    tvUrl: ip ? `http://${ip}:${actual}/display` : null,
   };
   hub = createHub({ set, info, saved, save: store.save, store: sets });
   wss.on('connection', (ws, req) => hub.connect(ws, req));
@@ -520,6 +551,7 @@ export async function startServer({ port = START_PORT, quiet = false, dataDir = 
     console.log('\n  ProQuiz is running!\n');
     console.log(`  Host (this laptop):  ${info.hostUrl}`);
     console.log(`  TV screen:           ${info.displayUrl}`);
+    if (info.tvUrl) console.log(`  TV (other device):   ${info.tvUrl}`);
     console.log(`  Phones:              ${info.phoneUrl ?? '(no Wi-Fi network found — connect to Wi-Fi and restart)'}`);
     console.log(`  Game is saved in:    ${store.file}`);
     console.log('\n  Keep this window open while you play. Close it (or press Ctrl+C) to stop.\n');

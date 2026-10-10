@@ -80,7 +80,10 @@ function renderQr() {
       $('#qr').dataset.url = info.phoneUrl;
     }
     $('#url').textContent = shortUrl(info.phoneUrl);
+    $('#tv-url').textContent = info.tvUrl ? t('tvElsewhereHint', { url: shortUrl(info.tvUrl) }) : '';
+    $('#tv-url').hidden = !info.tvUrl;
   } else {
+    $('#tv-url').hidden = true;
     $('#qr').replaceChildren();
     $('#url').textContent = t('noNetwork');
   }
@@ -132,13 +135,40 @@ function renderSettings() {
   const form = $('#settings');
   for (const [key, value] of Object.entries(view.settings)) {
     const el = form.elements[key];
-    if (!el || el === document.activeElement) continue;
+    // A pill group is a RadioNodeList: skip it too while one of its buttons has focus.
+    const active = el instanceof RadioNodeList ? [...el].includes(document.activeElement) : el === document.activeElement;
+    if (!el || active) continue;
     if (el.type === 'checkbox') el.checked = value;
     else el.value = String(value);
   }
-  form.elements.finalSeconds.disabled = !view.settings.finalRound;
+  // Hide what doesn't apply right now, instead of greying it out.
+  const st = view.settings;
+  $('#final-setting').hidden = !view.set.final;
+  $('#final-seconds').hidden = !st.finalRound;
+  $('#negative-setting').hidden = st.penalty === 'none';
+  $('#volume-setting').hidden = !st.music;
+  renderQuizOptions();
   renderCrazyKinds();
   renderMusicFiles();
+  renderSummaries();
+}
+
+// The one-line status next to each folding section, so a closed section still says what is set.
+function renderSummaries() {
+  const st = view.settings;
+  const secs = (n) => (n ? t('nSeconds', { n }) : t('noTimer'));
+  const used = KINDS.length - st.crazyExclude.length;
+  $('#crazy-status').textContent =
+    st.crazy === 'off' ? t('crazyOff') : used === 0 ? t('crazyNoneShort') : t('crazySummary', { level: t(st.crazy === 'some' ? 'crazySome' : 'crazyLots'), n: used, total: KINDS.length });
+  $('#crazy-status').classList.toggle('bad', st.crazy !== 'off' && used === 0);
+  const penalty = { none: 'penaltyNone', half: 'penaltyHalf', full: 'penaltyFull' }[st.penalty];
+  $('#rules-status').textContent = t('rulesSummary', { penalty: t(penalty), buzz: secs(st.buzzSeconds), answer: secs(st.answerSeconds) });
+  $('#sound-status').textContent = t('soundSummary', {
+    fx: t(st.sound ? 'stateOn' : 'stateOff'),
+    music: st.music ? t('musicLevel', { pct: st.musicVolume }) : t('stateOff'),
+  });
+  const own = MUSIC_MOODS.filter((m) => st.musicFiles[m]).length;
+  $('#music-files-status').textContent = own ? t('ownMusicSome', { n: own, total: MUSIC_MOODS.length }) : t('ownMusicNone');
 }
 
 // Your own music: a file per moment, or the built-in tune.
@@ -210,6 +240,10 @@ function renderCrazyKinds() {
   }
   for (const input of box.querySelectorAll('input[name=crazyKind]')) input.checked = !excluded.includes(input.value);
   $('#crazy-none').hidden = excluded.length < KINDS.length;
+}
+
+// Ticks that only make sense for the chosen quiz: its round 2 and its own special tiles.
+function renderQuizOptions() {
   // Specials placed by hand in the quiz: only offered when the quiz has some.
   const own = Object.keys(ownSpecials(view.set.categories)).length + Object.keys(ownSpecials(view.set.round2?.categories)).length;
   $('#quiz-specials').hidden = own === 0;
@@ -222,6 +256,7 @@ function renderCrazyKinds() {
 
 $('#settings').addEventListener('change', (e) => {
   const el = e.target;
+  if (!el.name || el.type === 'file') return; // the music file pickers upload by themselves
   if (el.name === 'crazyKind') {
     const excluded = [...$('#settings').querySelectorAll('input[name=crazyKind]')].filter((x) => !x.checked).map((x) => x.value);
     return cmd({ type: 'settings', settings: { crazyExclude: excluded } });
@@ -265,6 +300,8 @@ loadQuizzes();
 $('#test-sound').addEventListener('click', () => net.send({ type: 'testSound' }));
 $('#resume-yes').addEventListener('click', () => net.send({ type: 'resume' }));
 $('#resume-no').addEventListener('click', () => net.send({ type: 'discardSave' }));
+// Leave the game for the main menu. It is kept, and the lobby offers to continue it.
+$('#menu-btn').addEventListener('click', () => confirm(t('confirmMainMenu')) && net.send({ type: 'mainMenu' }));
 
 function renderResume() {
   $('#resume').hidden = !resume;
@@ -756,6 +793,7 @@ function render() {
   const inLobby = view.phase === 'lobby';
   $('#lobby').hidden = !inLobby;
   $('#game').hidden = inLobby;
+  $('#menu-btn').hidden = inLobby;
   if (inLobby) {
     renderResume();
     renderTeams();
