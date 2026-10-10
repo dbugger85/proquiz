@@ -1,6 +1,6 @@
 {
   "name": "proquiz",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "private": true,
   "type": "module",
   "description": "Jeopardy-style team quiz with phones as buzzers",
