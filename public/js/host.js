@@ -4,7 +4,7 @@
 // Esc = put the question back, U = undo.
 import { ranking, COLORS, KINDS, unveilProgress, MUSIC_MOODS, maxBet, SHAPES, OPTION_COLORS, MAX_PLAYERS, MAX_TEAMS } from '/lib/game.js';
 import { connect } from './net.js';
-import { t, setLang, translatePage, fastestTitle, secondsText } from './i18n.js';
+import { t, pts, setLang, translatePage, fastestTitle, secondsText } from './i18n.js';
 import { $, h, fill, qrSvg, shortUrl, urlNodes, countdown, runCountdowns, teamStyle, setGlass, shapeSvg, optionStyle, setBrand, brandLogo, ACCENTS, ask, askNumber, askColor, modalOpen } from './ui.js';
 import { unlockAudio, audioReady, playEvent, playSound, startTicks } from './sounds.js';
 import { syncClip, stopClip } from './clip.js';
@@ -558,7 +558,7 @@ function renderResume() {
   const time = new Date(resume.savedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   $('#resume-text').textContent = t(resume.mode === 'quick' ? 'resumeTextQuick' : resume.round === 2 ? 'resumeTextRound2' : 'resumeText', { title: resume.title, time, played: resume.played, total: resume.total });
   $('#resume-teams').replaceChildren(
-    ...resume.teams.map((tm) => h('li', { class: 'plate', style: teamStyle(tm) }, face(tm), h('span', {}, tm.name), h('b', {}, String(tm.score)))),
+    ...resume.teams.map((tm) => h('li', { class: 'plate', style: teamStyle(tm) }, face(tm), h('span', {}, tm.name), h('b', {}, pts(tm.score)))),
   );
 }
 
@@ -757,7 +757,7 @@ function renderBoard() {
             return h(
               'button',
               { class: 'tile', type: 'button', disabled: view.used[c][i], 'data-special': kind || false, title: kind ? t(`k-${kind}`) : false, onclick: () => cmd({ type: 'pick', c, i }) },
-              String(q.value),
+              pts(q.value),
               kind ? h('span', { class: 'tile-special' }, ICONS[kind]) : null,
             );
           }),
@@ -775,7 +775,7 @@ function renderSpecialHost() {
   return h(
     'div',
     { class: 'host-q host-special' },
-    h('p', { class: 'where' }, `${view.set.categories[q.c].name} `, h('b', {}, String(q.value))),
+    h('p', { class: 'where' }, `${view.set.categories[q.c].name} `, h('b', {}, pts(q.value))),
     h('div', { class: `special-card k-${kind}` }, h('span', { class: 'special-icon' }, ICONS[kind]), h('div', {}, h('h2', {}, t(`k-${kind}`)), h('p', {}, ruleFor(view)))),
     kind === 'double' ? doubleBetForm() : null,
     kind === 'freeze'
@@ -817,10 +817,10 @@ function doubleBetForm() {
         if (input.value !== '' && Number.isFinite(amount)) cmd({ type: 'bet', amount });
       },
     },
-    h('p', {}, t('doubleBetHint', { name: picker?.name ?? '', n: max })),
+    h('p', {}, t('doubleBetHint', { name: picker?.name ?? '', n: pts(max) })),
     h('label', { class: 'field' }, h('span', {}, t('doubleBet')), input),
     h('button', { class: 'btn', type: 'submit' }, t('doubleBetSet')),
-    q.bet == null ? h('p', { class: 'muted' }, t('doubleNoBet', { n: q.value })) : null,
+    q.bet == null ? h('p', { class: 'muted' }, t('doubleNoBet', { n: pts(q.value) })) : null,
   );
 }
 
@@ -840,13 +840,13 @@ function statusLine() {
     const r = q.result;
     const text =
       r.type === 'boom'
-        ? t('boomResult', { name: teamName(r.teamId), n: r.amount })
+        ? t('boomResult', { name: teamName(r.teamId), n: pts(r.amount) })
         : r.type === 'correct' && q.won
-          ? t('jackpotWon', { name: teamName(r.teamId), n: q.value, pot: q.won })
+          ? t('jackpotWon', { name: teamName(r.teamId), n: pts(q.value), pot: pts(q.won) })
           : r.type === 'correct'
-            ? t('resultCorrect', { name: teamName(r.teamId), n: q.value })
+            ? t('resultCorrect', { name: teamName(r.teamId), n: pts(q.value) })
             : q.fullPenalty && q.lockedOut.includes(q.solo)
-              ? t('doubleLost', { name: teamName(q.solo), n: q.value })
+              ? t('doubleLost', { name: teamName(q.solo), n: pts(q.value) })
               : r.type === 'timeout'
               ? t('resultTimeout')
               : t('resultNobody');
@@ -878,7 +878,7 @@ function renderQuestion() {
   return h(
     'div',
     { class: 'host-q' },
-    h('p', { class: 'where' }, `${view.set.categories[q.c].name} `, h('b', {}, String(q.value)), q.special ? h('span', { class: `special-badge k-${q.special}` }, badgeFor(view)) : null),
+    h('p', { class: 'where' }, `${view.set.categories[q.c].name} `, h('b', {}, pts(q.value)), q.special ? h('span', { class: `special-badge k-${q.special}` }, badgeFor(view)) : null),
     src.image || src.answerImage
       ? h('div', { class: 'host-imgs' }, img(src.image, 'host-img', t('picQuestion')), img(src.answerImage, 'host-img', t('picAnswer')))
       : null,
@@ -935,7 +935,7 @@ function renderFinal() {
     const wager = f.wagers[tm.id];
     const answer = f.answers[tm.id];
     const verdict = f.judged[tm.id];
-    const cells = [h('span', { class: 'who' }, face(tm), tm.name), h('span', { class: 'bet' }, wager == null ? t('betWaiting') : t('betAmount', { n: wager }))];
+    const cells = [h('span', { class: 'who' }, face(tm), tm.name), h('span', { class: 'bet' }, wager == null ? t('betWaiting') : t('betAmount', { n: pts(wager) }))];
     if (p !== 'finalWager') cells.push(h('span', { class: 'said' }, answer == null ? t(p === 'finalJudge' ? 'noAnswer' : 'noAnswerYet') : answer || '—'));
     if (p === 'finalJudge') {
       const judge = (correct) => cmd({ type: 'judgeFinal', teamId: tm.id, correct: verdict === correct ? null : correct });
@@ -960,8 +960,8 @@ function renderRound2Host() {
     'div',
     { class: 'host-over' },
     h('h2', {}, t('round2Title')),
-    h('p', { class: 'board-hint' }, `${t('round2PicksFirst', { name: teamName(view.picker) })}. ${t('round2UpTo', { n: top })}.`),
-    h('ol', { class: 'rank-list' }, ranking(view.teams).map((tm) => h('li', { class: 'plate', style: teamStyle(tm) }, h('span', {}, face(tm), tm.name), h('span', {}, String(tm.score))))),
+    h('p', { class: 'board-hint' }, `${t('round2PicksFirst', { name: teamName(view.picker) })}. ${t('round2UpTo', { n: pts(top) })}.`),
+    h('ol', { class: 'rank-list' }, ranking(view.teams).map((tm) => h('li', { class: 'plate', style: teamStyle(tm) }, h('span', {}, face(tm), tm.name), h('span', {}, pts(tm.score))))),
   );
 }
 
@@ -972,7 +972,7 @@ function renderOver() {
     'div',
     { class: 'host-over' },
     h('h2', {}, ranked.length ? (tie ? t('tie') : t('winner', { name: ranked[0].name })) : t('gameOver')),
-    h('ol', { class: 'rank-list' }, ranked.map((tm) => h('li', { class: 'plate', style: teamStyle(tm) }, h('span', {}, face(tm), tm.name), h('span', {}, String(tm.score))))),
+    h('ol', { class: 'rank-list' }, ranked.map((tm) => h('li', { class: 'plate', style: teamStyle(tm) }, h('span', {}, face(tm), tm.name), h('span', {}, pts(tm.score))))),
   );
 }
 
@@ -996,7 +996,7 @@ function renderScores() {
           face(team),
           team.name,
         ),
-        h('span', { class: 'pts' }, String(team.score)),
+        h('span', { class: 'pts' }, pts(team.score)),
         h(
           'span',
           { class: 'tools' },
@@ -1063,7 +1063,7 @@ function quickStatus() {
   return h('p', { class: 'host-status' }, t('quickHostRanks'));
 }
 
-const rankLine = (e) => h('li', { class: 'plate', style: teamStyle(e) }, h('span', {}, `${e.rank}. `, face(e), e.name), h('span', {}, e.delta ? h('small', { class: 'gain' }, `+${e.delta} `) : null, String(e.score)));
+const rankLine = (e) => h('li', { class: 'plate', style: teamStyle(e) }, h('span', {}, `${e.rank}. `, face(e), e.name), h('span', {}, e.delta ? h('small', { class: 'gain' }, `+${pts(e.delta)} `) : null, pts(e.score)));
 
 function renderQuickHost() {
   const p = view.phase;
@@ -1117,7 +1117,7 @@ function renderQuickScores() {
           e.name,
           answered ? h('span', { class: 'answered-tick' }, '✓') : null,
         ),
-        h('span', { class: 'pts' }, gain ? h('small', { class: 'gain' }, `+${gain} `) : null, String(e.score)),
+        h('span', { class: 'pts' }, gain ? h('small', { class: 'gain' }, `+${pts(gain)} `) : null, pts(e.score)),
         h('span', { class: 'tools' }, h('button', { type: 'button', onclick: () => adjust(e) }, t('adjustBtn'))),
       );
     }),
@@ -1129,7 +1129,7 @@ async function adjust(team) {
     title: t('adjustBtn'),
     text: t('adjustPrompt', { name: team.name }),
     ok: t('dlgAdjustOk'),
-    preview: (n) => t('dlgAdjustPreview', { score: team.score + n }),
+    preview: (n) => t('dlgAdjustPreview', { score: pts(team.score + n) }),
   });
   if (delta) cmd({ type: 'adjust', teamId: team.id, delta });
 }

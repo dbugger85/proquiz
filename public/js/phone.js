@@ -1,7 +1,7 @@
 // A team's phone: join with a name and colour, then act as the buzzer.
 import { COLORS, newColor, SHAPES, OPTION_COLORS } from '/lib/game.js';
 import { connect } from './net.js';
-import { t, setLang, guessLang, translatePage, secondsText } from './i18n.js';
+import { t, pts, setLang, guessLang, translatePage, secondsText } from './i18n.js';
 import { $, h, inkFor, countdown, runCountdowns, setGlass, shapeSvg, optionStyle, setBrand } from './ui.js';
 import { keepAwake } from './wake.js';
 import { countTo, shownCount } from './rankanim.js';
@@ -240,7 +240,7 @@ function stage() {
   }
   if (s === 'solo') return [h('div', { class: 'big' }, t('answerNow')), countdown(view)];
   if (view.phase === 'revealed' && ev?.type === 'boom' && ev.teamId === me.id) {
-    return [h('div', { class: 'big' }, '💥'), h('div', { class: 'big' }, t('boomYou', { n: ev.amount ?? 0 }))];
+    return [h('div', { class: 'big' }, '💥'), h('div', { class: 'big' }, t('boomYou', { n: pts(ev.amount ?? 0) }))];
   }
   // Fair buzzing can find that a press came before the buzzers were on: too early, like while the host reads.
   if (s === 'armed') return [buzzer(true), ev?.type === 'early' && ev.teamId === me.id ? h('div', { class: 'big' }, t('tooEarly')) : null];
@@ -257,7 +257,7 @@ function stage() {
   if (s === 'finalWait') {
     const f = view.final;
     if (f.judged === null) return [h('div', { class: 'big' }, t('waitJudging')), f.answer ? h('p', { class: 'small' }, t('youAnswered', { text: f.answer })) : null];
-    return [h('div', { class: 'big' }, f.judged ? t('finalRight', { n: f.wager ?? 0 }) : t('finalWrong', { n: f.wager ?? 0 }))];
+    return [h('div', { class: 'big' }, f.judged ? t('finalRight', { n: pts(f.wager ?? 0) }) : t('finalWrong', { n: pts(f.wager ?? 0) }))];
   }
   // waiting: board, reading or revealed. While the host reads, the (dim) buzzer is there, but pressing it is too early.
   if (view.phase === 'reading') {
@@ -332,7 +332,7 @@ function gapLine() {
   const other = view.behind ?? view.ahead;
   if (!other) return null;
   const key = other.gap === 0 ? 'quickLevel' : view.behind ? 'quickBehind' : 'quickAheadOf';
-  const [before, after] = t(key, { n: other.gap, name: '\u0000' }).split('\u0000');
+  const [before, after] = t(key, { n: pts(other.gap), name: '\u0000' }).split('\u0000');
   return h('p', { class: 'gap-line' }, before, h('span', { class: 'gap-name', style: `--team: ${other.color}; --team-ink: ${inkFor(other.color)}` }, avatarEl(other.avatar), other.name), after);
 }
 
@@ -396,7 +396,7 @@ function quickStage() {
         verdict,
         q.fastest ? h('p', { class: 'fastest-badge' }, t('quickFastestYou')) : null,
         h('div', { class: 'big' }, right ? t('quickRight') : none ? t('quickTooSlow') : t('quickWrong')),
-        right && q.points ? h('p', { class: 'result' }, t('quickPlus', { n: q.gained })) : null,
+        right && q.points ? h('p', { class: 'result' }, t('quickPlus', { n: pts(q.gained) })) : null,
         !q.points ? h('p', { class: 'small' }, t('quickNoPointsQ')) : null,
         right && view.you.streak >= 2 && q.points ? h('p', { class: 'streak' }, `🔥 ${t('quickStreakN', { n: view.you.streak })}`) : null,
         !right ? h('div', { class: 'right-was' }, h('span', {}, t(rights.length > 1 ? 'quickRightWere' : 'quickRightWas')), h('div', { class: 'right-chips' }, rights.map((i) => optionChip(i)))) : null,
@@ -455,7 +455,7 @@ function pickStage() {
         h(
           'button',
           { class: `pick-tile${cat.used[i] ? ' used' : ''}`, type: 'button', disabled: cat.used[i], onclick: () => net.send({ type: 'pick', c: pickCat, i }) },
-          String(value),
+          pts(value),
         ),
       ),
     ),
@@ -484,13 +484,13 @@ function doubleStage() {
           input.blur();
         },
       },
-      h('label', { for: 'double-bet' }, t('doubleAsk'), ' ', h('span', { class: 'muted' }, t('doubleUpTo', { n: b.max }))),
+      h('label', { for: 'double-bet' }, t('doubleAsk'), ' ', h('span', { class: 'muted' }, t('doubleUpTo', { n: pts(b.max) }))),
       input,
-      h('div', { class: 'chips' }, quick(t('doubleTile', { n: b.value }), b.value), quick(t('betHalf'), Math.floor(b.max / 2)), quick(t('betAll'), b.max)),
+      h('div', { class: 'chips' }, quick(t('doubleTile', { n: pts(b.value) }), b.value), quick(t('betHalf'), Math.floor(b.max / 2)), quick(t('betAll'), b.max)),
       h('p', { id: 'final-error', class: 'error', role: 'alert' }),
       h('button', { class: 'btn btn-ink', type: 'submit' }, t('placeBet')),
     ),
-    b.bet != null ? h('p', { class: 'small' }, t('doubleBetPlaced', { n: b.bet })) : null,
+    b.bet != null ? h('p', { class: 'small' }, t('doubleBetPlaced', { n: pts(b.bet) })) : null,
   ];
 }
 
@@ -546,13 +546,13 @@ function wagerStage() {
           input.blur();
         },
       },
-      h('label', { for: 'bet' }, t('yourBet'), ' ', h('span', { class: 'muted' }, t('youHave', { n: f.maxWager }))),
+      h('label', { for: 'bet' }, t('yourBet'), ' ', h('span', { class: 'muted' }, t('youHave', { n: pts(f.maxWager) }))),
       input,
       h('div', { class: 'chips' }, quick(t('betNothing'), 0), quick(t('betHalf'), Math.floor(f.maxWager / 2)), quick(t('betAll'), f.maxWager)),
       h('p', { id: 'final-error', class: 'error', role: 'alert' }),
       h('button', { class: 'btn btn-ink', type: 'submit' }, t('placeBet')),
     ),
-    f.wager != null ? h('p', { class: 'small' }, t('betPlaced', { n: f.wager })) : null,
+    f.wager != null ? h('p', { class: 'small' }, t('betPlaced', { n: pts(f.wager) })) : null,
   ];
 }
 
@@ -672,9 +672,9 @@ function render() {
     $('#me').replaceChildren(...[avatarEl(me.avatar, 'me-avatar'), h('span', { class: 'me-name' }, me.name)].filter(Boolean));
   }
   // New points count up (or down) to the new score.
-  if (shownScore?.id === me.id && shownScore.score !== me.score) countTo('score', shownCount('score', shownScore.score), me.score, { ms: 600, tick: false, format: (n) => t('points', { n }) });
+  if (shownScore?.id === me.id && shownScore.score !== me.score) countTo('score', shownCount('score', shownScore.score), me.score, { ms: 600, tick: false, format: (n) => t('points', { n: pts(n) }) });
   shownScore = { id: me.id, score: me.score };
-  $('#score').textContent = t('points', { n: shownCount('score', me.score) });
+  $('#score').textContent = t('points', { n: pts(shownCount('score', me.score)) });
   const key = stageKeyFor();
   if (key !== stageKey) {
     stageKey = key;

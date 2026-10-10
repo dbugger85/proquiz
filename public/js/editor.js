@@ -2,7 +2,7 @@
 import { validateSet, modeOf, MAX_CATEGORIES, MAX_QUESTIONS, MAX_SECTIONS, MAX_SECTION_QUESTIONS, MAX_OPTION, MIN_SECONDS, MAX_SECONDS, DEFAULT_SECONDS, rightSet } from '/lib/validate.js';
 import { buildRequest, parseReply, splitTopics, AiQuizError, DIFFICULTIES, FILL_DIFFICULTIES, MIN_SIZE, QUICK_SECTIONS, QUICK_PER_SECTION, gapsOf, guessLanguage, buildFillRequest, parseFill } from '/lib/aiquiz.js';
 import { SHAPES, OPTION_COLORS } from '/lib/quick.js';
-import { t, setLang, getLang, translatePage } from './i18n.js';
+import { t, pts, setLang, getLang, translatePage } from './i18n.js';
 import { $, h, fill, setGlass, savedGlass, shapeSvg, optionStyle, setBrand, ask, tell } from './ui.js';
 import { KINDS } from '/lib/crazy.js';
 import { ICONS } from './specials.js';
@@ -321,7 +321,7 @@ function boardParts(r) {
               'data-r': r,
               onclick: () => openQuestion(c, i, r),
             },
-            h('b', {}, String(q.value || '?')),
+            h('b', {}, q.value ? pts(q.value) : '?'),
             h('span', {}, snippet(q)),
             KINDS.includes(q.special) ? h('span', { class: `ed-special k-${q.special}`, title: t(`n-${q.special}`) }, ICONS[q.special]) : null,
           ),

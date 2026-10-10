@@ -1,6 +1,7 @@
 // Numbers that count up, and the Quick quiz's top 5 shuffling into place (TV and phones).
 // Only transform and opacity move and the numbers are plain text, so it stays cheap on a TV's browser.
 // It follows the system's "reduce motion" setting: then everything shows its end state at once.
+import { pts } from './i18n.js';
 
 // The top 5 (ms): the old list settles in, the points count up, then the rows glide to their new places.
 export const RANK_TIMES = { settle: 600, count: 900, move: 550, gap: 150 };
@@ -56,7 +57,7 @@ const counts = new Map(); // key → { value, p, stop }
 // What a number should show now: the running count's value, or the real one.
 export const shownCount = (key, value) => counts.get(key)?.value ?? value;
 
-export function countTo(key, from, to, { ms = 500, delay = 0, tick = true, format = String } = {}) {
+export function countTo(key, from, to, { ms = 500, delay = 0, tick = true, format = pts } = {}) {
   counts.get(key)?.stop();
   if (from === to || reducedMotion()) return;
   const entry = { value: from, p: 0 };
@@ -118,7 +119,7 @@ export function animateRanks(ol, before, after, { swap = () => {}, reduced = red
       const li = row(e.id);
       if (!li) continue;
       li.querySelector('.rank-n').textContent = String(e.rank);
-      li.querySelector('.rank-score').textContent = String(e.score);
+      li.querySelector('.rank-score').textContent = pts(e.score);
       li.classList.remove('waiting');
       ol.append(li);
     }
@@ -157,7 +158,7 @@ export function animateRanks(ol, before, after, { swap = () => {}, reduced = red
         const from = e.score - e.delta;
         stops.push(
           tween(T.count, (k, p) => {
-            score.textContent = String(Math.round(from + e.delta * k));
+            score.textContent = pts(Math.round(from + e.delta * k));
             tick.p = p;
           }),
         );

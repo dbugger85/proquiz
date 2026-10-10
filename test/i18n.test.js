@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
-import { STRINGS } from '../public/js/i18n.js';
+import { STRINGS, pts } from '../public/js/i18n.js';
 
 test('every text exists in both English and Norwegian', () => {
   const en = Object.keys(STRINGS.en);
@@ -31,4 +31,16 @@ test('every text used in the pages and scripts exists', () => {
   const codes = new Set([...server.matchAll(/(?:code: |GameError\()'([\w-]+)'/g)].map((m) => m[1]));
   const untranslated = [...codes].filter((c) => c !== 'unknown-action' && !(`err-${c}` in STRINGS.en));
   assert.deepEqual(untranslated, []);
+});
+
+test('points get a no-break space between the thousands', () => {
+  const nb = ' ';
+  assert.equal(pts(0), '0');
+  assert.equal(pts(957), '957');
+  assert.equal(pts(1250), `1${nb}250`);
+  assert.equal(pts(12500), `12${nb}500`);
+  assert.equal(pts(1234567), `1${nb}234${nb}567`);
+  assert.equal(pts(-1500), `-1${nb}500`);
+  assert.equal(pts(-500), '-500');
+  assert.equal(pts(undefined), '');
 });

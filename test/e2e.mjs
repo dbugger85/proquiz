@@ -554,7 +554,7 @@ try {
   await answerModal(host);
   await host.waitForSelector('body[data-phase=round2]');
   await tv.waitForSelector('.tv-round2');
-  assert.match(await tv.textContent('.tv-round2'), /Round 2[\s\S]*up to 1000 points[\s\S]*Blue Steel has the fewest points/);
+  assert.match(await tv.textContent('.tv-round2'), /Round 2[\s\S]*up to 1\s000 points[\s\S]*Blue Steel has the fewest points/);
   await blue.waitForFunction(() => document.body.textContent.includes('you pick first'));
   await red.waitForFunction(() => document.body.textContent.includes('Blue Steel has the fewest points'));
   await tv.waitForTimeout(600);
@@ -564,11 +564,11 @@ try {
   await host.keyboard.press('Space');
   await host.waitForSelector('body[data-phase=board]');
   await tv.waitForSelector('.tv-picks .round-tag');
-  assert.match(await tv.textContent('.tv-board'), /Capitals II[\s\S]*1000/);
+  assert.match(await tv.textContent('.tv-board'), /Capitals II[\s\S]*1\s000/);
   assert.doesNotMatch(await tv.textContent('body'), /Round 2 answer/);
   // Blue picks a round 2 question on its phone.
   await blue.click('.pick-board button:has-text("Capitals II")');
-  await blue.click('.pick-values button:has-text("1000")');
+  await blue.click('.pick-values button:has-text("1 000")');
   await host.waitForSelector('body[data-phase=reading]');
   assert.match(await host.textContent('.host-q'), /Round 2 question 5\?[\s\S]*Round 2 answer 5/);
   assert.match(await tv.textContent('.tv-q'), /Round 2 question 5\?/);
@@ -703,7 +703,7 @@ try {
   // Round 2: tick it, and a second board appears with double points. Its tiles open like the others.
   await ed.check('#ed-round2 input[name=hasRound2]');
   await ed.waitForSelector('#ed-round2 .ed-tile[data-r="2"]');
-  assert.match(await ed.textContent('#ed-round2 .ed-col:nth-child(1)'), /200[\s\S]*400[\s\S]*600[\s\S]*800[\s\S]*1000/);
+  assert.match(await ed.textContent('#ed-round2 .ed-col:nth-child(1)'), /200[\s\S]*400[\s\S]*600[\s\S]*800[\s\S]*1\s000/);
   await ed.fill('#ed-round2 .ed-col:nth-child(2) .ed-cat input', 'Bands');
   await ed.click('#ed-round2 .ed-col:nth-child(2) .ed-tile:nth-of-type(1)');
   await ed.waitForSelector('#q-dialog[open]');

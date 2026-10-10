@@ -1,7 +1,7 @@
 // The TV screen. Shows the game to the room; never gets an answer before the host reveals it.
 import { ranking, COLORS, unveilProgress, SHAPES, OPTION_COLORS } from '/lib/game.js';
 import { connect } from './net.js';
-import { t, setLang, translatePage, fastestTitle, secondsText } from './i18n.js';
+import { t, pts, setLang, translatePage, fastestTitle, secondsText } from './i18n.js';
 import { $, h, qrSvg, shortUrl, urlNodes, countdown, runCountdowns, teamStyle, setGlass, shapeSvg, optionStyle, timerTotal, setBrand, brandLogo } from './ui.js';
 import { unlockAudio, audioReady, playEvent, playSound, startTicks, sounds } from './sounds.js';
 import { animateRanks, cancelRanks, countTo, shownCount, setTickSound, reducedMotion } from './rankanim.js';
@@ -146,8 +146,8 @@ function renderBoard() {
           h('div', { class: 'cat' }, cat.name),
           cat.questions.map((q, i) =>
             embedded && !view.used[c][i]
-              ? h('button', { class: 'tile', type: 'button', onclick: () => toHost({ type: 'pick', c, i }) }, String(q.value))
-              : h('div', { class: `tile${view.used[c][i] ? ' used' : ''}` }, String(q.value)),
+              ? h('button', { class: 'tile', type: 'button', onclick: () => toHost({ type: 'pick', c, i }) }, pts(q.value))
+              : h('div', { class: `tile${view.used[c][i] ? ' used' : ''}` }, pts(q.value)),
           ),
         ),
       ),
@@ -177,11 +177,11 @@ function band() {
   if (p === 'revealed') {
     const r = q.result;
     if (r.type === 'correct') {
-      const won = q.won ? ` +${q.won} ${ICONS.jackpot}` : '';
-      return [h('span', { class: 'plate buzzed-name', style: teamStyle(teamById(r.teamId)) }, face(teamById(r.teamId)), h('span', {}, `${teamById(r.teamId)?.name} +${q.value}${won}`))];
+      const won = q.won ? ` +${pts(q.won)} ${ICONS.jackpot}` : '';
+      return [h('span', { class: 'plate buzzed-name', style: teamStyle(teamById(r.teamId)) }, face(teamById(r.teamId)), h('span', {}, `${teamById(r.teamId)?.name} +${pts(q.value)}${won}`))];
     }
     // Daily Double lost: the whole bet goes.
-    if (q.fullPenalty && q.lockedOut.includes(q.solo)) return [h('span', { class: 'plate buzzed-name', style: teamStyle(teamById(q.solo)) }, face(teamById(q.solo)), h('span', {}, `${teamById(q.solo)?.name} −${q.value}`))];
+    if (q.fullPenalty && q.lockedOut.includes(q.solo)) return [h('span', { class: 'plate buzzed-name', style: teamStyle(teamById(q.solo)) }, face(teamById(q.solo)), h('span', {}, `${teamById(q.solo)?.name} −${pts(q.value)}`))];
     return [h('span', { class: 'muted' }, r.type === 'timeout' ? t('resultTimeout') : t('resultNobody'))];
   }
   return [];
@@ -256,7 +256,7 @@ function renderBoom() {
     { class: `tv-boom${fresh ? ' bang' : ''}` },
     h('span', { class: 'boom-icon' }, '💥'),
     h('h1', {}, 'BOOM!'),
-    team ? h('span', { class: 'plate buzzed-name', style: teamStyle(team) }, face(team), h('span', {}, `${team.name} −${q.result.amount}`)) : null,
+    team ? h('span', { class: 'plate buzzed-name', style: teamStyle(team) }, face(team), h('span', {}, `${team.name} −${pts(q.result.amount)}`)) : null,
   );
 }
 
@@ -328,7 +328,7 @@ function renderQuestion() {
   return h(
     'div',
     { class: `tv-q${picture ? ' has-image' : ''}`, style: zoom ? '' : 'animation: none' },
-    h('div', { class: 'where' }, h('span', {}, view.set.categories[q.c].name), q.special ? h('span', { class: `special-badge k-${q.special}` }, badgeFor(view)) : null, h('b', {}, String(q.value))),
+    h('div', { class: 'where' }, h('span', {}, view.set.categories[q.c].name), q.special ? h('span', { class: `special-badge k-${q.special}` }, badgeFor(view)) : null, h('b', {}, pts(q.value))),
     blocks ? unveilCanvas(q) : img(picture, `q-img${q.answerImage ? ' reveal-img' : ''}`),
     picture ? null : clipViz(),
     q.question ? h('p', { class: 'question' }, q.question) : h('div', { class: 'spacer' }),
@@ -472,8 +472,8 @@ function rankRow(e, i, was = e) {
       { class: 'plate rank-plate' },
       rankFace(e, was.rank),
       h('span', { class: 'rank-name' }, e.name),
-      e.delta ? h('span', { class: 'rank-delta' }, `+${e.delta}`) : null,
-      h('span', { class: 'rank-score' }, String(was.score)),
+      e.delta ? h('span', { class: 'rank-delta' }, `+${pts(e.delta)}`) : null,
+      h('span', { class: 'rank-score' }, pts(was.score)),
     ),
   );
 }
@@ -522,7 +522,7 @@ function quickSection(fresh) {
           'div',
           { class: 'standings' },
           h('h2', {}, t('quickStandings')),
-          h('ol', { class: `standings-list${shown.length > 5 ? ' two' : ''}` }, shown.map((e, i) => h('li', { class: 'plate', style: `${teamStyle(e)}; --i: ${i}` }, rankFace(e, e.rank), h('span', { class: 'rank-name' }, e.name), h('b', {}, String(e.score))))),
+          h('ol', { class: `standings-list${shown.length > 5 ? ' two' : ''}` }, shown.map((e, i) => h('li', { class: 'plate', style: `${teamStyle(e)}; --i: ${i}` }, rankFace(e, e.rank), h('span', { class: 'rank-name' }, e.name), h('b', {}, pts(e.score))))),
           all.length > shown.length ? h('p', { class: 'final-note' }, t('quickAndMore', { n: all.length - shown.length })) : null,
         )
       : [h('ul', { class: 'final-teams' }, all.map((e) => h('li', { class: 'plate', style: teamStyle(e) }, face(e), h('span', {}, e.name)))), h('p', { class: 'final-note' }, t('quickPlayersReady'))],
@@ -545,7 +545,7 @@ function quickPodium(fresh) {
       { class: `step p${n}`, style: teamStyle(e) },
       face(e, 'step-face'),
       h('span', { class: 'plate step-name' }, e.name),
-      h('div', { class: 'step-block' }, h('span', { class: 'step-place' }, t(`quickPlace${e.rank > 3 ? 3 : e.rank}`)), h('b', { 'data-count': key }, String(shownCount(key, e.score)))),
+      h('div', { class: 'step-block' }, h('span', { class: 'step-place' }, t(`quickPlace${e.rank > 3 ? 3 : e.rank}`)), h('b', { 'data-count': key }, pts(shownCount(key, e.score)))),
     );
   };
   return h(
@@ -555,7 +555,7 @@ function quickPodium(fresh) {
     h('h1', {}, all.length ? (tie ? t('tie') : t('winner', { name: all[0].name })) : t('gameOver')),
     h('div', { class: 'podium' }, step(podium[1], 2), step(podium[0], 1), step(podium[2], 3)),
     all.length > 3
-      ? h('ol', { class: 'podium-rest' }, all.slice(3, 15).map((e) => h('li', { style: teamStyle(e) }, h('span', {}, `${e.rank}.`), face(e), ` ${e.name} `, h('b', {}, String(e.score)))))
+      ? h('ol', { class: 'podium-rest' }, all.slice(3, 15).map((e) => h('li', { style: teamStyle(e) }, h('span', {}, `${e.rank}.`), face(e), ` ${e.name} `, h('b', {}, pts(e.score)))))
       : null,
   );
 }
@@ -650,7 +650,7 @@ function renderFinal() {
           { class: `judge-card${r ? ' shown' : ''}${verdict === true ? ' right' : verdict === false ? ' wrong' : ''}`, style: teamStyle(tm) },
           h('span', { class: 'who' }, face(tm), h('span', {}, tm.name)),
           h('span', { class: 'what' }, r ? r.answer || '—' : '?'),
-          r ? h('span', { class: 'bet' }, r.wager === 0 ? '0' : `${verdict ? '+' : '−'}${r.wager}`) : null,
+          r ? h('span', { class: 'bet' }, r.wager === 0 ? '0' : `${verdict ? '+' : '−'}${pts(r.wager)}`) : null,
         );
       }),
     ),
@@ -669,7 +669,7 @@ function renderRound2() {
     { class: 'tv-final tv-round2', style: zoom ? '' : 'animation: none' },
     h('p', { class: 'final-kicker' }, t('round2Kicker')),
     h('h1', { class: 'final-cat' }, t('round2Title')),
-    h('p', { class: 'final-note' }, t('round2UpTo', { n: top })),
+    h('p', { class: 'final-note' }, t('round2UpTo', { n: pts(top) })),
     h('ul', { class: 'round2-cats' }, view.set.categories.map((cat) => h('li', {}, cat.name))),
     picker ? h('p', { class: 'plate round2-picker', style: teamStyle(picker) }, face(picker), h('span', {}, t('round2PicksFirst', { name: picker.name }))) : null,
   );
@@ -692,7 +692,7 @@ function renderOver(fresh) {
     { class: 'tv-over' },
     brandBlock(),
     h('h1', {}, ranked.length ? (tie ? t('tie') : t('winner', { name: ranked[0].name })) : t('gameOver')),
-    h('ol', {}, ranked.map((tm) => h('li', { class: 'plate', style: teamStyle(tm) }, h('span', { class: 'over-name' }, face(tm), h('span', {}, tm.name)), h('span', { 'data-count': key(tm) }, String(shownCount(key(tm), tm.score)))))),
+    h('ol', {}, ranked.map((tm) => h('li', { class: 'plate', style: teamStyle(tm) }, h('span', { class: 'over-name' }, face(tm), h('span', {}, tm.name)), h('span', { 'data-count': key(tm) }, pts(shownCount(key(tm), tm.score)))))),
   );
 }
 
@@ -718,7 +718,7 @@ function renderScores(bumped) {
         },
         face(team),
         h('span', { class: 'name' }, team.name),
-        h('span', { class: 'pts', 'data-count': `strip-${team.id}` }, String(shownCount(`strip-${team.id}`, team.score))),
+        h('span', { class: 'pts', 'data-count': `strip-${team.id}` }, pts(shownCount(`strip-${team.id}`, team.score))),
       ),
     ),
   );

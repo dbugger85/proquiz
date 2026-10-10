@@ -52,7 +52,7 @@ async function topFive(page, name) {
   await page.waitForSelector('body[data-rankanim=done]', { state: 'attached', timeout: 4000 });
   await page.waitForTimeout(350); // the arrows fade in
   const top = srv.hub.getState().teams.toSorted((a, b) => b.score - a.score).slice(0, 5);
-  const rows = await page.$$eval('.top-list li', (els) => els.map((li) => [li.dataset.id, Number(li.querySelector('.rank-score').textContent)]));
+  const rows = await page.$$eval('.top-list li', (els) => els.map((li) => [li.dataset.id, Number(li.querySelector('.rank-score').textContent.replace(/\s/g, ''))]));
   assert.deepEqual(rows, top.map((tm) => [tm.id, tm.score]), 'the top 5 ends in the right order with the right points');
   await shot(page, name);
 }
@@ -223,7 +223,7 @@ try {
   assert.match(await alex.textContent('.gap-line'), /points ahead of/);
   // The phone's own points counted up to the new score.
   const alexScore = state().teams.find((tm) => tm.name === 'Alex').score;
-  await alex.waitForFunction((n) => document.querySelector('#score').textContent === `${n} points`, alexScore, { timeout: 3000 });
+  await alex.waitForFunction((n) => document.querySelector('#score').textContent === `${n} points`, String(alexScore).replace(/\B(?=(\d{3})+$)/g, '\u00a0'), { timeout: 3000 });
   await shot(alex, 'quick-phone-ranks');
 
   // ----- Question 2 has two right answers (Dolphin and Bat): either counts. The host stops the clock. -----
@@ -299,7 +299,7 @@ try {
   await tv.waitForSelector('.podium');
   await tv.waitForTimeout(4500); // 3rd, 2nd, then 1st rise, their points counting up
   assert.match(await tv.textContent('.podium'), /Alex/);
-  const podium = await tv.$$eval('.step:not(.empty)', (els) => els.map((el) => [el.querySelector('.step-name').textContent, Number(el.querySelector('.step-block b').textContent)]));
+  const podium = await tv.$$eval('.step:not(.empty)', (els) => els.map((el) => [el.querySelector('.step-name').textContent, Number(el.querySelector('.step-block b').textContent.replace(/\s/g, ''))]));
   for (const [name, pts] of podium) assert.equal(pts, state().teams.find((tm) => tm.name === name).score, `${name} on the podium`);
   assert.equal(await tv.locator('.podium .step .step-face').count(), podium.filter(([name]) => state().teams.find((tm) => tm.name === name).avatar).length);
   await shot(tv, 'quick-tv-podium');

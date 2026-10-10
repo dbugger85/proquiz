@@ -1357,6 +1357,14 @@ export function getLang() {
   return lang;
 }
 
+// Points with a space between the thousands: "12 500", "-1 500" (both languages). A no-break space, so a
+// score never wraps onto two lines. Only for points: not years, seconds, question numbers or a PIN.
+export function pts(n) {
+  if (typeof n !== 'number' || !Number.isFinite(n)) return String(n ?? '');
+  const s = String(Math.abs(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0');
+  return n < 0 ? `-${s}` : s;
+}
+
 export function t(key, params = {}) {
   const s = STRINGS[lang][key] ?? STRINGS.en[key] ?? key;
   return s.replace(/\{(\w+)\}/g, (_, k) => params[k] ?? '');
