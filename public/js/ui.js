@@ -81,3 +81,23 @@ export const teamStyle = (team) => `--team: ${team.color}; --team-ink: ${inkFor(
 export function fill(el, ...children) {
   el.replaceChildren(...children.flat(Infinity).filter((c) => c != null && c !== false));
 }
+
+// The frosted "glass" look (setting `glass`): a class on <body> that style.css reacts to. The host remembers the
+// choice in localStorage so the editor, which has no game state, can look the same.
+const GLASS_KEY = 'proquiz.glass';
+export function setGlass(on, { remember = false } = {}) {
+  document.body.classList.toggle('glass', Boolean(on));
+  if (remember) {
+    try {
+      localStorage.setItem(GLASS_KEY, on ? '1' : '0');
+    } catch {}
+  }
+}
+export function savedGlass(fallback = true) {
+  try {
+    const v = localStorage.getItem(GLASS_KEY);
+    return v === null ? fallback : v === '1';
+  } catch {
+    return fallback;
+  }
+}

@@ -1,8 +1,8 @@
 // A team's phone: join with a name and colour, then act as the buzzer.
-import { COLORS } from '/lib/game.js';
+import { COLORS, newColor } from '/lib/game.js';
 import { connect } from './net.js';
 import { t, setLang, guessLang, translatePage } from './i18n.js';
-import { $, h, inkFor, countdown, runCountdowns } from './ui.js';
+import { $, h, inkFor, countdown, runCountdowns, setGlass } from './ui.js';
 import { keepAwake } from './wake.js';
 
 const KEY = 'proquiz.team'; // { id, name, color } — survives reloads, so a phone re-joins as the same team
@@ -62,7 +62,7 @@ document.addEventListener('pointerdown', keepAwake);
 function renderSwatches() {
   const taken = new Set((view?.teams ?? []).filter((tm) => tm.id !== saved.id).map((tm) => tm.color));
   const box = $('#swatches');
-  const current = box.querySelector('input:checked')?.value ?? saved.color;
+  const current = box.querySelector('input:checked')?.value ?? newColor(saved.color);
   box.replaceChildren(
     ...COLORS.map((color, n) =>
       h(
@@ -391,6 +391,7 @@ function react() {
 
 function render() {
   if (view) setLang(view.lang);
+  if (view) setGlass(view.settings.glass);
   translatePage();
   const me = view?.you;
   const showJoin = welcomed && (!me || editing);

@@ -85,7 +85,8 @@ Download the zip for your computer from the [latest release](https://github.com/
    - **At the top:** choose the quiz and the language, and tick round 2 and the final round on or off (with the time for the final answer).
    - **Crazy mode** (already open): off, a little or lots, and which specials to use.
    - **Rules:** what a wrong answer costs, the timers, picking on the phone and fairer buzzing.
-   - **Sound:** effects, music and the volume. **Your own music**, at the very end, lets you choose a music file for each moment (lobby, between questions, thinking, final, after the game).
+   - **Sound:** effects, music and the volume. **Your own music**, at the end of this section, lets you choose a music file for each moment (lobby, between questions, thinking, final, after the game).
+   - **Look:** the **Glass look** (on by default): frosted, see-through panels with a soft glow slowly moving behind them, on the TV, the phones and the laptop. Untick it if the TV or an older laptop stutters, and every screen switches to the plain look at once.
 6. **Round 2:** if the quiz has a round 2, **Play round 2** is ticked in the lobby. Untick it to skip it tonight.
 7. **Fairer buzzing:** tick it if close calls matter. Normally the laptop goes by whose buzz *arrives* first, so a phone with weak Wi-Fi can lose by a few hundredths of a second. With this on, ProQuiz measures how slow each phone's Wi-Fi is (you'll see it in milliseconds next to each team) and goes by who *pressed* first. The winner shows a tiny moment later (0.15 s), which most people won't notice.
 8. **Picking on the phone:** with **Teams pick the next question on their phone** ticked (it is by default), the team whose turn it is chooses a category and then the points on its phone, and the question opens on the TV at once. You can always click a tile on the laptop instead, for example if their phone has run out of battery.

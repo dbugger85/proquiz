@@ -5,7 +5,7 @@
 import { ranking, COLORS, KINDS, unveilProgress, MUSIC_MOODS, maxBet } from '/lib/game.js';
 import { connect } from './net.js';
 import { t, setLang, translatePage } from './i18n.js';
-import { $, h, fill, qrSvg, shortUrl, countdown, runCountdowns, teamStyle } from './ui.js';
+import { $, h, fill, qrSvg, shortUrl, countdown, runCountdowns, teamStyle, setGlass } from './ui.js';
 import { unlockAudio, audioReady, playEvent, playSound, startTicks } from './sounds.js';
 import { syncClip, stopClip } from './clip.js';
 import { syncMusic, stopMusic } from './music.js';
@@ -169,6 +169,7 @@ function renderSummaries() {
   });
   const own = MUSIC_MOODS.filter((m) => st.musicFiles[m]).length;
   $('#music-files-status').textContent = own ? t('ownMusicSome', { n: own, total: MUSIC_MOODS.length }) : t('ownMusicNone');
+  $('#look-status').textContent = t('lookSummary', { state: t(st.glass ? 'stateOn' : 'stateOff') });
 }
 
 // Your own music: a file per moment, or the built-in tune.
@@ -785,6 +786,7 @@ function renderGame() {
 
 function render() {
   document.body.dataset.phase = view.phase; // handy for the browser test
+  setGlass(view.settings.glass, { remember: true }); // the editor follows this choice
   setLang(view.settings.lang);
   translatePage();
   renderQr();

@@ -525,6 +525,19 @@ test('bad settings are refused', () => {
   assert.equal(apply(s, { type: 'settings', settings: { penalty: 'full', lang: 'no' } }).settings.penalty, 'full');
 });
 
+test('the glass look is a setting: on by default, plain on/off, and the phones and the TV hear about it', () => {
+  let s = started();
+  assert.equal(s.settings.glass, true);
+  assert.equal(phoneView(s, 'r').settings.glass, true);
+  assert.equal(displayView(s).settings.glass, true);
+  s = apply(s, { type: 'settings', settings: { glass: false } }); // also mid-game, like the sound and music switches
+  assert.equal(s.settings.glass, false);
+  assert.equal(phoneView(s, 'r').settings.glass, false);
+  assert.equal(displayView(s).settings.glass, false);
+  assert.equal(apply(s, { type: 'settings', settings: { glass: 'yes' } }).settings.glass, true); // anything else is just true/false
+  assert.equal(newGame(small, { glass: 0 }).settings.glass, false);
+});
+
 test('restart keeps the teams, clears scores and the board', () => {
   let s = run(armedAt(started()), { type: 'buzz', teamId: 'r', now: 1100 }, { type: 'correct' });
   s = apply(s, { type: 'restart' });
@@ -777,4 +790,10 @@ test('round 2 gets its own specials, and the jackpot pot carries over', () => {
   s = run(s, { type: 'next', now: 0 }, { type: 'pick', c: 1, i: 0 });
   assert.equal(s.phase, 'special');
   assert.equal(phoneView(s, s.picker).betting.max, 400);
+});
+
+test('a team with a colour from before version 1.7 gets its new version', () => {
+  const s = apply(newGame(sample), { type: 'join', teamId: 'r', name: 'Old Red', color: '#e53935' });
+  assert.equal(s.teams[0].color, COLORS[0]);
+  assert.throws(() => apply(newGame(sample), { type: 'join', teamId: 'x', name: 'X', color: '#123456' }), GameError);
 });

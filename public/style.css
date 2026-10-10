@@ -44,6 +44,17 @@
   --r-m: 16px; /* plates, tiles */
   --r-l: 28px; /* big stage panels */
   --pill: 999px; /* buttons */
+
+  /* The glass look (setting `glass`, class `glass` on <body>; the block at the end of this file). */
+  --lg-blur: 22px; /* how frosted the see-through panels are */
+  --lg-sat: 1.7; /* colours behind the glass come through a little richer */
+  --lg-tint: rgb(28 24 76 / 0.42); /* the panel's own colour: dark enough for white text on anything */
+  --lg-tint-deep: rgb(12 10 40 / 0.62); /* bars, side panels and dialogs */
+  --lg-edge: rgb(255 255 255 / 0.22); /* rim light around a glass edge */
+  --lg-shine: rgb(255 255 255 / 0.5); /* the bright line along the top edge */
+  --glow-a: var(--light); /* the glow behind the glass: the TV sets these to the first teams' colours */
+  --glow-b: var(--flare);
+  --glow-c: #38c8ff;
   color-scheme: dark;
 }
 
@@ -2841,4 +2852,290 @@ body.display.embedded {
 #ed-round2 > small {
   display: block;
   margin: 0.3rem 0 1rem;
+}
+
+/* ---------- the glass look (setting `glass`, on by default) ----------
+   Frosted, see-through panels (backdrop-filter) with a bright top edge and a rim light, over a soft glow that
+   drifts slowly behind them. The real blur is spent only on the big panels, bars and dialogs and a few phone
+   controls; the 30 TV tiles, the buttons and the pills fake it with gradients and highlights, so the TV stays
+   smooth. The glow moves with transform only (cheap for the GPU) and stops with prefers-reduced-motion. With
+   the setting off, none of this applies and the plain look above is unchanged. */
+
+body.glass {
+  --r-s: 12px;
+  --r-m: 20px;
+  --r-l: 32px;
+}
+body.glass.display {
+  --lg-tint: rgb(14 11 46 / 0.55); /* darker on the TV: the question must read from the sofa */
+}
+body.glass .phone-team {
+  --lg-tint: rgb(0 0 0 / 0.16); /* on a phone the glass sits on the team colour, so no violet tint */
+  --lg-tint-deep: rgb(0 0 0 / 0.3);
+  --lg-edge: rgb(255 255 255 / 0.35);
+  --lg-shine: rgb(255 255 255 / 0.6);
+}
+
+/* The glow: two layers, each with two soft colour spots, drifting for about a minute. They are drawn at 70% of
+   the screen and scaled up, so the GPU keeps two small pictures, not two huge ones. */
+body.glass .host,
+body.glass.display,
+body.glass .phone-team {
+  position: relative;
+  isolation: isolate; /* the glow (z-index -1) stays above this element's background and below its content */
+}
+body.glass .host::before,
+body.glass .host::after,
+body.glass.display::before,
+body.glass.display::after,
+body.glass .phone-team::before,
+body.glass .phone-team::after {
+  content: '';
+  position: fixed;
+  left: 15%;
+  top: 15%;
+  width: 70%;
+  height: 70%;
+  z-index: -1;
+  pointer-events: none;
+  will-change: transform;
+}
+body.glass .host::before,
+body.glass.display::before {
+  background:
+    radial-gradient(28% 32% at 30% 35%, color-mix(in srgb, var(--glow-a) 55%, transparent), transparent 72%),
+    radial-gradient(22% 26% at 76% 72%, color-mix(in srgb, var(--glow-c) 42%, transparent), transparent 72%);
+  animation: glow-a 52s ease-in-out infinite alternate;
+}
+body.glass .host::after,
+body.glass.display::after {
+  background:
+    radial-gradient(26% 30% at 70% 24%, color-mix(in srgb, var(--glow-b) 46%, transparent), transparent 72%),
+    radial-gradient(20% 24% at 24% 80%, color-mix(in srgb, var(--glow-a) 30%, transparent), transparent 72%);
+  animation: glow-b 67s ease-in-out infinite alternate;
+}
+/* On the phone the glow is light and shade on the team colour. */
+body.glass .phone-team::before {
+  background: radial-gradient(30% 34% at 30% 30%, rgb(255 255 255 / 0.3), transparent 72%);
+  animation: glow-a 44s ease-in-out infinite alternate;
+}
+body.glass .phone-team::after {
+  background: radial-gradient(28% 32% at 72% 70%, rgb(0 0 0 / 0.22), transparent 72%);
+  animation: glow-b 58s ease-in-out infinite alternate;
+}
+@keyframes glow-a {
+  from {
+    transform: translate3d(-6%, -4%, 0) scale(2.2);
+  }
+  50% {
+    transform: translate3d(4%, 5%, 0) scale(2.45);
+  }
+  to {
+    transform: translate3d(7%, -5%, 0) scale(2.25);
+  }
+}
+@keyframes glow-b {
+  from {
+    transform: translate3d(5%, 4%, 0) scale(2.3);
+  }
+  50% {
+    transform: translate3d(-5%, -3%, 0) scale(2.2);
+  }
+  to {
+    transform: translate3d(-3%, 6%, 0) scale(2.5);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.glass .host::before,
+  body.glass .host::after,
+  body.glass.display::before,
+  body.glass.display::after,
+  body.glass .phone-team::before,
+  body.glass .phone-team::after {
+    animation: none; /* the glow stays, but still */
+  }
+}
+
+/* Real glass: big panels, bars, dialogs, and the few phone controls that sit on the team colour. */
+body.glass .host-bar,
+body.glass .settings,
+body.glass .host-side,
+body.glass .controls,
+body.glass .help-card,
+body.glass .resume,
+body.glass .special-card,
+body.glass .ed-side,
+body.glass .ed-dialog,
+body.glass .sound-unlock,
+body.glass .offline-banner,
+body.glass .tv-q,
+body.glass .tv-special,
+body.glass .tv-boom,
+body.glass .reel,
+body.glass .buzzer:not(.live),
+body.glass .pick-cat,
+body.glass .pick-tile:not(.used),
+body.glass .phone-team .score,
+body.glass .phone-team .kicker {
+  background-color: var(--lg-tint);
+  background-image: linear-gradient(180deg, rgb(255 255 255 / 0.13), rgb(255 255 255 / 0.03) 38%, transparent 75%);
+  -webkit-backdrop-filter: blur(var(--lg-blur)) saturate(var(--lg-sat));
+  backdrop-filter: blur(var(--lg-blur)) saturate(var(--lg-sat));
+  border-color: var(--lg-edge);
+  box-shadow:
+    inset 0 1px 0 var(--lg-shine),
+    inset 0 -1px 0 rgb(255 255 255 / 0.06),
+    inset 0 0 0 1px rgb(255 255 255 / 0.07),
+    0 14px 44px rgb(0 0 0 / 0.28);
+}
+body.glass .host-bar,
+body.glass .host-side,
+body.glass .controls,
+body.glass .ed-side,
+body.glass .help-card,
+body.glass .ed-dialog,
+body.glass .sound-unlock,
+body.glass .offline-banner {
+  background-color: var(--lg-tint-deep);
+}
+body.glass .host-bar,
+body.glass .host-side,
+body.glass .controls,
+body.glass .ed-side {
+  box-shadow: none; /* edge-to-edge bars: no drop shadow, no top line */
+}
+body.glass .host-bar {
+  border-bottom-color: var(--lg-edge);
+}
+body.glass .tv-q,
+body.glass .tv-special,
+body.glass .tv-boom {
+  box-shadow:
+    inset 0 0.2vh 0 var(--lg-shine),
+    inset 0 0 0 1px rgb(255 255 255 / 0.1),
+    0 2vh 8vh rgb(0 0 0 / 0.35);
+}
+body.glass .tv-special {
+  background-image: radial-gradient(60% 60% at 50% 40%, color-mix(in srgb, var(--k) 32%, transparent), transparent 70%);
+}
+body.glass .tv-boom {
+  background-image: radial-gradient(55% 55% at 50% 45%, rgb(255 77 77 / 0.45), transparent 70%);
+}
+body.glass .reel {
+  box-shadow: inset 0 0 0 0.6vh var(--k), 0 0 10vh color-mix(in srgb, var(--k) 45%, transparent);
+}
+body.glass .buzzer:not(.live) {
+  box-shadow: inset 0 2px 0 var(--lg-shine), inset 0 0 0 3px rgb(255 255 255 / 0.3), 0 16px 40px rgb(0 0 0 / 0.22);
+}
+body.glass .pick-tile:not(.used) {
+  box-shadow: inset 0 1px 0 var(--lg-shine), inset 0 0 0 1px rgb(255 255 255 / 0.2), 0 8px 24px rgb(0 0 0 / 0.18);
+}
+body.glass .ed-dialog-actions {
+  background: linear-gradient(180deg, transparent, rgb(14 11 46 / 0.88) 30%);
+}
+body.glass .ed-dialog::backdrop,
+body.glass .help {
+  background: rgb(7 6 26 / 0.55);
+  backdrop-filter: blur(8px);
+}
+
+/* Fake glass (no blur): the TV board's tiles, the host's tiles, buttons, pills, chips and inputs. */
+body.glass .tv-board .tile:not(.used) {
+  background:
+    radial-gradient(120% 70% at 20% 0%, rgb(255 255 255 / 0.14), transparent 60%),
+    linear-gradient(180deg, rgb(255 255 255 / 0.17), rgb(255 255 255 / 0.05) 55%, rgb(255 255 255 / 0.09));
+  box-shadow:
+    inset 0 0.15vh 0 var(--lg-shine),
+    inset 0 0 0 1px rgb(255 255 255 / 0.14),
+    inset 0 -1.2vh 2vh rgb(255 255 255 / 0.04),
+    0 1vh 3vh rgb(0 0 0 / 0.25);
+  text-shadow: 0 0.2vh 0.8vh rgb(0 0 0 / 0.3);
+}
+body.glass.embedded .tv-board button.tile:hover,
+body.glass.embedded .tv-board button.tile:focus-visible {
+  box-shadow: inset 0 0 0 0.5vh var(--light), 0 0 4vh rgb(111 85 255 / 0.5);
+}
+body.glass .host-board .tile:not(:disabled),
+body.glass .btn:not(.btn-primary):not(.btn-good):not(.btn-bad):not(.btn-quiet):not(.plate):not(.team-btn),
+body.glass .pills span,
+body.glass .chip,
+body.glass .ed-tile,
+body.glass .ed-media,
+body.glass .crazy-kinds,
+body.glass .round2-cats li,
+body.glass .tv-q .where b,
+body.glass .tv-lobby .call-url b,
+body.glass .host-q .where b,
+body.glass .judge-card:not(.shown) {
+  background-image: linear-gradient(180deg, rgb(255 255 255 / 0.2), rgb(255 255 255 / 0.06) 45%, rgb(255 255 255 / 0.03));
+  border-color: var(--lg-edge);
+  box-shadow: inset 0 1px 0 var(--lg-shine), inset 0 0 0 1px rgb(255 255 255 / 0.06), 0 6px 18px rgb(0 0 0 / 0.2);
+}
+body.glass .pills input:checked + span,
+body.glass .btn-primary {
+  background-image: linear-gradient(180deg, #fff, #ece9ff);
+  box-shadow: inset 0 1px 0 #fff, 0 8px 28px rgb(111 85 255 / 0.45);
+}
+body.glass .btn-good,
+body.glass .btn-bad {
+  background-image: linear-gradient(180deg, rgb(255 255 255 / 0.28), rgb(255 255 255 / 0.04) 50%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.55), 0 8px 24px rgb(0 0 0 / 0.25);
+}
+body.glass input[type='text'],
+body.glass input[type='number'],
+body.glass select,
+body.glass .ed-dialog textarea {
+  background-color: rgb(0 0 0 / 0.22);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08), inset 0 2px 6px rgb(0 0 0 / 0.25);
+}
+/* The phone's bet and answer fields stay white (dark text on them). */
+body.glass .final-form input {
+  background-color: rgb(255 255 255 / 0.92);
+  box-shadow: inset 0 1px 0 #fff, 0 8px 24px rgb(0 0 0 / 0.18);
+}
+
+/* Team plates get a shine along the top, so the loud colours look like coloured glass. */
+body.glass .plate,
+body.glass .tv-teams li,
+body.glass .tv-scores li,
+body.glass .tv-over li,
+body.glass .buzzed-name,
+body.glass .final-teams li,
+body.glass .judge-card.shown,
+body.glass .round2-picker,
+body.glass .special-team,
+body.glass .team-list li,
+body.glass .resume-teams li,
+body.glass .rank-list li,
+body.glass .freeze-team,
+body.glass .swatch {
+  background-image: linear-gradient(180deg, rgb(255 255 255 / 0.3), rgb(255 255 255 / 0.05) 50%, rgb(0 0 0 / 0.07));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.55), inset 0 0 0 1px rgb(255 255 255 / 0.12), 0 8px 24px rgb(0 0 0 / 0.22);
+}
+body.glass .tv-scores li.picker {
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.55), 0 0 0 0.5vh var(--bg), 0 0 0 1vh #fff;
+}
+body.glass .tv-over li:first-child {
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.55), 0 3vh 8vh color-mix(in srgb, var(--team) 50%, transparent);
+}
+body.glass .swatch:has(input:checked) {
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.55), 0 0 0 4px var(--bg), 0 0 0 7px #fff, 0 8px 24px color-mix(in srgb, var(--team) 60%, transparent);
+}
+body.glass .freeze-team.on {
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.55), 0 0 0 4px rgb(185 232 255 / 0.5);
+}
+
+/* A browser without backdrop-filter: the panels turn nearly solid so the text stays readable. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  body.glass {
+    --lg-tint: rgb(24 20 68 / 0.92);
+    --lg-tint-deep: rgb(12 10 40 / 0.94);
+  }
+  body.glass.display {
+    --lg-tint: rgb(14 11 46 / 0.92);
+  }
+  body.glass .phone-team {
+    --lg-tint: rgb(0 0 0 / 0.26);
+    --lg-tint-deep: rgb(0 0 0 / 0.4);
+  }
 }

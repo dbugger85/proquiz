@@ -2,7 +2,7 @@
 import { validateSet, MAX_CATEGORIES, MAX_QUESTIONS } from '/lib/validate.js';
 import { buildRequest, parseReply, splitTopics, AiQuizError, DIFFICULTIES, FILL_DIFFICULTIES, MIN_SIZE, gapsOf, guessLanguage, buildFillRequest, parseFill } from '/lib/aiquiz.js';
 import { t, setLang, getLang, translatePage } from './i18n.js';
-import { $, h, fill } from './ui.js';
+import { $, h, fill, setGlass, savedGlass } from './ui.js';
 import { KINDS } from '/lib/crazy.js';
 import { ICONS } from './specials.js';
 
@@ -14,6 +14,8 @@ let problems = [];
 let saveTimer = null;
 let savePromise = Promise.resolve();
 let aiNote = null; // { id, duplicates, filled?, left? } for a quiz just made or filled with AI (shown until another quiz is opened)
+
+setGlass(savedGlass()); // the look the host chose last (the editor has no game state of its own)
 
 // ----- talking to the server -----
 

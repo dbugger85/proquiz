@@ -2,7 +2,7 @@
 import { ranking, COLORS, unveilProgress } from '/lib/game.js';
 import { connect } from './net.js';
 import { t, setLang, translatePage } from './i18n.js';
-import { $, h, qrSvg, shortUrl, countdown, runCountdowns, teamStyle } from './ui.js';
+import { $, h, qrSvg, shortUrl, countdown, runCountdowns, teamStyle, setGlass } from './ui.js';
 import { unlockAudio, audioReady, playEvent, playSound, startTicks } from './sounds.js';
 import { syncClip, preloadClips } from './clip.js';
 import { syncMusic } from './music.js';
@@ -439,9 +439,12 @@ function renderGame() {
 }
 
 function render() {
+  setGlass(view.settings.glass);
   setLang(view.settings.lang);
   translatePage();
   const inLobby = view.phase === 'lobby';
+  // The glass look's glow behind the stage takes the first teams' colours (the stage light when there are none).
+  for (const [i, name] of ['a', 'b', 'c'].entries()) document.body.style.setProperty(`--glow-${name}`, view.teams[i]?.color ?? '');
   $('#lobby').hidden = !inLobby;
   $('#game').hidden = inLobby;
   document.querySelector('.display > .wordmark').hidden = !inLobby;

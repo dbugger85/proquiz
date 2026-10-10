@@ -47,6 +47,36 @@ async function shot(page, name) {
 // Choose one of the lobby's pill buttons (language, wrong answer, Crazy mode).
 const pickPill = (page, name, value) => page.click(`label:has(> input[name=${name}][value=${value}])`);
 
+// The same screen with the glass look on (the default) and off, mid-game: glass-on-<name>.png and glass-off-<name>.png.
+async function glassPair(page, name) {
+  await page.waitForSelector('body.glass');
+  await shot(page, `glass-on-${name}`);
+  srv.hub.dispatch({ type: 'settings', settings: { glass: false } });
+  await page.waitForSelector('body:not(.glass)');
+  await shot(page, `glass-off-${name}`);
+  srv.hub.dispatch({ type: 'settings', settings: { glass: true } });
+  await page.waitForSelector('body.glass');
+}
+// How smoothly a screen is drawing right now: the time between frames, in ms (16.7 = 60 per second).
+async function frameTimes(page) {
+  const gaps = await page.evaluate(
+    () =>
+      new Promise((resolve) => {
+        const out = [];
+        let last = performance.now();
+        const tick = (now) => {
+          out.push(now - last);
+          last = now;
+          if (out.length < 90) requestAnimationFrame(tick);
+          else resolve(out.slice(30)); // skip the warm-up
+        };
+        requestAnimationFrame(tick);
+      }),
+  );
+  const avg = gaps.reduce((a, b) => a + b, 0) / gaps.length;
+  return { avg: avg.toFixed(1), worst: Math.max(...gaps).toFixed(1) };
+}
+
 try {
   const host = await open('/host', { width: 1366, height: 768 }, 'host');
   const tv = await open('/display', { width: 1920, height: 1080 }, 'tv');
@@ -120,9 +150,29 @@ try {
   await host.click('#group-rules summary');
   await host.click('#group-sound summary');
   await host.click('#music-files summary');
+  await host.click('#group-look summary');
   await host.evaluate(() => document.querySelector('#settings').scrollIntoView({ block: 'start' }));
   await shot(host, 'host-1c-settings-open-no');
   await pickPill(host, 'lang', 'en');
+
+  // The glass look is on by default, and the Look section's tick turns it off (and on) for every screen at once.
+  await host.waitForSelector('#look-status:has-text("Glass on")');
+  for (const p of [host, tv, phones[0]]) await p.waitForSelector('body.glass');
+  await host.evaluate(() => window.scrollTo(0, 0));
+  await host.waitForTimeout(300); // headless Chromium repaints the blurred bar a moment after a scroll
+  await shot(host, 'glass-on-host-lobby');
+  await host.uncheck('input[name=glass]');
+  await waitFor(() => srv.hub.getState().settings.glass === false);
+  for (const p of [host, tv, phones[0]]) await p.waitForSelector('body:not(.glass)');
+  await host.waitForSelector('#look-status:has-text("Glass off")');
+  await host.evaluate(() => window.scrollTo(0, 0));
+  await host.waitForTimeout(300);
+  await shot(host, 'glass-off-host-lobby');
+  await shot(tv, 'glass-off-tv-lobby');
+  await host.check('input[name=glass]');
+  await waitFor(() => srv.hub.getState().settings.glass === true);
+  for (const p of [host, tv, phones[0]]) await p.waitForSelector('body.glass');
+  await shot(tv, 'glass-on-tv-lobby');
 
   // A setting changed on the host reaches the game.
   await pickPill(host, 'penalty', 'none');
@@ -168,6 +218,11 @@ try {
   await tv.waitForSelector('.tv-board');
   await shot(host, 'host-3-board');
   await shot(tv, 'tv-3-board');
+  // The TV board with the glass look on and off, and how smoothly the TV draws with it on (headless Chromium has no
+  // real GPU, so this only catches something badly wrong; it is printed, not asserted).
+  console.log('TV board frame times, glass on:', await frameTimes(tv));
+  await glassPair(tv, 'tv-board');
+  console.log('TV board frame times, glass off:', await frameTimes(tv));
 
   // Pick "Capitals 200". The host sees the answer, the TV doesn't.
   await host.click('.host-board .col:nth-child(1) .tile:nth-of-type(2)');
@@ -182,6 +237,8 @@ try {
   await tv.waitForTimeout(450);
   await shot(tv, 'tv-4-question');
   await shot(yellow, 'phone-4-too-early');
+  await glassPair(tv, 'tv-question');
+  await glassPair(red, 'phone-buzzer');
 
   // Space turns the buzzers on.
   await host.keyboard.press('Space');
@@ -249,9 +306,11 @@ try {
   await blue.waitForSelector('#stage :text("Quizzy Rascals is picking")');
   assert.equal(await blue.locator('.pick-board').count(), 0);
   await shot(red, 'phone-9-pick-board');
+  await glassPair(red, 'phone-pick');
   await red.click('.pick-cat >> nth=1');
   await red.waitForSelector('.pick-values');
   await shot(red, 'phone-10-pick-values');
+  await glassPair(red, 'phone-pick-values');
   // A category with a question already played shows an empty slot there, like the TV board.
   await red.click('.pick-values ~ button.btn-quiet');
   await red.click('.pick-cat >> nth=0');

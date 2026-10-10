@@ -13,7 +13,7 @@ import { FILE_NAME, validateSet } from './lib/validate.js';
 import { createStore, apiHandler, SAMPLE_ID } from './store.js';
 import { randomUUID } from 'node:crypto';
 import { WebSocketServer } from 'ws';
-import { apply, newGame, hostView, displayView, phoneView, GameError, DEFAULT_SETTINGS, nextTimerAt, MAX_SLACK_MS, COLORS, MAX_TEAMS } from './lib/game.js';
+import { apply, newGame, hostView, displayView, phoneView, GameError, DEFAULT_SETTINGS, nextTimerAt, MAX_SLACK_MS, COLORS, MAX_TEAMS, newColor } from './lib/game.js';
 
 const ROOT = new URL('./', import.meta.url);
 const START_PORT = Number(process.env.PORT) || 3000;
@@ -167,7 +167,7 @@ function summary(saved) {
   return {
     savedAt: saved.savedAt,
     title: st.set?.title ?? '',
-    teams: st.teams.map((t) => ({ name: t.name, color: t.color, score: t.score })),
+    teams: st.teams.map((t) => ({ name: t.name, color: newColor(t.color), score: t.score })),
     played: st.used?.flat().filter(Boolean).length ?? 0,
     total: st.used?.flat().length ?? 0,
     phase: st.phase,
@@ -352,6 +352,7 @@ export function createHub({ set, info, saved = null, save = () => {}, store = nu
     if (!resumable) return;
     const lobbyTeams = state.teams;
     state = { round: 1, ...resumable.state, deadline: null }; // games saved before round 2 existed are in round 1
+    state.teams = state.teams.map((t) => ({ ...t, color: newColor(t.color) })); // saved with the colours before 1.7
     // Teams that joined in the lobby meanwhile play on with zero points (a free colour if theirs is taken).
     for (const t of lobbyTeams) {
       if (state.teams.length >= MAX_TEAMS) break;
