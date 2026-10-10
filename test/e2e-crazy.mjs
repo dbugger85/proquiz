@@ -42,7 +42,10 @@ const score = (name) => state().teams.find((tm) => tm.name === name).score;
 
 try {
   const host = await open('/host', { width: 1366, height: 768 }, 'host');
-  host.on('dialog', (d) => d.accept());
+  host.on('dialog', (d) => {
+    errors.push(`host: a browser ${d.type()} appeared: ${d.message()}`); // ProQuiz asks with its own pop-ups now
+    d.dismiss().catch(() => {});
+  });
   const tv = await open('/display', { width: 1920, height: 1080 }, 'tv');
   await tv.mouse.click(5, 5);
   const phones = [];

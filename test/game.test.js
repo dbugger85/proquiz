@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { apply, newGame, COLORS, MAX_TEAMS, displayView, phoneView, hostView, phoneStatus, clipFor, GameError, unveilProgress, nextTimerAt, BUZZ_WINDOW_MS } from '../lib/game.js';
+import { apply, newGame, COLORS, MAX_TEAMS, displayView, phoneView, hostView, phoneStatus, clipFor, GameError, unveilProgress, nextTimerAt, BUZZ_WINDOW_MS, MAX_REMOTE_SLACK_MS } from '../lib/game.js';
 import { validateSet } from '../lib/validate.js';
 
 const sample = JSON.parse(readFileSync(new URL('../sets/sample.json', import.meta.url)));
@@ -38,6 +38,7 @@ const armedAt = (s, c = 0, i = 1, now = 1000) => run(s, { type: 'pick', c, i }, 
 test('the sample sets are valid', () => {
   assert.deepEqual(validateSet(sample), []);
   assert.deepEqual(validateSet(JSON.parse(readFileSync(new URL('../sets/eksempel.json', import.meta.url)))), []);
+  for (const name of ['quick-sample', 'lynquiz']) assert.deepEqual(validateSet(JSON.parse(readFileSync(new URL(`../sets/${name}.json`, import.meta.url)))), [], name);
   assert.deepEqual(validateSet(small), []);
 });
 
@@ -187,12 +188,26 @@ test('fair buzzing: a phone can only claim its own network delay', () => {
   s = apply(s, press('r', 1400, 1350, 80));
   s = apply(s, press('b', 1420, 1200, 80)); // 220 ms back, only 80 allowed → 1340
   assert.equal(s.q.buzzes.find((b) => b.teamId === 'b').at, 1340);
-  // A press in the future counts as the arrival time, and a huge slack is capped.
+  // A press in the future counts as the arrival time, and a huge slack is capped (the server gives a phone on the
+  // Wi-Fi at most MAX_SLACK_MS, one over the internet at most MAX_REMOTE_SLACK_MS; the rules check the larger).
   let t = fairArmed();
   t = apply(t, press('g', 1500, 9999, 100));
   assert.equal(t.q.buzzes[0].at, 1500);
-  t = apply(t, press('r', 1600, 1200, 10_000));
-  assert.equal(t.q.buzzes[1].at, 1600 - 250);
+  t = apply(t, press('r', 1700, 1050, 10_000));
+  assert.equal(t.q.buzzes[1].at, 1700 - MAX_REMOTE_SLACK_MS);
+});
+
+test('fair buzzing: with a slow phone (elsewhere) playing, the server can ask for a longer wait', () => {
+  let s = fairArmed();
+  s = apply(s, { ...press('g', 1100, 1095), wait: 400 });
+  assert.equal(s.q.decideAt, 1500);
+  // The far-away team pressed earlier; its buzz arrives 300 ms later and still wins.
+  s = apply(s, press('r', 1400, 1090, 405));
+  s = apply(s, { type: 'timeout', now: 1500 });
+  assert.equal(s.q.buzzedTeam, 'r');
+  // The wait is never shorter than the usual one, nor longer than the largest slack.
+  assert.equal(apply(fairArmed(), { ...press('g', 1100, 1095), wait: 10 }).q.decideAt, 1100 + BUZZ_WINDOW_MS);
+  assert.equal(apply(fairArmed(), { ...press('g', 1100, 1095), wait: 99_999 }).q.decideAt, 1100 + MAX_REMOTE_SLACK_MS);
 });
 
 test('fair buzzing: just before the buzzers opened counts as the opening moment', () => {
@@ -699,6 +714,8 @@ test('music settings: on by default at 35%, own files only as sound file names f
   assert.deepEqual(s.settings.musicFiles, {});
   s = apply(s, { type: 'settings', settings: { musicVolume: 80, musicFiles: { lobby: 'abc123.mp3', thinking: 'x.ogg' } } });
   assert.deepEqual(s.settings.musicFiles, { lobby: 'abc123.mp3', thinking: 'x.ogg' });
+  s = apply(s, { type: 'settings', settings: { musicFiles: { calm: 'x.mp3' } } }); // after the answer, and the standings
+  assert.deepEqual(s.settings.musicFiles, { calm: 'x.mp3' });
   for (const bad of [{ musicVolume: 101 }, { musicVolume: -1 }, { musicFiles: { lobby: 'virus.exe' } }, { musicFiles: { dance: 'a.mp3' } }, { musicFiles: 'a.mp3' }]) {
     assert.throws(() => apply(s, { type: 'settings', settings: bad }), { code: 'bad-settings' }, JSON.stringify(bad));
   }

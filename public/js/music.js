@@ -8,7 +8,7 @@ import { audioGraph } from './sounds.js';
 
 // ----- which music plays when (a pure function, tested headless) -----
 
-// 'off' | 'silent' | 'lobby' | 'board' | 'thinking' | 'hot' | 'answering' | 'final' | 'finalQ' | 'judge' | 'over'
+// 'off' | 'silent' | 'lobby' | 'board' | 'thinking' | 'hot' | 'answering' | 'calm' | 'calmUp' | 'final' | 'finalQ' | 'judge' | 'over'
 export function moodFor(view, now = 0) {
   if (!view?.settings?.music) return 'off';
   const p = view.phase;
@@ -25,6 +25,8 @@ export function moodFor(view, now = 0) {
       return view.deadline != null && view.deadline - now <= 3000 ? 'hot' : 'thinking';
     case 'answering':
       return 'answering';
+    case 'revealed':
+      return 'calm'; // after the answer's sting, a soft tune comes in
     case 'finalWager':
       return 'final';
     case 'finalQuestion':
@@ -33,18 +35,33 @@ export function moodFor(view, now = 0) {
       return 'judge';
     case 'over':
       return 'over';
+    // Quick quiz: the board tune on a section's title card, the ticking tune while a question shows,
+    // then the soft calm tune after the reveal chime, a little fuller under the top 5.
+    case 'section':
+      return 'board';
+    case 'ready':
+      return 'thinking';
+    case 'open':
+      return view.deadline != null && view.deadline - now <= 3000 ? 'hot' : 'thinking';
+    case 'result':
+      return 'calm';
+    case 'ranks':
+      return 'calmUp';
     default:
-      return 'silent'; // special (the Kaosmodus reel), revealed (the stings stand alone)
+      return 'silent'; // special (the Kaosmodus reel)
   }
 }
 
 // What each mood plays: a built-in song with some of its layers, at a level, or the host's file for that moment.
-const MOODS = {
+export const MOODS = {
   lobby: { song: 'day', layers: 'all', level: 1, file: 'lobby' },
   board: { song: 'day', layers: ['pad', 'bass', 'hat'], level: 0.7, file: 'board', fallbackFile: 'lobby', fileLevel: 0.6 },
   thinking: { song: 'tick', layers: 'all', level: 1, file: 'thinking', restart: true },
   hot: { song: 'tick', layers: 'all', level: 1, hot: true, file: 'thinking' },
   answering: { song: 'tick', layers: ['pad', 'bass'], level: 0.4, file: 'thinking', fileLevel: 0.35 },
+  // After the answer: the reveal chime stands alone for a moment, then a soft tune fades in.
+  calm: { song: 'glow', layers: ['pad', 'bass', 'bell'], level: 0.6, file: 'calm', fallbackFile: 'final', fileLevel: 0.3, delay: 1.2 },
+  calmUp: { song: 'glow', layers: 'all', level: 0.75, file: 'calm', fallbackFile: 'final', fileLevel: 0.35 }, // the top 5: a shimmer on top
   final: { song: 'slow', layers: ['pad', 'bass', 'kick', 'bell'], level: 1, file: 'final' },
   finalQ: { song: 'slow', layers: 'all', level: 1, file: 'final' },
   judge: { song: 'slow', layers: ['pad', 'bass'], level: 0.4, file: 'final', fileLevel: 0.35 },
@@ -61,6 +78,9 @@ const Em = [40, 43, 47];
 const Dm = [38, 41, 45];
 const E = [40, 44, 47];
 const Fmaj7 = [41, 45, 48, 52];
+const Cmaj7 = [48, 52, 55, 59];
+const Am7 = [45, 48, 52, 55];
+const G6 = [43, 47, 50, 52];
 const E7 = [40, 44, 47, 50];
 
 // Patterns are 16 steps (16th notes) per bar. Bass: r = root, f = fifth, o = octave. Arp: digits are chord tones.
@@ -96,8 +116,27 @@ export const SONGS = {
     kick: 'x..x....x..x....', // a heartbeat
     shaker: 'x.x.x.x.x.x.x.x.',
     bass: 'r.......r.......',
+    longBass: true,
     pad: true,
     bell: true,
+  },
+  // Ambient: no drums, slow swelling chords, a low note per bar, a rare bell and a quiet high shimmer.
+  glow: {
+    bpm: 72,
+    bars: [Fmaj7, Cmaj7, Am7, G6],
+    bass: 'r...............',
+    longBass: true,
+    bassSteps: 14,
+    pad: true,
+    padAttack: 1.2,
+    padFilter: 650,
+    padSteps: 22, // each chord swells into the next
+    bell: true,
+    bellEvery: 4,
+    arp: ['0...2...1...3...'],
+    arpType: 'sine',
+    arpGain: 0.5,
+    arpOctave: 36,
   },
   party: {
     bpm: 120,
@@ -209,8 +248,8 @@ function playStep(song, st, step, t) {
   if (b && b !== '.') {
     const root = chord[0] - 12 + (st.hot ? 12 : 0);
     const note = { r: root, f: root + 7, o: root + 12 }[b];
-    const long = song.bass === SONGS.slow.bass;
-    tone(L.bass, hz(note), t, long ? stepLen * 7 : stepLen * 1.8, { type: 'triangle', gain: 1, filter: 500 });
+    const long = Boolean(song.longBass);
+    tone(L.bass, hz(note), t, long ? stepLen * (song.bassSteps ?? 7) : stepLen * 1.8, { type: 'triangle', gain: 1, filter: 500 });
     if (!long) tone(L.bass, hz(note), t, stepLen * 1.2, { type: 'square', gain: 0.15, filter: 400 });
   }
 
@@ -219,20 +258,24 @@ function playStep(song, st, step, t) {
     const pattern = song.arp[loop % song.arp.length];
     const a = pattern[s16];
     if (a !== '.') {
-      const tones = [...chord.map((n) => n + 24), chord[0] + 36];
-      tone(L.arp, hz(tones[Number(a)]), t, stepLen * 1.5, { type: 'square', gain: 1, filter: st.hot ? 3000 : 1500 });
+      const up = song.arpOctave ?? 24;
+      const tones = [...chord.map((n) => n + up), chord[0] + up + 12];
+      tone(L.arp, hz(tones[Number(a)]), t, stepLen * 1.5, { type: song.arpType ?? 'square', gain: song.arpGain ?? 1, filter: st.hot ? 3000 : 1500 });
     }
   }
 
   if (song.pad && s16 === 0 && (bar % 2 === 0 || song.bpm < 100 || song === SONGS.tick)) {
-    const dur = stepLen * (song.bpm < 100 || song === SONGS.tick ? 16 : 32);
+    const dur = stepLen * (song.padSteps ?? (song.bpm < 100 || song === SONGS.tick ? 16 : 32));
+    const attack = song.padAttack ?? 0.4;
+    const filter = song.padFilter ?? 800;
     for (const n of chord) {
-      for (const detune of [-0.06, 0.06]) tone(L.pad, hz(n + 12 + detune), t, dur, { type: 'sawtooth', gain: 0.5, attack: 0.4, filter: 800 });
+      for (const detune of [-0.06, 0.06]) tone(L.pad, hz(n + 12 + detune), t, dur, { type: 'sawtooth', gain: 0.5, attack, filter });
     }
   }
 
-  // A soft bell on a chord note every second bar (the same note each time round, so it feels planned).
-  if (song.bell && s16 === 8 && bar % 2 === 1) tone(L.bell, hz(chord[bar % chord.length] + 24), t, 1.8, { gain: 1, attack: 0.01 });
+  // A soft bell on a chord note every second bar (or every 4th; the same note each time round, so it feels planned).
+  const every = song.bellEvery ?? 2;
+  if (song.bell && s16 === 8 && bar % every === every - 1) tone(L.bell, hz(chord[bar % chord.length] + 24), t, 1.8, { gain: 1, attack: 0.01 });
 
   // The little tune, every other time round.
   if (song.melody && loop % 2 === 1) {

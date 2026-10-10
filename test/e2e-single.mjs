@@ -27,7 +27,10 @@ async function open(path, viewport, label) {
 
 try {
   const host = await open('/host', { width: 1366, height: 768 }, 'host');
-  host.on('dialog', (d) => d.accept());
+  host.on('dialog', (d) => {
+    errors.push(`host: a browser ${d.type()} appeared: ${d.message()}`); // ProQuiz asks with its own pop-ups now
+    d.dismiss().catch(() => {});
+  });
   const phones = [];
   for (const [name, n] of [['Quizzy Rascals', 0], ['Blue Steel', 1]]) {
     const p = await open('/', { width: 390, height: 844 }, name);
@@ -99,6 +102,11 @@ try {
   // Main menu in the middle of the game: the lobby offers to continue, the phones are asked to join again,
   // and a new team that joins now plays on with zero points.
   await host.click('#menu-btn');
+  await host.waitForSelector('dialog.pq-modal[open]'); // it asks first, over the TV view
+  assert.match(await host.textContent('dialog.pq-modal[open]'), /Leave the game\?[\s\S]*Go to main menu/);
+  await host.waitForTimeout(250);
+  await host.screenshot({ path: `${shots}/dialog-single-screen.png` });
+  await host.click('dialog.pq-modal[open] button[value=ok]');
   await host.waitForSelector('body[data-phase=lobby]');
   await host.waitForSelector('#resume:not([hidden])');
   await host.waitForSelector('#menu-btn[hidden]', { state: 'attached' });

@@ -44,6 +44,26 @@ async function shot(page, name) {
   await page.screenshot({ path: `${shots}/${name}.png` });
 }
 
+// ProQuiz's own pop-up questions (ask() and askNumber() in ui.js): wait for one, then press its main button or Cancel.
+const MODAL = 'dialog.pq-modal[open]';
+async function answerModal(page, ok = true) {
+  await page.waitForSelector(MODAL);
+  await page.click(`${MODAL} button[value=${ok ? 'ok' : 'cancel'}]`);
+  await page.waitForSelector('dialog.pq-modal', { state: 'detached' });
+}
+// The browser's own confirm()/alert()/prompt() must never show up any more.
+const noBrowserDialogs = (page, label) =>
+  page.on('dialog', (d) => {
+    errors.push(`${label}: a browser ${d.type()} appeared: ${d.message()}`);
+    d.dismiss().catch(() => {});
+  });
+// The top bar is still at the top of the window after scrolling down.
+async function barStaysOnTop(page) {
+  const { y, top } = await page.evaluate(() => ({ y: window.scrollY, top: document.querySelector('.host-bar').getBoundingClientRect().top }));
+  assert.ok(y > 100, `the page should have scrolled (scrollY ${y})`);
+  assert.equal(top, 0, 'the top bar stays at the top');
+}
+
 // Choose one of the lobby's pill buttons (language, wrong answer, Crazy mode).
 const pickPill = (page, name, value) => page.click(`label:has(> input[name=${name}][value=${value}])`);
 
@@ -113,7 +133,11 @@ try {
   for (const [name, n] of [['Quizzy Rascals', 0], ['Blue Steel', 1], ['Lemon Heads', 3]]) {
     const p = await open('/', { width: 390, height: 844 }, name);
     await p.waitForSelector('#join:not([hidden])');
-    if (!phones.length) await shot(p, 'phone-1-join');
+    if (!phones.length) {
+      assert.equal(await p.textContent('#avatar-title'), 'Your team’s mascot'); // a team has a mascot, a Quick quiz player an avatar
+      await p.click('#avatar-random');
+      await shot(p, 'phone-1-join');
+    }
     await p.fill('#name', name);
     await p.click(`#swatches label:nth-child(${n + 1})`);
     await p.click('#join-btn');
@@ -131,6 +155,11 @@ try {
   await host.waitForFunction(() => document.querySelectorAll('#teams li').length === 3);
   assert.equal(await host.locator('#teams .dot.on').count(), 3);
   await tv.waitForFunction(() => document.querySelectorAll('#teams li').length === 3);
+  // Every phone sent its mascot (a random one, remembered on the phone), and the TV and host show them.
+  assert.ok(srv.hub.getState().teams.every((tm) => tm.avatar), 'each team has a mascot');
+  assert.equal(await tv.locator('#teams li .avatar svg').count(), 3);
+  assert.equal(await host.locator('#teams li .avatar svg').count(), 3);
+  assert.equal(await phones[0].locator('#me .avatar svg').count(), 1);
   await shot(host, 'host-2-teams');
   await tv.waitForTimeout(500); // let the pop-in finish
   await shot(tv, 'tv-1-lobby');
@@ -139,6 +168,7 @@ try {
   await phones[1].reload();
   await phones[1].waitForSelector('#team:not([hidden])');
   assert.equal(await phones[1].textContent('#me'), 'Blue Steel');
+  assert.equal(await phones[1].locator('#me .avatar').count(), 1); // the mascot is remembered too
 
   // Switching to Norwegian changes the phones and the TV.
   await shot(host, 'host-1b-settings');
@@ -194,13 +224,60 @@ try {
   await host.waitForSelector('.team-list .ping', { timeout: 4000 });
   await shot(host, 'host-2b-fair-buzz');
 
-  host.on('dialog', (d) => d.accept());
+  noBrowserDialogs(host, 'host');
+  // The top bar stays on screen while the lobby's settings scroll under it.
+  await host.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await barStaysOnTop(host);
+  await host.waitForTimeout(300); // headless Chromium repaints the blurred bar a moment after a scroll
+  await shot(host, 'host-sticky-lobby');
+  await host.evaluate(() => window.scrollTo(0, 0));
+
+  // Removing a team asks first, in ProQuiz's own pop-up: red Remove, Cancel focused, and Cancel keeps the team.
+  await host.click('#teams li:nth-child(1) .remove');
+  await host.waitForSelector(`${MODAL}.danger`);
+  assert.match(await host.textContent(MODAL), /Remove team\?[\s\S]*Remove Quizzy Rascals from the game\?/);
+  assert.equal(await host.evaluate(() => document.activeElement.value), 'cancel');
+  assert.equal(await host.locator(`${MODAL} .btn-bad`).textContent(), 'Remove');
+  await host.waitForTimeout(250); // the pop-in
+  await shot(host, 'dialog-host-remove-team');
+  await host.keyboard.press('Enter'); // Enter on the focused Cancel
+  await host.waitForSelector('dialog.pq-modal', { state: 'detached' });
+  await host.click('#teams li:nth-child(1) .remove');
+  await host.waitForSelector(MODAL);
+  await host.keyboard.press('Escape'); // Esc cancels too
+  await host.waitForSelector('dialog.pq-modal', { state: 'detached' });
+  assert.equal(srv.hub.getState().teams.length, 3);
+
+  // A phone-sized host page: the bar fits on one row, nothing scrolls sideways, and the pop-up fits.
+  const narrow = await open('/host', { width: 390, height: 844 }, 'narrow host');
+  noBrowserDialogs(narrow, 'narrow host');
+  await narrow.waitForSelector('#teams li .remove');
+  const wide = await narrow.evaluate(() =>
+    [...document.querySelectorAll('body *')]
+      .filter((el) => el.getBoundingClientRect().right > document.documentElement.clientWidth + 1)
+      .map((el) => `${el.tagName}.${el.className}`)
+      .slice(0, 8),
+  );
+  assert.deepEqual(wide, [], 'nothing sticks out sideways');
+  assert.ok((await narrow.evaluate(() => document.querySelector('.host-bar').offsetHeight)) < 80, 'the bar stays one row');
+  await narrow.evaluate(() => window.scrollTo(0, 1400));
+  await barStaysOnTop(narrow);
+  await narrow.waitForTimeout(300);
+  await shot(narrow, 'host-narrow-sticky');
+  await narrow.click('#teams li:nth-child(2) .remove');
+  await narrow.waitForTimeout(250);
+  await shot(narrow, 'dialog-host-narrow');
+  await answerModal(narrow, false);
+  assert.equal(srv.hub.getState().teams.length, 3);
+  await narrow.context().close();
+
   const score = (name) => srv.hub.getState().teams.find((tm) => tm.name === name).score;
   const [red, blue, yellow] = phones;
 
-  // The flag question (Capitals 300) gets a slowly appearing picture: 6 seconds from blocks to clear.
+  // The flag question (Capitals 300) gets a slowly appearing picture: 12 seconds from blocks to clear (long enough
+  // that a busy machine still buzzes well before it's clear).
   const withUnveil = structuredClone(srv.hub.getState().set);
-  withUnveil.categories[0].questions[2].unveil = 6;
+  withUnveil.categories[0].questions[2].unveil = 12;
   // And a round 2: the same board with new names, double points and its own questions.
   withUnveil.round2 = {
     categories: withUnveil.categories.map((cat) => ({
@@ -216,6 +293,7 @@ try {
   await host.click('#start');
   await host.waitForSelector('.host-board');
   await tv.waitForSelector('.tv-board');
+  assert.equal(await tv.locator('.tv-scores li .avatar').count(), 3); // the mascots on the score strip
   await shot(host, 'host-3-board');
   await shot(tv, 'tv-3-board');
   // The TV board with the glass look on and off, and how smoothly the TV draws with it on (headless Chromium has no
@@ -271,7 +349,7 @@ try {
   await tv.waitForSelector('.tv-q .answer');
   assert.equal(score('Quizzy Rascals'), 200);
   assert.match(await tv.textContent('.tv-q .answer'), /Rome/);
-  await tv.waitForSelector('body[data-music=silent]', { state: 'attached', timeout: 6000 });
+  await tv.waitForSelector('body[data-music=calm]', { state: 'attached', timeout: 6000 });
   await tv.waitForTimeout(500);
   await shot(tv, 'tv-7-revealed');
   await shot(red, 'phone-8-correct');
@@ -332,6 +410,16 @@ try {
 
   // A picture question that appears slowly: big blocks while the host reads, sharper once the buzzers are on.
   const step = () => tv.$eval('.tv-q canvas.unveil', (c) => Number(c.dataset.step));
+  // True once the TV has the latest pause state (`running`) and has drawn the step that state gives (the same sum as
+  // stepAt() in display.js), so a step read right after the host's phase change can't be one frame out of date.
+  const settled = (running) =>
+    tv.waitForFunction((running) => {
+      const c = document.querySelector('.tv-q canvas.unveil');
+      if (!c || (c.dataset.since !== '') !== running) return false;
+      if (running) return true;
+      const want = Math.min(10, Math.floor(Math.min(1, Number(c.dataset.done) / Number(c.dataset.ms)) * 11));
+      return c.dataset.step === String(want);
+    }, running);
   await host.click('.host-board .col:nth-child(1) .tile:nth-of-type(3)');
   await host.waitForSelector('.host-q .host-img img');
   await tv.waitForSelector('.tv-q canvas.unveil[data-step="0"]');
@@ -343,7 +431,7 @@ try {
   await host.keyboard.press('Space');
   await host.waitForSelector('body[data-phase=armed]');
   await host.waitForSelector('[data-unveil-pct]');
-  await tv.waitForTimeout(2600);
+  await tv.waitForFunction(() => Number(document.querySelector('.tv-q canvas.unveil')?.dataset.step) >= 3);
   const mid = await step();
   assert.ok(mid >= 3 && mid < 10, `step ${mid}`);
   await shot(tv, 'tv-16-unveil-mid');
@@ -351,13 +439,16 @@ try {
   // A buzz freezes it.
   await yellow.click('.buzzer');
   await host.waitForSelector('body[data-phase=answering]');
+  await settled(false);
   const frozen = await step();
+  assert.ok(frozen < 10, `already clear at the buzz (step ${frozen})`);
   await tv.waitForTimeout(1300);
   assert.equal(await step(), frozen);
   // Wrong: the others may buzz, and it carries on.
   await host.keyboard.press('n');
   await host.waitForSelector('body[data-phase=armed]');
-  await tv.waitForFunction((was) => Number(document.querySelector('.tv-q canvas.unveil').dataset.step) > was, frozen);
+  await settled(true);
+  await tv.waitForFunction((was) => Number(document.querySelector('.tv-q canvas.unveil')?.dataset.step) > was, frozen);
   // Show the answer: the whole picture.
   await host.keyboard.press('r');
   await tv.waitForSelector('.tv-q img.q-img');
@@ -408,9 +499,49 @@ try {
   await host.waitForSelector('body[data-phase=board]');
   assert.equal(srv.hub.getState().media, null);
 
+  // Change score: a number pop-up. Empty is refused, minus works, the new score shows while typing, Enter saves.
+  const total = () => srv.hub.getState().teams.reduce((sum, tm) => sum + tm.score, 0);
+  const before = total();
+  await host.click('.host-side button:has-text("Change score") >> nth=0');
+  await host.waitForSelector(`${MODAL} input[type=number]:focus`);
+  await host.keyboard.press('Enter');
+  await host.waitForSelector(`${MODAL} .pq-modal-error:not([hidden])`);
+  await host.keyboard.type('50');
+  await host.click(`${MODAL} .pq-sign`); // ± makes it −50
+  assert.equal(await host.inputValue(`${MODAL} input`), '-50');
+  assert.match(await host.textContent(`${MODAL} .pq-modal-preview`), /New score: -?\d+/);
+  await host.waitForTimeout(250);
+  await glassPair(host, 'dialog-change-score');
+  await host.keyboard.press('u'); // keys go to the pop-up, not the game
+  await host.focus(`${MODAL} input`);
+  await host.keyboard.press('Enter');
+  await host.waitForSelector('dialog.pq-modal', { state: 'detached' });
+  await waitFor(() => total() === before - 50);
+  await host.click('.host-side button:has-text("Change score") >> nth=0');
+  await host.fill(`${MODAL} input`, '50');
+  await answerModal(host);
+  await waitFor(() => total() === before);
+  await host.click('.host-side button:has-text("Change score") >> nth=0');
+  await host.fill(`${MODAL} input`, '999');
+  await answerModal(host, false); // Cancel changes nothing
+  await host.waitForTimeout(100);
+  assert.equal(total(), before);
+
   // End the board: round 2 comes first. Blue has the fewest points, so Blue picks first.
+  // It asks first; while it asks, the game's keys do nothing, and Esc only closes the question.
   await host.waitForSelector('.controls button:has-text("End the board")');
   await host.keyboard.press('e');
+  await host.waitForSelector(MODAL);
+  assert.equal(await host.evaluate(() => document.activeElement.value), 'ok'); // not destructive: Enter says yes
+  await host.waitForTimeout(250);
+  await glassPair(host, 'dialog-end-board');
+  for (const key of ['e', 'u', 'y', 'n', 'r']) await host.keyboard.press(key);
+  await host.keyboard.press('Escape');
+  await host.waitForSelector('dialog.pq-modal', { state: 'detached' });
+  await host.waitForTimeout(150);
+  assert.equal(srv.hub.getState().phase, 'board');
+  await host.keyboard.press('e');
+  await answerModal(host);
   await host.waitForSelector('body[data-phase=round2]');
   await tv.waitForSelector('.tv-round2');
   assert.match(await tv.textContent('.tv-round2'), /Round 2[\s\S]*up to 1000 points[\s\S]*Blue Steel has the fewest points/);
@@ -440,6 +571,8 @@ try {
 
   // End round 2: on to the final round.
   await host.keyboard.press('e');
+  await host.waitForSelector(MODAL);
+  await host.keyboard.press('Enter');
   await host.waitForSelector('body[data-phase=finalWager]');
   await tv.waitForSelector('.tv-final');
   await tv.waitForSelector('body[data-music=final]', { state: 'attached', timeout: 6000 });
@@ -497,6 +630,7 @@ try {
 
   await host.keyboard.press('Space');
   await tv.waitForSelector('.tv-over');
+  assert.equal(await tv.locator('.tv-over li .avatar').count(), 3);
   await tv.waitForSelector('body[data-music=over]', { state: 'attached', timeout: 6000 });
   await red.waitForFunction(() => document.body.textContent.includes('Place 1 of 3'));
   await shot(tv, 'tv-9-over');
@@ -508,7 +642,7 @@ try {
   ed.on('pageerror', (e) => errors.push(`editor: ${e.message}`));
   // (The refused .txt upload below makes the browser log one "400 Bad Request"; that one is expected.)
   ed.on('console', (m) => m.type() === 'error' && !/status of 400/.test(m.text()) && errors.push(`editor: ${m.text()}`));
-  ed.on('dialog', (d) => d.accept());
+  noBrowserDialogs(ed, 'editor');
   await ed.goto(`${base}/editor`);
   await ed.waitForSelector('.ed-note'); // only the built-in sample so far: it's read-only
   await shot(ed, 'editor-1-sample');
@@ -575,8 +709,20 @@ try {
   assert.equal(withR2.round2.categories[1].name, 'Bands');
   assert.equal(withR2.round2.categories[1].questions[0].question, 'Who sang Yellow Submarine?');
   assert.equal(withR2.round2.categories[1].questions[0].value, 200);
-  // Unticking removes it again (after asking, since it has a question).
-  await ed.uncheck('#ed-round2 input[name=hasRound2]');
+  // The top bar stays while the editor scrolls.
+  await ed.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await barStaysOnTop(ed);
+  await ed.waitForTimeout(300);
+  await shot(ed, 'editor-sticky-bar');
+  // Unticking removes it again, after asking, since it has a question. Cancel keeps it ticked and kept.
+  await ed.click('#ed-round2 input[name=hasRound2]');
+  await ed.waitForSelector(`${MODAL}.danger`);
+  assert.match(await ed.textContent(MODAL), /Remove round 2\?/);
+  await answerModal(ed, false);
+  assert.equal(await ed.isChecked('#ed-round2 input[name=hasRound2]'), true);
+  assert.equal(await ed.locator('#ed-round2 .ed-tile[data-r="2"]').count() > 0, true);
+  await ed.click('#ed-round2 input[name=hasRound2]');
+  await answerModal(ed);
   await ed.waitForSelector('#ed-round2 .ed-tile', { state: 'detached' });
   await ed.waitForFunction(() => document.querySelector('#ed-status').textContent === 'Saved');
   assert.equal((await (await fetch(`${base}/api/sets/${mine.id}`)).json()).set.round2, undefined);
@@ -649,8 +795,22 @@ try {
   await ed.waitForFunction(() => document.querySelector('#ed-status').textContent === 'Saved');
   await shot(ed, 'editor-7-ai-filled');
 
+  // Deleting a quiz asks first (red Delete); Cancel keeps it. Shown with the glass look on and off.
+  await ed.evaluate(() => window.scrollTo(0, 0));
+  await ed.click('.ed-head button:has-text("Delete")');
+  await ed.waitForSelector(`${MODAL}.danger`);
+  assert.match(await ed.textContent(MODAL), /Delete quiz\?[\s\S]*can’t be undone[\s\S]*Cancel[\s\S]*Delete/);
+  await ed.waitForTimeout(250);
+  await shot(ed, 'dialog-editor-delete-glass-on');
+  await ed.evaluate(() => document.body.classList.remove('glass'));
+  await shot(ed, 'dialog-editor-delete-glass-off');
+  await ed.evaluate(() => document.body.classList.add('glass'));
+  await answerModal(ed, false);
+  assert.ok((await (await fetch(`${base}/api/sets`)).json()).some((x) => x.title === 'Musikkquiz'));
+
   // In the lobby it shows as "needs fixing" and can't be picked yet.
   await host.click('.controls button:has-text("Back to the main menu")');
+  await answerModal(host);
   await host.waitForSelector('body[data-phase=lobby]');
   await host.evaluate(() => window.dispatchEvent(new Event('focus')));
   await host.waitForFunction(() => [...document.querySelectorAll('#set-picker option')].some((o) => o.textContent.includes('needs fixing') && o.disabled));

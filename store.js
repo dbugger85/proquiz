@@ -2,18 +2,19 @@
 //
 //   <data dir>/sets/<id>.json   the user's quizzes
 //   <data dir>/files/<name>     pictures and clips, named after their content ("3fa9c0d1e2b4a6f8.jpg")
-//   sets/*.json                 the built-in quizzes (read-only, id = file name: "sample", "eksempel"), files in sets/files/
+//   sets/*.json                 the built-in quizzes (read-only, id = file name: "sample", "eksempel", "quick-sample", "lynquiz"), files in sets/files/
 
 import { readFile, writeFile, readdir, mkdir, rename, unlink, stat } from 'node:fs/promises';
 import { createHash, randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { validateSet, FILE_NAME, IMAGE_NAME, AUDIO_NAME } from './lib/validate.js';
+import { validateSet, modeOf, FILE_NAME, IMAGE_NAME, AUDIO_NAME, MAX_OPTION, rightSet } from './lib/validate.js';
 import { KINDS } from './lib/crazy.js';
+import { MAX_LOGO } from './brand.js';
 
 const ROOT = new URL('./', import.meta.url);
 export const SAMPLE_ID = 'sample';
-export const BUILT_IN = ['sample', 'eksempel']; // English and Norwegian samples
+export const BUILT_IN = ['sample', 'eksempel', 'quick-sample', 'lynquiz']; // English and Norwegian samples, board then Quick quiz
 const ID = /^[a-z0-9-]{1,60}$/;
 const MAX_FILE = 25 * 1024 * 1024; // one picture or clip
 const MAX_JSON = 80 * 1024 * 1024; // an imported quiz with its files
@@ -116,7 +117,7 @@ export function createStore(dataDir) {
   async function importPackage(pkg) {
     // A plain set (without files) can be imported too.
     const set = pkg?.proquiz === 1 ? pkg.set : pkg;
-    if (!set || typeof set !== 'object' || !Array.isArray(set.categories)) throw httpError(400, 'not-a-quiz');
+    if (!set || typeof set !== 'object' || !(Array.isArray(set.categories) || Array.isArray(set.sections))) throw httpError(400, 'not-a-quiz');
     for (const [name, b64] of Object.entries(pkg?.files ?? {})) {
       if (!FILE_NAME.test(name) || typeof b64 !== 'string') continue;
       const bytes = Buffer.from(b64, 'base64');
@@ -132,12 +133,31 @@ export function createStore(dataDir) {
 
 // ----- the editor's HTTP API (only for the laptop itself) -----
 
-export function apiHandler(store, { onSetSaved = () => {}, getLang = () => 'en' } = {}) {
+export function apiHandler(store, { onSetSaved = () => {}, getLang = () => 'en', brand = null, onBrand = () => {} } = {}) {
   return async function api(req, res, url) {
     const parts = url.pathname.split('/').filter(Boolean); // ['api', 'sets', id]
     const [, what, id] = parts;
     try {
       if (what === 'lang' && req.method === 'GET') return json(res, 200, { lang: getLang() });
+      // Branding (brand.js): the logo, the event name and the accent colour.
+      if (what === 'brand' && brand) {
+        if (!id && req.method === 'GET') return json(res, 200, brand.view());
+        if (!id && req.method === 'PUT') {
+          await brand.update(await readJson(req));
+          onBrand();
+          return json(res, 200, brand.view());
+        }
+        if (id === 'logo' && req.method === 'POST') {
+          await brand.setLogo(await readAll(req, MAX_LOGO, 'logo-too-big'));
+          onBrand();
+          return json(res, 201, brand.view());
+        }
+        if (id === 'logo' && req.method === 'DELETE') {
+          await brand.removeLogo();
+          onBrand();
+          return json(res, 200, brand.view());
+        }
+      }
       if (what === 'sets' && !id && req.method === 'GET') return json(res, 200, await store.list());
       if (what === 'sets' && !id && req.method === 'POST') {
         const body = await readJson(req);
@@ -187,8 +207,8 @@ export function apiHandler(store, { onSetSaved = () => {}, getLang = () => 'en' 
 
 function summary(id, set, builtIn, updated) {
   const count = (cats) => (cats ?? []).reduce((n, c) => n + (c.questions?.length ?? 0), 0);
-  const questions = count(set.categories) + count(set.round2?.categories);
-  return { id, title: set.title || '', builtIn, updated, questions, problems: validateSet(set).length };
+  const questions = count(set.categories) + count(set.round2?.categories) + count(set.sections);
+  return { id, title: set.title || '', kind: modeOf(set), builtIn, updated, questions, problems: validateSet(set).length };
 }
 
 // Every picture and clip a set uses.
@@ -197,13 +217,14 @@ export function filesOf(set) {
   const add = (q) => {
     for (const k of ['image', 'answerImage', 'audio']) if (q?.[k]) names.add(q[k]);
   };
-  for (const c of [...(set.categories ?? []), ...(set.round2?.categories ?? [])]) for (const q of c.questions ?? []) add(q);
+  for (const c of [...(set.categories ?? []), ...(set.round2?.categories ?? []), ...(set.sections ?? [])]) for (const q of c.questions ?? []) add(q);
   add(set.final);
   return [...names];
 }
 
 // Only the fields ProQuiz knows, so a saved file stays tidy.
 function clean(set) {
+  if (modeOf(set) === 'quick') return cleanQuick(set);
   const q = (x = {}) => {
     const out = { value: Number(x.value) || 0, question: String(x.question ?? ''), answer: String(x.answer ?? '') };
     if (x.image) out.image = x.image;
@@ -224,6 +245,38 @@ function clean(set) {
     delete out.final.special;
   }
   return out;
+}
+
+// A Quick quiz. Empty answer options are dropped (except ones marked right, so the editor still shows
+// the problem), and `correct` follows its option(s): a number for one right answer, a list for several,
+// left out when no option is marked right.
+function cleanQuick(set) {
+  const media = (x, out) => {
+    if (x.image) out.image = x.image;
+    if (x.audio) out.audio = x.audio;
+    if (x.audio && Number(x.audioStart) > 0) out.audioStart = Number(x.audioStart);
+    return out;
+  };
+  const seconds = (x) => (Number.isInteger(Number(x)) && Number(x) > 0 ? { seconds: Number(x) } : {});
+  const q = (x = {}) => {
+    const raw = (Array.isArray(x.options) ? x.options : []).map((o) => String(o ?? '').slice(0, MAX_OPTION));
+    const marked = rightSet(x).filter((n) => n < raw.length); // none marked yet stays unmarked (the editor asks for it)
+    const keep = raw.map((o, n) => n).filter((n) => raw[n].trim() !== '' || marked.includes(n));
+    const out = { question: String(x.question ?? ''), options: keep.map((n) => raw[n]) };
+    // One right answer is saved as a number (as before), several as a list.
+    const right = marked.map((n) => keep.indexOf(n));
+    if (right.length === 1) out.correct = right[0];
+    else if (right.length > 1) out.correct = right;
+    Object.assign(out, seconds(x.seconds));
+    if ([0, 2000].includes(Number(x.points)) && x.points !== null && x.points !== '') out.points = Number(x.points);
+    return media(x, out);
+  };
+  const sections = (Array.isArray(set?.sections) ? set.sections : []).map((sec) => ({
+    name: String(sec?.name ?? ''),
+    ...seconds(sec?.seconds),
+    questions: (Array.isArray(sec?.questions) ? sec.questions : []).map(q),
+  }));
+  return { v: 1, kind: 'quick', title: String(set?.title ?? ''), sections };
 }
 
 function slug(text) {
@@ -258,6 +311,21 @@ function readBody(req, max) {
       } else chunks.push(c);
     });
     req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+}
+
+// Like readBody, but a body that is too big is read to the end (and thrown away) before the error, so the browser
+// gets the answer instead of a broken connection.
+function readAll(req, max, code) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let size = 0;
+    req.on('data', (c) => {
+      size += c.length;
+      if (size <= max) chunks.push(c);
+    });
+    req.on('end', () => (size > max ? reject(httpError(413, code)) : resolve(Buffer.concat(chunks))));
     req.on('error', reject);
   });
 }

@@ -73,6 +73,19 @@ test('host and display get the phone address; phones join and show up as connect
   late.send({ type: 'join', name: 'Late', color: COLORS[0] });
   assert.equal((await late.wait((m) => m.type === 'error')).code, 'color-taken');
 
+  // An avatar (a team's mascot) comes along with the join; a broken one is refused.
+  const odd = await client('phone');
+  odd.send({ type: 'join', name: 'Odd', color: COLORS[2], avatar: { skin: 99 } });
+  assert.equal((await odd.wait((m) => m.type === 'error')).code, 'bad-avatar');
+  const mascot = { skin: 1, hair: 2, hairColor: 3, eyes: 4, mouth: 0, glasses: 1, hat: 5 };
+  odd.send({ type: 'join', name: 'Odd', color: COLORS[2], avatar: mascot });
+  await odd.wait((m) => m.type === 'joined');
+  const seen = await host.wait((m) => m.type === 'state' && m.view.teams.some((t) => t.name === 'Odd'));
+  assert.deepEqual(seen.view.teams.find((t) => t.name === 'Odd').avatar, mascot);
+  host.send({ type: 'cmd', action: { type: 'removeTeam', teamId: srv.hub.getState().teams.find((t) => t.name === 'Odd').id } });
+  await host.wait((m) => m.type === 'state' && !m.view.teams.some((t) => t.name === 'Odd'));
+  odd.close();
+
   // Phones never get the host view.
   const pv = (await red.wait((m) => m.type === 'state' && m.view.you)).view;
   assert.equal(pv.you.name, 'Red');
@@ -156,6 +169,7 @@ test('the server runs the timers', async () => {
 test('the game is saved, and after a restart the host can continue it', async () => {
   const host = await client('host');
   host.send({ type: 'cmd', action: { type: 'adjust', teamId: srv.hub.getState().teams[0].id, delta: 700 } });
+  srv.hub.dispatch({ type: 'join', teamId: srv.hub.getState().teams[0].id, name: srv.hub.getState().teams[0].name, color: srv.hub.getState().teams[0].color, avatar: { skin: 0, hair: 1, hairColor: 2, eyes: 3, mouth: 4, glasses: 0, hat: 1 } });
   host.send({ type: 'cmd', action: { type: 'settings', settings: { penalty: 'full', musicFiles: { lobby: '0123456789abcdef.mp3' }, musicVolume: 50 } } });
   await new Promise((r) => setTimeout(r, 400));
   host.close();
@@ -182,6 +196,7 @@ test('the game is saved, and after a restart the host can continue it', async ()
   const host2 = await client('host');
   const offer = await host2.wait((m) => m.type === 'state' && m.resume);
   assert.equal(offer.resume.teams[0].score, before);
+  assert.equal(offer.resume.teams[0].avatar.hat, 1); // the mascot is saved and shown in the resume list
   host2.send({ type: 'resume' });
   await host2.wait((m) => m.type === 'state' && !m.resume && m.view.teams.length > 0);
   assert.equal(srv.hub.getState().teams[0].score, before);
@@ -190,6 +205,7 @@ test('the game is saved, and after a restart the host can continue it', async ()
   await p.wait((m) => m.type === 'welcome' && m.teamId === teamId);
   const back = await p.wait((m) => m.type === 'state' && m.view.you);
   assert.equal(back.view.you.id, teamId);
+  assert.equal(back.view.you.avatar.hat, 1);
   p.close();
   host2.close();
 });
@@ -346,4 +362,144 @@ test('editor API: create, save, list, upload a file, export and import, choose i
   await call('DELETE', `/api/sets/${imported.data.id}`);
   assert.equal((await call('GET', `/api/sets/${imported.data.id}`)).status, 404);
   host.close();
+});
+
+test('a Quick quiz end to end: answers with press times, scores, the top 5 on the TV, places on the phones', async () => {
+  // Its own server, so the game above doesn't matter.
+  const own = await startServer({ port: 3480, quiet: true, dataDir: mkdtempSync(join(tmpdir(), 'proquiz-quick-')) });
+  const ownUrl = `ws://127.0.0.1:${own.info.port}/ws`;
+  // Like client() above, but it answers the server's clock questions the way net.js does.
+  async function measured(role) {
+    const ws = new WebSocket(ownUrl);
+    const msgs = [];
+    ws.onmessage = (e) => {
+      const m = JSON.parse(e.data);
+      if (m.type === 'clock') return ws.send(JSON.stringify({ type: 'clock', id: m.id, t: performance.now() }));
+      msgs.push(m);
+    };
+    await new Promise((r) => (ws.onopen = r));
+    const c = {
+      msgs,
+      send: (m) => ws.send(JSON.stringify(m)),
+      async wait(fn, ms = 3000) {
+        for (const end = Date.now() + ms; Date.now() < end; await new Promise((r) => setTimeout(r, 10))) {
+          const found = msgs.findLast(fn);
+          if (found) return found;
+        }
+        throw new Error('timed out waiting');
+      },
+      close: () => ws.close(),
+    };
+    c.send({ type: 'hello', role });
+    await c.wait((m) => m.type === 'welcome');
+    return c;
+  }
+  const host = await measured('host');
+  const tv = await measured('display');
+  host.send({ type: 'cmd', action: { type: 'settings', settings: { quickReadSeconds: 0, quickPhoneText: false } } });
+  host.send({ type: 'chooseSet', id: 'quick-sample' });
+  await host.wait((m) => m.type === 'state' && m.view.mode === 'quick' && m.view.settings.quickReadSeconds === 0);
+
+  // Three players, two of them with the same colour.
+  const players = [];
+  for (const [name, color] of [['Ann', COLORS[0]], ['Bo', COLORS[0]], ['Cy', COLORS[1]]]) {
+    const p = await measured('phone');
+    assert.equal((await p.wait((m) => m.type === 'state')).view.mode, 'quick', 'the join screen knows the mode');
+    p.send({ type: 'join', name, color });
+    p.teamId = (await p.wait((m) => m.type === 'joined')).teamId;
+    players.push(p);
+  }
+  const [ann, bo, cy] = players;
+  await new Promise((r) => setTimeout(r, 1000)); // the clock measurements after joining (5 × 150 ms)
+  const ids = Object.keys((await host.wait((m) => m.type === 'state' && Object.keys(m.latency ?? {}).length === 3)).latency);
+  assert.equal(ids.length, 3, 'phones are measured in a Quick quiz even with fair buzzing off');
+
+  host.send({ type: 'cmd', action: { type: 'start' } });
+  await tv.wait((m) => m.type === 'state' && m.view.phase === 'section');
+  host.send({ type: 'cmd', action: { type: 'next' } });
+  await ann.wait((m) => m.type === 'state' && m.view.status === 'ready');
+  host.send({ type: 'cmd', action: { type: 'next' } });
+  await Promise.all(players.map((p) => p.wait((m) => m.type === 'state' && m.view.status === 'answer')));
+
+  // Mercury (0) is right. Ann and Cy press it, Bo presses Venus; everyone answered, so the result comes at once.
+  ann.send({ type: 'answer', option: 0, at: performance.now() });
+  ann.send({ type: 'answer', option: 1, at: performance.now() }); // a second press doesn't count
+  bo.send({ type: 'answer', option: 1, at: performance.now() });
+  await new Promise((r) => setTimeout(r, 300));
+  cy.send({ type: 'answer', option: 0, at: performance.now() });
+  const result = await host.wait((m) => m.type === 'state' && m.view.phase === 'result');
+  const score = (id) => result.view.teams.find((t) => t.id === id).score;
+  assert.ok(score(ann.teamId) > score(cy.teamId), 'faster is more');
+  assert.ok(score(ann.teamId) >= 990 && score(ann.teamId) <= 1000);
+  assert.ok(score(cy.teamId) > 900 && score(cy.teamId) < 1000);
+  assert.equal(score(bo.teamId), 0);
+  assert.deepEqual(result.view.q.counts, [2, 1, 0, 0]);
+  assert.equal(result.view.q.answers[ann.teamId].option, 0);
+  const tvResult = await tv.wait((m) => m.type === 'state' && m.view.phase === 'result');
+  assert.deepEqual(tvResult.view.q.correct, [0]); // the right options, as a list (several may be right)
+  const annResult = await ann.wait((m) => m.type === 'state' && m.view.status === 'result');
+  assert.deepEqual([annResult.view.q.mine, annResult.view.q.correct, annResult.view.q.gained], [0, [0], score(ann.teamId)]);
+  assert.equal(annResult.view.q.question, undefined, 'no texts on the phones when the host turned them off');
+
+  // The top 5 on the TV, and each phone its place.
+  host.send({ type: 'cmd', action: { type: 'next' } });
+  const ranks = await tv.wait((m) => m.type === 'state' && m.view.phase === 'ranks');
+  assert.deepEqual(ranks.view.ranks.top.map((r) => r.id), [ann.teamId, cy.teamId, bo.teamId]);
+  assert.equal((await bo.wait((m) => m.type === 'state' && m.view.status === 'ranks')).view.rank, 3);
+  assert.equal((await cy.wait((m) => m.type === 'state' && m.view.status === 'ranks')).view.rank, 2);
+
+  // Skip the next question; then leave for the main menu while one is open, and continue: it starts again.
+  host.send({ type: 'cmd', action: { type: 'next' } });
+  await host.wait((m) => m.type === 'state' && m.view.phase === 'ready' && m.view.pos.i === 1);
+  host.send({ type: 'cmd', action: { type: 'skip' } });
+  await host.wait((m) => m.type === 'state' && m.view.phase === 'ready' && m.view.pos.i === 2);
+  host.send({ type: 'cmd', action: { type: 'next' } });
+  await host.wait((m) => m.type === 'state' && m.view.phase === 'open' && m.view.pos.i === 2);
+  bo.send({ type: 'answer', option: 1 });
+  await host.wait((m) => m.type === 'state' && Object.keys(m.view.q?.answers ?? {}).length === 1);
+  host.send({ type: 'mainMenu' });
+  const menu = await host.wait((m) => m.type === 'state' && m.view.phase === 'lobby' && m.resume);
+  assert.deepEqual([menu.resume.mode, menu.resume.played, menu.resume.total], ['quick', 2, 15]);
+  host.send({ type: 'resume' });
+  const back = await host.wait((m) => m.type === 'state' && !m.resume && m.view.phase === 'ready');
+  assert.deepEqual(back.view.q.answers, {});
+  assert.equal(back.view.teams.find((t) => t.id === ann.teamId).score, score(ann.teamId));
+  for (const c of [host, tv, ...players]) c.close();
+  await own.close();
+});
+
+test('another website open in the laptop browser can not use the editor API or become the host', async () => {
+  const http = await import('node:http');
+  const { WebSocket: WS } = await import('ws');
+  const base = `http://127.0.0.1:${srv.info.port}`;
+  const post = (headers) => fetch(`${base}/api/sets`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify({ set: { title: 'x', categories: [] } }) });
+  assert.equal((await post({ Origin: 'http://evil.example' })).status, 403);
+  assert.equal((await post({ Origin: 'null' })).status, 403);
+  assert.equal((await post({ 'Sec-Fetch-Site': 'cross-site' })).status, 403);
+  assert.equal((await post({ 'Sec-Fetch-Site': 'same-site' })).status, 403); // another program on this laptop
+  const ok = await post({ Origin: base, 'Sec-Fetch-Site': 'same-origin' });
+  assert.equal(ok.status, 201);
+  await fetch(`${base}/api/sets/${(await ok.json()).id}`, { method: 'DELETE' });
+
+  // A website's own name pointed at this laptop (DNS rebinding) can't even read the quizzes.
+  const status = await new Promise((resolve, reject) => {
+    http.get({ host: '127.0.0.1', port: srv.info.port, path: '/api/sets', headers: { Host: `evil.example:${srv.info.port}` } }, (res) => {
+      res.resume();
+      resolve(res.statusCode);
+    }).on('error', reject);
+  });
+  assert.equal(status, 403);
+
+  // The host's WebSocket from another website's page counts as not on the laptop.
+  const ws = new WS(url, { origin: 'http://evil.example' });
+  const reply = await new Promise((resolve, reject) => {
+    ws.on('open', () => ws.send(JSON.stringify({ type: 'hello', role: 'host' })));
+    ws.on('message', (raw) => {
+      const m = JSON.parse(raw);
+      if (m.type === 'welcome' || m.type === 'error') resolve(m);
+    });
+    ws.on('error', reject);
+  });
+  ws.close();
+  assert.equal(reply.type, 'error');
 });

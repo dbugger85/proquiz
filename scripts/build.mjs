@@ -37,6 +37,9 @@ Your quizzes and the autosave are kept in the ProQuiz folder in your user folder
 
 The TV screen can also be shown on an iPad, another computer or a smart TV on the same Wi-Fi:
 open the "TV (other device)" address that ProQuiz shows, in that device's browser. For an Apple TV, open it on an iPhone, iPad or Mac and use AirPlay screen mirroring.
+Players who aren't in the room can join over the internet: in the lobby, open "How players join" and choose
+"Over the internet". The first time, ProQuiz offers to download a free program from Cloudflare
+(cloudflared, about 40 MB) into the ProQuiz folder. Then the QR code is the internet one. The laptop needs internet.
 `,
   mac: `ProQuiz ${version}
 
@@ -51,6 +54,10 @@ Your quizzes and the autosave are kept in the ProQuiz folder in your home folder
 
 The TV screen can also be shown on an iPad, another computer or a smart TV on the same Wi-Fi:
 open the "TV (other device)" address that ProQuiz shows, in that device's browser. For an Apple TV, open it on an iPhone, iPad or Mac and use AirPlay screen mirroring.
+Players who aren't in the room can join over the internet: in the lobby, open "How players join" and choose
+"Over the internet". The first time, ProQuiz offers to download a free program from Cloudflare
+(cloudflared, about 40 MB) into the ProQuiz folder (or install it with "brew install cloudflared").
+Then the QR code is the internet one. The laptop needs internet.
 `,
   linux: `ProQuiz ${version}
 
@@ -61,6 +68,9 @@ Your quizzes and the autosave are kept in ~/ProQuiz.
 
 The TV screen can also be shown on an iPad, another computer or a smart TV on the same Wi-Fi:
 open the "TV (other device)" address that ProQuiz shows, in that device's browser. For an Apple TV, open it on an iPhone, iPad or Mac and use AirPlay screen mirroring.
+Players who aren't in the room can join over the internet: in the lobby, open "How players join" and choose
+"Over the internet". The first time, ProQuiz offers to download a free program from Cloudflare
+(cloudflared, about 40 MB) into ~/ProQuiz/bin. Then the QR code is the internet one. The laptop needs internet.
 `,
 };
 

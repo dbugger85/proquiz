@@ -490,6 +490,20 @@ export const sounds = {
       noiseHit('white', { at: when, filter: 'bandpass', freq: [1200 + Math.random() * 2500], q: 2, levels: [[0.003, 0.25 * (1 - when / 1.4)], [0.04, 0.0001]], out: bus });
     }
   },
+  // Quick quiz: the top 5 slides in: a quick whoosh and three rising bells.
+  ranks() {
+    whoosh({ dur: 0.35, gain: 0.3, from: 500, to: 3500, wet: 0.2 });
+    [79, 84, 88].forEach((m, i) => bell(hz(m), { at: 0.15 + i * 0.16, dur: 0.9, gain: 0.22, ratio: 1.4, index: 1.6, pan: -0.3 + i * 0.3 }));
+  },
+  // Points counting up: a soft, short tick that climbs a little as the count goes on (p: 0–1).
+  countTick(p = 0) {
+    woodblock({ pitch: 2300 + p * 900, gain: 0.14 });
+  },
+  // The top 5 rows changing places: a quick whoosh and a soft landing.
+  swap() {
+    whoosh({ dur: 0.3, gain: 0.35, from: 600, to: 3200, wet: 0.25 });
+    thump(160, 90, { at: 0.22, dur: 0.12, gain: 0.3 });
+  },
   // The winner: a brass section "da-da-da-daaa" with a snare roll, a timpani and a crash cymbal.
   fanfare() {
     const brass = (notes, at, dur) => {
@@ -560,6 +574,22 @@ export function playEvent(view, ev, colors) {
       break;
     case 'boom':
       sounds.boom();
+      break;
+    // Quick quiz
+    case 'section':
+      sounds.round2();
+      break;
+    case 'quickReady':
+      sounds.pick();
+      break;
+    case 'quickOpen':
+      sounds.armed();
+      break;
+    case 'quickResult':
+      sounds.reveal();
+      break;
+    case 'ranks':
+      sounds.ranks();
       break;
   }
 }

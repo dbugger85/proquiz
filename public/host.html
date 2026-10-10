@@ -19,6 +19,8 @@
     </header>
 
     <p id="host-error" class="error" role="alert" hidden></p>
+    <!-- During a game: joining over the internet has stopped working -->
+    <p id="remote-warn" class="remote-warn" role="alert" hidden></p>
 
     <section id="lobby" class="lobby" hidden>
       <div id="resume" class="resume" hidden>
@@ -35,14 +37,27 @@
       </div>
       <div class="join-card">
         <h2 data-t="scanToJoin">Scan to join</h2>
+        <!-- Players join over the internet, but the address isn't ready (yet): what is happening, and what to do -->
+        <div id="join-wait" class="join-wait" role="status" hidden>
+          <span class="join-wait-icon" aria-hidden="true"></span>
+          <p id="join-wait-text"></p>
+          <div class="row">
+            <button id="join-retry" class="btn btn-primary btn-small" type="button" data-t="remoteRetry" hidden></button>
+            <button id="join-download" class="btn btn-primary btn-small" type="button" data-t="remoteDownloadShort" hidden></button>
+          </div>
+        </div>
+        <!-- One QR code: the Wi-Fi one, or the internet one when players join over the internet -->
+        <p id="join-label" class="join-label"></p>
         <div id="qr" class="qr"></div>
         <p id="url" class="url"></p>
+        <p id="remote-pin" class="pin-line" hidden></p>
+        <p id="remote-tv" class="hint" hidden></p>
         <p class="hint" data-t="hostOnLaptopHint"></p>
         <p id="tv-url" class="hint" hidden></p>
       </div>
 
       <div>
-        <h2><span data-t="teams">Teams</span> <span id="team-count"></span></h2>
+        <h2><span id="teams-title" data-t="teams">Teams</span> <span id="team-count"></span></h2>
         <ul id="teams" class="team-list"></ul>
         <p id="no-teams" class="empty" data-t="noTeamsYet"></p>
         <div class="start-row">
@@ -58,7 +73,7 @@
         <div class="settings-group quiz-group">
           <label class="field">
             <span data-t="questionSet">Questions</span>
-            <span class="row picker-row"><select id="set-picker"></select> <a class="btn btn-small" href="/editor" data-t="editShort"></a></span>
+            <span class="row picker-row"><select id="set-picker"></select> <a id="edit-set" class="btn btn-small" href="/editor" data-t="editShort"></a></span>
           </label>
           <fieldset class="field pill-field">
             <legend data-t="language">Language</legend>
@@ -74,6 +89,17 @@
           </div>
           <label class="check quiz-specials" id="quiz-specials" hidden><input type="checkbox" name="quizSpecials"> <span><span id="quiz-specials-label"></span><br><small data-t="quizSpecialsHint"></small></span></label>
         </div>
+
+        <!-- Quick quiz (multiple choice): only shown when the chosen quiz is one. -->
+        <details class="settings-group" id="group-quick" open hidden>
+          <summary><span class="group-title" data-t="groupQuick"></span> <span class="group-status" id="quick-status"></span></summary>
+          <div class="field">
+            <label class="seconds"><span data-t="quickReadSeconds"></span> <input type="number" name="quickReadSeconds" min="0" max="30" step="1"> <span data-t="secondsShort"></span></label>
+            <small data-t="quickReadHint"></small>
+          </div>
+          <label class="check"><input type="checkbox" name="quickStreak"> <span data-t="quickStreak"></span></label>
+          <label class="check with-hint"><input type="checkbox" name="quickPhoneText"> <span><span data-t="quickPhoneText"></span><br><small data-t="quickPhoneTextHint"></small></span></label>
+        </details>
 
         <details class="settings-group" id="group-crazy" open>
           <summary><span class="group-title" data-t="crazyMode"></span> <span class="group-status" id="crazy-status"></span></summary>
@@ -134,6 +160,59 @@
         <details class="settings-group" id="group-look">
           <summary><span class="group-title" data-t="groupLook"></span> <span class="group-status" id="look-status"></span></summary>
           <label class="check with-hint"><input type="checkbox" name="glass"> <span><span data-t="glassLook"></span><br><small data-t="glassHint"></small></span></label>
+          <!-- Branding (brand.js): kept in the ProQuiz folder for every quiz, not a game setting, so nothing here has a
+               `name` the settings form would send. Changed through /api/brand. -->
+          <div id="brand" class="brand-settings">
+            <div class="field">
+              <span data-t="brandLogo"></span>
+              <div class="brand-logo-row">
+                <div id="brand-preview" class="brand-preview"></div>
+                <div class="brand-logo-actions">
+                  <label class="btn btn-small"><span id="brand-choose" data-t="brandChoose"></span><input id="brand-file" type="file" accept=".png,.jpg,.jpeg,.svg,.webp,image/png,image/jpeg,image/svg+xml,image/webp" hidden></label>
+                  <button id="brand-remove" class="btn btn-small btn-quiet" type="button" data-t="brandRemove" hidden></button>
+                </div>
+              </div>
+              <small id="brand-logo-msg" class="brand-msg" role="status"></small>
+            </div>
+            <label class="check with-hint" id="brand-plate-row" hidden><input type="checkbox" id="brand-plate"> <span><span data-t="brandPlate"></span><br><small data-t="brandPlateHint"></small></span></label>
+            <label class="field">
+              <span data-t="brandName"></span>
+              <input id="brand-name" type="text" maxlength="60" autocomplete="off" data-t-placeholder="brandNamePlaceholder">
+              <small data-t="brandNameHint"></small>
+            </label>
+            <fieldset class="field pill-field">
+              <legend><span data-t="brandAccent"></span> <span id="brand-accent-name" class="brand-accent-name"></span></legend>
+              <div id="brand-accents" class="accent-swatches" role="radiogroup" data-t-aria-label="brandAccent"></div>
+              <small data-t="brandAccentHint"></small>
+            </fieldset>
+          </div>
+        </details>
+
+        <!-- How players join: on this Wi-Fi, or over the internet (a Cloudflare quick tunnel, see lib/tunnel.js) -->
+        <details class="settings-group" id="group-remote">
+          <summary><span class="group-title" data-t="groupRemote"></span> <span class="group-status" id="remote-status"></span></summary>
+          <fieldset class="field pill-field">
+            <legend data-t="joinModeLabel"></legend>
+            <div class="pills">
+              <label><input type="radio" name="joinMode" value="wifi"><span data-t="joinWifi"></span></label>
+              <label><input type="radio" name="joinMode" value="internet"><span data-t="joinInternet"></span></label>
+            </div>
+          </fieldset>
+          <small class="hint" id="join-mode-hint"></small>
+          <div id="remote-more" class="remote-more">
+            <p id="remote-state" class="remote-state" role="status"></p>
+            <div id="remote-missing" class="remote-missing" hidden>
+              <button id="remote-download" class="btn btn-small" type="button" data-t="remoteDownload"></button>
+              <small data-t="remoteInstallHint"></small>
+            </div>
+            <button id="remote-retry" class="btn btn-small" type="button" data-t="remoteRetry" hidden></button>
+            <label class="check with-hint"><input type="checkbox" id="remote-pin-on"> <span><span data-t="remotePinSetting"></span><br><small data-t="remotePinHint"></small></span></label>
+            <div id="remote-pin-row" class="row remote-pin-row" hidden>
+              <b id="remote-pin-show"></b>
+              <button id="remote-pin-new" class="btn btn-small" type="button" data-t="remotePinNew"></button>
+            </div>
+            <p id="remote-note" class="remote-note" hidden data-t="remoteQuickNote"></p>
+          </div>
         </details>
       </form>
     </section>

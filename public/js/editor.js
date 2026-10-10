@@ -1,8 +1,9 @@
 // The question editor (laptop only). Quizzes save themselves a moment after each change.
-import { validateSet, MAX_CATEGORIES, MAX_QUESTIONS } from '/lib/validate.js';
-import { buildRequest, parseReply, splitTopics, AiQuizError, DIFFICULTIES, FILL_DIFFICULTIES, MIN_SIZE, gapsOf, guessLanguage, buildFillRequest, parseFill } from '/lib/aiquiz.js';
+import { validateSet, modeOf, MAX_CATEGORIES, MAX_QUESTIONS, MAX_SECTIONS, MAX_SECTION_QUESTIONS, MAX_OPTION, MIN_SECONDS, MAX_SECONDS, DEFAULT_SECONDS, rightSet } from '/lib/validate.js';
+import { buildRequest, parseReply, splitTopics, AiQuizError, DIFFICULTIES, FILL_DIFFICULTIES, MIN_SIZE, QUICK_SECTIONS, QUICK_PER_SECTION, gapsOf, guessLanguage, buildFillRequest, parseFill } from '/lib/aiquiz.js';
+import { SHAPES, OPTION_COLORS } from '/lib/quick.js';
 import { t, setLang, getLang, translatePage } from './i18n.js';
-import { $, h, fill, setGlass, savedGlass } from './ui.js';
+import { $, h, fill, setGlass, savedGlass, shapeSvg, optionStyle, setBrand, ask, tell } from './ui.js';
 import { KINDS } from '/lib/crazy.js';
 import { ICONS } from './specials.js';
 
@@ -15,7 +16,15 @@ let saveTimer = null;
 let savePromise = Promise.resolve();
 let aiNote = null; // { id, duplicates, filled?, left? } for a quiz just made or filled with AI (shown until another quiz is opened)
 
+// A Quick quiz (multiple choice in sections) instead of a board: see renderSections() and openQuestion().
+const quick = () => modeOf(set) === 'quick';
+
 setGlass(savedGlass()); // the look the host chose last (the editor has no game state of its own)
+// The host's branding (logo and accent colour), fetched once (the editor is on the laptop, so /api/ answers).
+fetch('/api/brand')
+  .then((r) => (r.ok ? r.json() : null))
+  .then(setBrand)
+  .catch(() => {});
 
 // ----- talking to the server -----
 
@@ -87,7 +96,7 @@ function renderList() {
           h(
             'span',
             { class: `ed-item-sub${q.problems ? ' bad' : ''}` },
-            q.builtIn ? t('edBuiltIn') : q.problems ? t('edNotReady') : t('edQuestions', { n: q.questions }),
+            [q.kind === 'quick' ? t('quickTag') : null, q.builtIn ? t('edBuiltIn') : q.problems ? t('edNotReady') : t('edQuestions', { n: q.questions })].filter(Boolean).join(' · '),
           ),
         ),
       ),
@@ -122,6 +131,13 @@ function blankSet() {
   };
 }
 
+// A Quick quiz to start from: two sections of five empty questions (no right answer marked yet).
+const blankQuickQuestion = () => ({ question: '', options: [] });
+const blankSection = (n = 5) => ({ name: '', questions: Array.from({ length: n }, blankQuickQuestion) });
+function blankQuickSet() {
+  return { v: 1, kind: 'quick', title: t('edNewQuizTitle'), sections: [blankSection(), blankSection()] };
+}
+
 async function createQuiz(newSet) {
   const { id } = await call('POST', '/api/sets', { set: newSet });
   await loadList();
@@ -129,6 +145,7 @@ async function createQuiz(newSet) {
 }
 
 $('#new-quiz').addEventListener('click', () => createQuiz(blankSet()));
+$('#new-quick').addEventListener('click', () => createQuiz(blankQuickSet()));
 
 $('#import-file').addEventListener('change', async (e) => {
   const file = e.target.files[0];
@@ -139,7 +156,7 @@ $('#import-file').addEventListener('change', async (e) => {
     await loadList();
     await select(id);
   } catch {
-    alert(t('edImportFailed'));
+    tell({ title: t('dlgImportTitle'), text: t('edImportFailed') });
   }
 });
 
@@ -199,7 +216,7 @@ function renderMain() {
               class: 'btn',
               type: 'button',
               onclick: async () => {
-                if (!confirm(t('edConfirmDelete', { title: set.title }))) return;
+                if (!(await ask({ title: t('dlgDeleteQuizTitle'), text: t('edConfirmDelete', { title: set.title }), ok: t('edDelete'), danger: true }))) return;
                 clearTimeout(saveTimer);
                 saveTimer = null;
                 await call('DELETE', `/api/sets/${currentId}`);
@@ -212,9 +229,7 @@ function renderMain() {
             t('edDelete'),
           ),
     ),
-    h('div', { id: 'ed-board' }),
-    h('div', { id: 'ed-round2' }),
-    h('div', { id: 'ed-final' }),
+    quick() ? h('div', { id: 'ed-sections', class: 'ed-sections' }) : [h('div', { id: 'ed-board' }), h('div', { id: 'ed-round2' }), h('div', { id: 'ed-final' })],
     h('div', { id: 'ed-problems' }),
   );
   renderBoard();
@@ -222,15 +237,17 @@ function renderMain() {
 }
 
 // The categories of a board: r = 1 is the main board, r = 2 the round 2 board.
-const catsOf = (r) => (r === 2 ? (set.round2?.categories ?? []) : set.categories);
+// A Quick quiz's sections take the place of the categories (problems use `c` for the section, `i` for the question).
+const catsOf = (r) => (quick() ? (r === 2 ? [] : set.sections) : r === 2 ? (set.round2?.categories ?? []) : set.categories);
 const tileKey = (c, i, r = 1) => (r === 2 ? `2:${c}-${i}` : `${c}-${i}`); // for the AI-filled marks
 
 // A question nobody has started on yet: not shown in red, just counted.
-const isBlank = (q) => !q.question?.trim() && !q.answer?.trim() && !q.image && !q.answerImage && !q.audio;
+const isBlank = (q) =>
+  !q.question?.trim() && !q.answer?.trim() && !(q.options ?? []).some((o) => String(o ?? '').trim()) && !q.image && !q.answerImage && !q.audio;
 const blankCategory = (cat) => !cat?.name?.trim() && (cat?.questions ?? []).every(isBlank);
 const blankProblem = (p) => {
   const cats = catsOf(p.r ?? 1);
-  return p.i !== undefined ? isBlank(cats[p.c]?.questions[p.i] ?? {}) : p.code === 'no-category-name' && blankCategory(cats[p.c]);
+  return p.i !== undefined ? isBlank(cats[p.c]?.questions[p.i] ?? {}) : /^no-(category|section)-name$/.test(p.code) && blankCategory(cats[p.c]);
 };
 const hasProblem = (c, i, r = 1) =>
   problems.some((p) => (p.r ?? 1) === r && p.c === c && (i === undefined ? p.i === undefined : p.i === i) && !blankProblem(p));
@@ -242,6 +259,7 @@ function snippet(q) {
 }
 
 function renderBoard() {
+  if (quick()) return renderSections();
   fill($('#ed-board'), ...boardParts(1));
   renderRound2();
   renderFinal();
@@ -282,8 +300,9 @@ function boardParts(r) {
                   type: 'button',
                   title: t('edRemoveCategory'),
                   'aria-label': t('edRemoveCategory'),
-                  onclick: () => {
-                    if (!confirm(t('edConfirmRemoveCategory', { name: cat.name || t('edCategory', { n: c + 1 }) }))) return;
+                  onclick: async () => {
+                    const text = t('edConfirmRemoveCategory', { name: cat.name || t('edCategory', { n: c + 1 }) });
+                    if (!(await ask({ title: t('dlgRemoveCategoryTitle'), text, ok: t('dlgRemove'), danger: true }))) return;
                     cats.splice(c, 1);
                     changed({ board: true });
                   },
@@ -351,8 +370,8 @@ function boardParts(r) {
             class: 'btn',
             type: 'button',
             disabled: rows <= 1,
-            onclick: () => {
-              if (!confirm(t('edConfirmRemoveRow'))) return;
+            onclick: async () => {
+              if (!(await ask({ title: t('dlgRemoveRowTitle'), text: t('edConfirmRemoveRow'), ok: t('dlgRemove'), danger: true }))) return;
               for (const cat of cats) if (cat.questions.length > 1) cat.questions.pop();
               changed({ board: true });
             },
@@ -385,7 +404,17 @@ function renderRound2() {
             };
           } else {
             const started = set.round2.categories.some((cat) => !blankCategory(cat));
-            if (started && !confirm(t('edConfirmRemoveRound2'))) return (e.target.checked = true);
+            if (started) {
+              // Stays ticked while the question is open, and only goes when the host says Remove.
+              e.target.checked = true;
+              const quiz = set;
+              ask({ title: t('dlgRemoveRound2Title'), text: t('edConfirmRemoveRound2'), ok: t('dlgRemove'), danger: true }).then((ok) => {
+                if (!ok || set !== quiz) return;
+                delete set.round2;
+                changed({ board: true });
+              });
+              return;
+            }
             delete set.round2;
           }
           changed({ board: true });
@@ -429,15 +458,189 @@ function renderFinal() {
   );
 }
 
+// ----- a Quick quiz: sections of multiple-choice questions -----
+
+// Moves an item of a list one place up (-1) or down (+1).
+function move(list, n, by) {
+  const to = n + by;
+  if (to < 0 || to >= list.length) return;
+  list.splice(to, 0, ...list.splice(n, 1));
+  changed({ board: true });
+}
+
+// The small ▲ ▼ × buttons next to a section or a question.
+function orderButtons(list, n, removeLabel, remove) {
+  if (builtIn) return null;
+  const mini = (label, text, onclick, disabled, extra = '') =>
+    h('button', { class: `ed-mini${extra}`, type: 'button', title: label, 'aria-label': label, disabled, onclick }, text);
+  return h(
+    'div',
+    { class: 'ed-order' },
+    mini(t('edMoveUp'), '▲', () => move(list, n, -1), n === 0, ' ed-up'),
+    mini(t('edMoveDown'), '▼', () => move(list, n, 1), n === list.length - 1, ' ed-down'),
+    mini(removeLabel, '×', remove, list.length <= 1, ' ed-del'),
+  );
+}
+
+// One question's line in its section: number, text, the right answer with its shape, the time and the points.
+function questionRow(sec, c, q, i) {
+  const rights = rightSet(q).filter((n) => q.options?.[n]?.trim());
+  const blank = isBlank(q);
+  const meta = [
+    ...(rights.length
+      ? rights.map((n) => h('span', { class: 'ed-qright', style: optionStyle(OPTION_COLORS[n]) }, shapeSvg(SHAPES[n]), h('span', {}, q.options[n])))
+      : blank
+        ? [null]
+        : [h('span', { class: 'ed-qright none' }, t('edNoRight'))]),
+    h('span', { class: 'ed-qbadge secs', 'data-own': q.seconds != null }, t('quickSecs', { s: q.seconds ?? sec.seconds ?? DEFAULT_SECONDS })),
+    q.points === 2000 ? h('span', { class: 'ed-qbadge double' }, `×2 ${t('quickDouble')}`) : null,
+    q.points === 0 ? h('span', { class: 'ed-qbadge none' }, t('edPointsNone')) : null,
+  ];
+  return h(
+    'li',
+    { class: 'ed-qitem' },
+    h(
+      'button',
+      {
+        class: `ed-qrow${hasProblem(c, i) ? ' bad' : ''}${blank ? ' blank' : ''}`,
+        type: 'button',
+        'data-c': c,
+        'data-i': i,
+        onclick: () => openQuestion(c, i),
+      },
+      h('b', { class: 'ed-qnum' }, String(i + 1)),
+      h('span', { class: 'ed-qtext' }, snippet(q)),
+      h('span', { class: 'ed-qmeta' }, meta),
+    ),
+    orderButtons(sec.questions, i, t('edRemoveQuestion'), async () => {
+      if (!isBlank(q) && !(await ask({ title: t('dlgRemoveQuestionTitle'), text: t('edConfirmRemoveQuestion', { n: i + 1 }), ok: t('dlgRemove'), danger: true }))) return;
+      sec.questions.splice(i, 1);
+      changed({ board: true });
+    }),
+  );
+}
+
+function sectionCard(sec, c) {
+  const secs = set.sections;
+  const name = sec.name?.trim() || t('edSection', { n: c + 1 });
+  return h(
+    'section',
+    { class: 'ed-sec' },
+    h(
+      'div',
+      { class: `ed-sec-head${hasProblem(c) ? ' bad' : ''}`, 'data-c': c },
+      h('span', { class: 'ed-sec-num' }, t('edSection', { n: c + 1 })),
+      h(
+        'label',
+        { class: 'field ed-sec-name' },
+        h('span', {}, t('edSectionName')),
+        h('input', {
+          type: 'text',
+          name: 'sectionName',
+          value: sec.name ?? '',
+          maxlength: 40,
+          placeholder: t('edSection', { n: c + 1 }),
+          disabled: builtIn,
+          oninput: (e) => {
+            sec.name = e.target.value;
+            changed();
+          },
+        }),
+      ),
+      h(
+        'label',
+        { class: 'field ed-sec-secs' },
+        h('span', {}, t('edSectionSeconds')),
+        h('input', {
+          type: 'number',
+          name: 'sectionSeconds',
+          min: MIN_SECONDS,
+          max: MAX_SECONDS,
+          step: 1,
+          value: sec.seconds ?? '',
+          placeholder: String(DEFAULT_SECONDS),
+          disabled: builtIn,
+          oninput: (e) => {
+            const v = e.target.value.trim();
+            if (v === '') delete sec.seconds;
+            else sec.seconds = Math.round(Number(v));
+            changed();
+            // The questions without their own time show the new one (no redraw, so the cursor stays here).
+            const secs = t('quickSecs', { s: Number.isInteger(sec.seconds) ? sec.seconds : DEFAULT_SECONDS });
+            for (const b of e.target.closest('.ed-sec').querySelectorAll('.ed-qbadge.secs:not([data-own])')) b.textContent = secs;
+          },
+        }),
+      ),
+      orderButtons(secs, c, t('edRemoveSection'), async () => {
+        if (!blankCategory(sec) && !(await ask({ title: t('dlgRemoveSectionTitle'), text: t('edConfirmRemoveSection', { name }), ok: t('dlgRemove'), danger: true }))) return;
+        secs.splice(c, 1);
+        changed({ board: true });
+      }),
+    ),
+    h('ol', { class: 'ed-qlist' }, sec.questions.map((q, i) => questionRow(sec, c, q, i))),
+    builtIn
+      ? null
+      : h(
+          'button',
+          {
+            class: 'btn btn-small ed-add-question',
+            type: 'button',
+            disabled: sec.questions.length >= MAX_SECTION_QUESTIONS,
+            onclick: () => {
+              sec.questions.push(blankQuickQuestion());
+              changed({ board: true });
+              openQuestion(c, sec.questions.length - 1);
+            },
+          },
+          `+ ${t('edAddQuestion')}`,
+        ),
+  );
+}
+
+function renderSections() {
+  const box = $('#ed-sections');
+  if (!box) return;
+  fill(
+    box,
+    h('div', { class: 'ed-sec-intro' }, h('h2', {}, t('edSections')), h('small', { class: 'muted' }, t('edSectionsHint'))),
+    set.sections.map((sec, c) => sectionCard(sec, c)),
+    builtIn
+      ? null
+      : h(
+          'div',
+          { class: 'row ed-tools' },
+          h(
+            'button',
+            {
+              class: 'btn ed-add-section',
+              type: 'button',
+              disabled: set.sections.length >= MAX_SECTIONS,
+              onclick: () => {
+                set.sections.push(blankSection(3));
+                changed({ board: true });
+              },
+            },
+            `+ ${t('edAddSection')}`,
+          ),
+        ),
+  );
+}
+
 // Update just the red marks (keeps the cursor where it is while typing a category name).
 function markTiles() {
   for (const el of document.querySelectorAll('.ed-tile[data-c]')) el.classList.toggle('bad', hasProblem(Number(el.dataset.c), Number(el.dataset.i), Number(el.dataset.r)));
   for (const el of document.querySelectorAll('.ed-cat[data-c]')) el.classList.toggle('bad', hasProblem(Number(el.dataset.c), undefined, Number(el.dataset.r)));
+  for (const el of document.querySelectorAll('.ed-qrow[data-c]')) el.classList.toggle('bad', hasProblem(Number(el.dataset.c), Number(el.dataset.i)));
+  for (const el of document.querySelectorAll('.ed-sec-head[data-c]')) el.classList.toggle('bad', hasProblem(Number(el.dataset.c)));
   const ft = document.querySelector('.ed-final-tile');
   if (ft) ft.classList.toggle('bad', problems.some((p) => !p.r && p.c === undefined && /final|bad-/.test(p.code)));
 }
 
 function problemText(p) {
+  if (quick()) {
+    const cat = p.c !== undefined ? set.sections[p.c]?.name?.trim() || t('edSection', { n: p.c + 1 }) : '';
+    return t(`p-${p.code}`, { cat, where: p.i !== undefined ? t('edWhereQuick', { cat, n: p.i + 1 }) : cat });
+  }
   const cats = catsOf(p.r ?? 1);
   const cat = p.c !== undefined ? cats[p.c]?.name || t('edCategory', { n: p.c + 1 }) : t('edFinal');
   const where = p.i !== undefined ? `${cat} ${cats[p.c]?.questions[p.i]?.value ?? ''}`.trim() : cat;
@@ -463,6 +666,7 @@ function renderProblems() {
 
 function openQuestion(c, i, r = 1) {
   const isFinal = c === null;
+  const isQuick = quick();
   const cats = catsOf(r);
   const q = isFinal ? set.final : cats[c].questions[i];
   const dialog = $('#q-dialog');
@@ -472,7 +676,7 @@ function openQuestion(c, i, r = 1) {
     else q[key] = value;
     changed();
   };
-  const field = (label, input) => h('label', { class: 'field' }, h('span', {}, label), input);
+  const field = (label, input, hint) => h('label', { class: 'field' }, h('span', {}, label), input, hint ? h('small', {}, hint) : null);
   const text = (key, { area = false, max = 300 } = {}) =>
     h(area ? 'textarea' : 'input', {
       ...(area ? { rows: 3 } : { type: 'text', value: q[key] ?? '' }),
@@ -574,7 +778,7 @@ function openQuestion(c, i, r = 1) {
   // Not offered on the final question.
   const unveilBox = h('div');
   function drawUnveil() {
-    if (isFinal || !q.image) return fill(unveilBox);
+    if (isFinal || isQuick || !q.image) return fill(unveilBox);
     const on = Number(q.unveil) > 0;
     fill(
       unveilBox,
@@ -616,13 +820,14 @@ function openQuestion(c, i, r = 1) {
   }
 
   const picQ = mediaField('image', 'image', t('edPicQ'));
-  const picA = mediaField('answerImage', 'image', t('edPicA'));
-  const clip = mediaField('audio', 'audio', t('edClip'), t('edClipHint'));
+  const picA = isQuick ? null : mediaField('answerImage', 'image', t('edPicA'));
+  const clip = mediaField('audio', 'audio', t('edClip'), isQuick ? t('edQuickClipHint') : t('edClipHint'));
 
   const question = text('question', { area: true });
   question.value = q.question ?? '';
 
-  fill(form, 
+  if (isQuick) fill(form, ...quickFields(c, i, q, question, field, upd), h('div', { class: 'ed-media-grid two' }, h('div', {}, picQ.box), h('div', {}, clip.box, startBox)), h('div', { class: 'ed-dialog-actions' }, h('button', { class: 'btn btn-primary', value: 'done' }, t('edDone'))));
+  else fill(form, 
     h('h2', {}, isFinal ? t('edFinal') : `${r === 2 ? `${t('edRound2')}: ` : ''}${cats[c].name || t('edCategory', { n: c + 1 })}`),
     isFinal
       ? field(t('edFinalCategory'), text('category', { max: 40 }))
@@ -658,7 +863,7 @@ function openQuestion(c, i, r = 1) {
     h('div', { class: 'ed-dialog-actions' }, h('button', { class: 'btn btn-primary', value: 'done' }, t('edDone'))),
   );
   picQ.draw();
-  picA.draw();
+  picA?.draw();
   clip.draw();
   dialog.onclose = () => {
     for (const a of form.querySelectorAll('audio')) a.pause();
@@ -669,9 +874,145 @@ function openQuestion(c, i, r = 1) {
   if (!builtIn) (isFinal ? form.querySelector('input') : question).focus();
 }
 
+// The Quick quiz part of the question dialog: the question, 2 to 4 answers in their colours and shapes with one
+// or more marked right (any of them counts), the time and the points. Empty answers are left out (so 2 filled in = two choices), except the
+// ones marked right, so the problem list can say it's empty. Answers after an empty one move up (with a note)
+// once the host leaves the answers, so the dialog shows the colours and shapes the game will use; until then a
+// note says it will happen (moving them while the host is still clicking there would be confusing).
+function quickFields(c, i, q, question, field, upd) {
+  const sec = set.sections[c];
+  const slots = SHAPES.map((_, n) => String(q.options?.[n] ?? ''));
+  let right = rightSet(q).filter((n) => n < slots.length); // the slots marked right (one or more; any of them counts)
+  const sync = () => {
+    const keep = kept();
+    q.options = keep.map((n) => slots[n]);
+    const marks = right.map((n) => keep.indexOf(n));
+    if (!marks.length) delete q.correct;
+    else q.correct = marks.length === 1 ? marks[0] : marks; // one right answer is saved as a number, as before
+    changed();
+  };
+  const showMarks = () =>
+    rows.forEach((row, n) => {
+      row.querySelector('input[type=checkbox]').checked = right.includes(n);
+      row.classList.toggle('right', right.includes(n));
+    });
+  const rows = SHAPES.map((shape, n) =>
+    h(
+      'div',
+      { class: `ed-opt${right.includes(n) ? ' right' : ''}`, style: optionStyle(OPTION_COLORS[n]) },
+      h('span', { class: 'ed-opt-shape' }, shapeSvg(shape)),
+      h('input', {
+        type: 'text',
+        name: `option${n}`,
+        value: slots[n],
+        maxlength: MAX_OPTION,
+        placeholder: n < 2 ? t('quickOption', { n: n + 1 }) : t('edOptionOptional', { n: n + 1 }),
+        'aria-label': t('quickOption', { n: n + 1 }),
+        disabled: builtIn,
+        oninput: (e) => {
+          slots[n] = e.target.value;
+          sync();
+          gapNote();
+        },
+      }),
+      h(
+        'label',
+        { class: 'ed-opt-right' },
+        h('input', {
+          type: 'checkbox',
+          name: 'correct',
+          value: n,
+          checked: right.includes(n),
+          disabled: builtIn,
+          onchange: (e) => {
+            right = e.target.checked ? [...right, n].sort((a, b) => a - b) : right.filter((k) => k !== n);
+            showMarks();
+            sync();
+            gapNote();
+          },
+        }),
+        h('span', {}, t('edRightAnswer')),
+      ),
+    ),
+  );
+  // Close a gap (answers 1, 2 and 4 filled): 4 becomes 3, as in the game. The right marks move with their answers.
+  const movedNote = h('small', { class: 'ed-opts-moved', role: 'status', hidden: true });
+  const kept = () => slots.map((_, n) => n).filter((n) => slots[n].trim() !== '' || right.includes(n));
+  const gapNote = () => {
+    const keep = kept();
+    const first = keep.find((n, k) => n !== k);
+    movedNote.hidden = first === undefined;
+    if (first !== undefined) movedNote.textContent = t('edOptionsGap', { from: first + 1, to: keep.indexOf(first) + 1 });
+  };
+  const moveUp = () => {
+    const keep = kept();
+    const gaps = keep.filter((n, k) => n !== k);
+    if (!gaps.length) return;
+    const texts = keep.map((n) => slots[n]);
+    right = right.map((n) => keep.indexOf(n));
+    slots.forEach((_, n) => (slots[n] = texts[n] ?? ''));
+    rows.forEach((row, n) => (row.querySelector('input[type=text]').value = slots[n]));
+    showMarks();
+    movedNote.textContent = t('edOptionsMoved', { from: gaps[0] + 1, to: keep.indexOf(gaps[0]) + 1 });
+    movedNote.hidden = false;
+    sync();
+  };
+  const fallback = sec.seconds ?? DEFAULT_SECONDS;
+  return [
+    h('h2', {}, `${sec.name?.trim() || t('edSection', { n: c + 1 })}: ${t('edQuestionN', { n: i + 1 })}`),
+    field(t('edQuestion'), question),
+    h(
+      'div',
+      {
+        class: 'field ed-opts',
+        // Leaving the answers (not just moving between them): close any gap.
+        onfocusout: (e) => !e.currentTarget.contains(e.relatedTarget) && moveUp(),
+      },
+      h('span', {}, t('edOptions')),
+      h('small', {}, t('edOptionsHint')),
+      rows,
+      movedNote,
+    ),
+    h(
+      'div',
+      { class: 'ed-quick-row' },
+      field(
+        t('edSeconds'),
+        h('input', {
+          type: 'number',
+          name: 'seconds',
+          min: MIN_SECONDS,
+          max: MAX_SECONDS,
+          step: 1,
+          value: q.seconds ?? '',
+          placeholder: String(fallback),
+          disabled: builtIn,
+          oninput: (e) => {
+            const v = e.target.value.trim();
+            upd('seconds', v === '' ? null : Math.round(Number(v)));
+          },
+        }),
+        t('edSecondsHint', { n: fallback }),
+      ),
+      field(
+        t('edPoints'),
+        h(
+          'select',
+          { name: 'points', disabled: builtIn, onchange: (e) => upd('points', e.target.value === '1000' ? null : Number(e.target.value)) },
+          [
+            [1000, t('edPointsNormal')],
+            [2000, t('edPointsDouble')],
+            [0, t('edPointsNone')],
+          ].map(([value, label]) => h('option', { value, selected: (q.points ?? 1000) === value }, label)),
+        ),
+      ),
+    ),
+  ];
+}
+
 // ----- making a quiz with AI (copy and paste, ProQuiz itself stays offline) -----
 
-const aiOpts = { topics: '', examples: '', difficulty: 'medium', categories: 5, rows: 5, final: true, round2: false, round2Topics: '', lang: null };
+const aiOpts = { kind: 'board', topics: '', examples: '', difficulty: 'medium', categories: 5, rows: 5, final: true, round2: false, round2Topics: '', sections: 3, perSection: 5, lang: null };
 
 function openAiDialog() {
   const dialog = $('#ai-dialog');
@@ -691,13 +1032,27 @@ function openAiDialog() {
   const reply = h('textarea', { id: 'ai-reply', rows: 6, placeholder: t('aiReplyPlaceholder'), oninput: () => (error.textContent = '') });
   const error = h('p', { id: 'ai-error', class: 'ed-media-status bad', role: 'alert' });
   // Round 2's own topics, only shown when round 2 is ticked.
-  const round2Box = h('div', { hidden: !aiOpts.round2 });
+  const round2Box = h('div', { hidden: !aiOpts.round2 || aiOpts.kind === 'quick' });
+  const isQuickKind = () => aiOpts.kind === 'quick';
+  const topicsHint = h('small', {});
+  const makeBtn = h('button', { class: 'btn btn-primary ai-fill', type: 'button', onclick: fillBoard });
 
   // Only the request text and the hint change while typing, so the cursor stays where it is.
   function redraw() {
     request.value = buildRequest(aiOpts);
     const n = splitTopics(aiOpts.topics).length;
-    tooMany.textContent = n > aiOpts.categories ? t('aiTooManyTopics', { n: aiOpts.categories }) : '';
+    const most = isQuickKind() ? aiOpts.sections : aiOpts.categories;
+    tooMany.textContent = n > most ? t('aiTooManyTopics', { n: most }) : '';
+    topicsHint.textContent = isQuickKind() ? t('aiTopicsHintQuick') : t('aiTopicsHint');
+    makeBtn.textContent = isQuickKind() ? t('aiMakeQuick') : t('aiFill');
+  }
+  // A board quiz or a Quick quiz: each has its own size settings.
+  function setKind(kind) {
+    aiOpts.kind = kind;
+    boardPart.hidden = isQuickKind();
+    quickPart.hidden = !isQuickKind();
+    round2Box.hidden = isQuickKind() || !aiOpts.round2;
+    redraw();
   }
   function update(key, value) {
     aiOpts[key] = value;
@@ -720,11 +1075,40 @@ function openAiDialog() {
     setTimeout(() => (copied.textContent = ''), 2000);
   }
 
+  // The size settings of each kind of quiz (display: contents, so they sit in the same row as the rest).
+  const boardPart = h(
+    'span',
+    { class: 'ai-part', hidden: isQuickKind() },
+    field(t('aiCategories'), choice('categories', sizes)),
+    field(t('aiRows'), choice('rows', sizes)),
+    h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'final', checked: aiOpts.final, onchange: (e) => update('final', e.target.checked) }), h('span', {}, t('aiFinal'))),
+    h(
+      'label',
+      { class: 'check' },
+      h('input', {
+        type: 'checkbox',
+        name: 'round2',
+        checked: aiOpts.round2,
+        onchange: (e) => {
+          update('round2', e.target.checked);
+          round2Box.hidden = !e.target.checked;
+        },
+      }),
+      h('span', {}, t('aiRound2')),
+    ),
+  );
+  const quickPart = h(
+    'span',
+    { class: 'ai-part', hidden: !isQuickKind() },
+    field(t('aiSections'), choice('sections', QUICK_SECTIONS.map((n) => [n, String(n)]))),
+    field(t('aiPerSection'), choice('perSection', QUICK_PER_SECTION.map((n) => [n, String(n)]))),
+  );
+
   async function fillBoard() {
     error.textContent = '';
     let made;
     try {
-      made = parseReply(reply.value, { final: aiOpts.final, round2: aiOpts.round2, title: t('aiDefaultTitle') });
+      made = parseReply(reply.value, { final: aiOpts.final, round2: aiOpts.round2, title: t('aiDefaultTitle'), kind: aiOpts.kind });
     } catch (err) {
       if (!(err instanceof AiQuizError)) throw err;
       error.textContent = t(`ai-${err.code}`);
@@ -743,35 +1127,35 @@ function openAiDialog() {
     form,
     h('h2', {}, t('aiTitle')),
     h('p', { class: 'muted' }, t('aiIntro')),
+    h(
+      'div',
+      { class: 'ai-opts' },
+      field(
+        t('aiKind'),
+        h(
+          'select',
+          { name: 'kind', onchange: (e) => setKind(e.target.value) },
+          [
+            ['board', t('aiKindBoard')],
+            ['quick', t('aiKindQuick')],
+          ].map(([value, label]) => h('option', { value, selected: aiOpts.kind === value }, label)),
+        ),
+      ),
+    ),
     h('h3', {}, t('aiStep1')),
     h(
       'div',
       { class: 'ai-grid' },
-      h('div', { class: 'ai-topics' }, field(t('aiTopics'), text('topics', 4), t('aiTopicsHint')), tooMany),
+      h('div', { class: 'ai-topics' }, h('label', { class: 'field' }, h('span', {}, t('aiTopics')), text('topics', 4), topicsHint), tooMany),
       field(t('aiExamples'), text('examples', 4), t('aiExamplesHint')),
     ),
     h(
       'div',
       { class: 'ai-opts' },
       field(t('aiDifficulty'), choice('difficulty', DIFFICULTIES.map((d) => [d, t(`aiLevel-${d}`)]))),
-      field(t('aiCategories'), choice('categories', sizes)),
-      field(t('aiRows'), choice('rows', sizes)),
       field(t('aiLang'), choice('lang', [['en', 'English'], ['no', 'Norsk']])),
-      h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'final', checked: aiOpts.final, onchange: (e) => update('final', e.target.checked) }), h('span', {}, t('aiFinal'))),
-      h(
-        'label',
-        { class: 'check' },
-        h('input', {
-          type: 'checkbox',
-          name: 'round2',
-          checked: aiOpts.round2,
-          onchange: (e) => {
-            update('round2', e.target.checked);
-            round2Box.hidden = !e.target.checked;
-          },
-        }),
-        h('span', {}, t('aiRound2')),
-      ),
+      boardPart,
+      quickPart,
     ),
     round2Box,
     h('h3', {}, t('aiStep2')),
@@ -785,7 +1169,7 @@ function openAiDialog() {
       'div',
       { class: 'ed-dialog-actions' },
       h('button', { class: 'btn btn-quiet', value: 'cancel' }, t('aiCancel')),
-      h('button', { class: 'btn btn-primary ai-fill', type: 'button', onclick: fillBoard }, t('aiFill')),
+      makeBtn,
     ),
   );
   fill(round2Box, field(t('aiRound2Topics'), text('round2Topics', 3), t('aiRound2TopicsHint')));

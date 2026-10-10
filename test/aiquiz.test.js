@@ -321,3 +321,100 @@ test('round 2: filling finds and fills the gaps on both boards, without touching
   assert.equal(made.set.round2.categories[1].name, 'Rivers');
   assert.deepEqual(validateSet(made.set), []);
 });
+
+// ----- a Quick quiz (multiple choice in sections) -----
+
+test('the Quick quiz request asks for sections, options, the topics, level and language', () => {
+  const text = buildRequest({ kind: 'quick', topics: 'Film\nMusikk', sections: 3, perSection: 8, difficulty: 'easy', lang: 'no' });
+  assert.match(text, /multiple-choice quiz/);
+  assert.match(text, /Exactly 3 sections with exactly 8 questions each/);
+  assert.match(text, /"Film", "Musikk"/);
+  assert.match(text, /add 1 more section of your own/);
+  assert.match(text, /exactly 4 options, and usually exactly one of them is right/);
+  assert.match(text, /"answer" is a list of all the right options/);
+  assert.match(text, /\["Sant", "Usant"\]/);
+  assert.match(text, /Easy: things most adults know/);
+  assert.match(text, /Norwegian \(bokmål\)/);
+  assert.doesNotMatch(text, /THE BOARD|final question/);
+  // The format example reads back as a valid Quick quiz in the chosen language.
+  const example = text.match(/```json\n([\s\S]*?)\n```/)[1];
+  const { set, problems } = parseReply('```json\n' + example + '\n```');
+  assert.deepEqual(problems, []);
+  assert.equal(set.kind, 'quick');
+  assert.equal(set.sections[0].name, 'Dyr');
+  assert.equal(set.sections[0].questions[0].correct, 1); // "Ku"
+  assert.deepEqual(set.sections[0].questions[2].correct, [0, 2]); // "Hval" and "Flaggermus": two right
+  assert.match(example, /"answer": \["Hval", "Flaggermus"\] \}/); // kept on one line like the others
+  const en = buildRequest({ kind: 'quick', sections: 1, perSection: 5 });
+  assert.match(en, /Exactly 1 section with exactly 5 questions each/);
+  assert.match(en, /Choose a fun topic for the section yourself/);
+  assert.match(en, /\["True", "False"\]/);
+});
+
+test('a Quick quiz reply: the right answer by text, position or letter, and messy options', () => {
+  const reply = {
+    title: 'Movie night',
+    sections: [
+      {
+        name: 'Films',
+        questions: [
+          { question: 'Who directed Jaws?', options: ['Lucas', 'Spielberg', 'Scorsese', 'Coppola'], answer: ' spielberg ' },
+          { question: 'Which year was Titanic released?', options: ['1995', '1997', '1999', '2001'], correct: 1 },
+          { question: 'Which film has Neo?', options: [{ text: 'Alien' }, { text: 'Heat' }, { text: 'The Matrix' }, { text: 'Up' }], answer: 'C' },
+          { question: 'True or false: Shrek is green.', options: ['True', 'False'], answer: 'True' },
+          { question: 'Too many options?', options: ['A1', 'B1', 'C1', 'D1', 'E1'], answer: 'E1' },
+          { question: 'Name the hobbit.', options: ['Frodo', 'Gandalf', '', 'Legolas'], answer: 'Frodo' },
+        ],
+      },
+      { section: 'Music', questions: [{ question: 'Who sang Thriller?', options: ['Prince', 'Michael Jackson', 'Madonna', 'Sting'], answer: 'Michael Jackson' }] },
+    ],
+  };
+  const { set, problems } = parseReply('Here you go!\n```json\n' + JSON.stringify(reply) + ',\n```');
+  assert.equal(set.kind, 'quick');
+  assert.equal(set.title, 'Movie night');
+  const qs = set.sections[0].questions;
+  assert.deepEqual(qs.map((q) => q.correct), [1, 1, 2, 0, undefined, 0]);
+  assert.deepEqual(qs[2].options, ['Alien', 'Heat', 'The Matrix', 'Up']);
+  assert.deepEqual(qs[4].options, ['A1', 'B1', 'C1', 'D1']); // at most 4, and the answer was cut off: none marked
+  assert.deepEqual(qs[5].options, ['Frodo', 'Gandalf', 'Legolas']); // empty options are dropped
+  assert.equal(set.sections[1].name, 'Music');
+  assert.deepEqual(problems, [{ code: 'bad-correct', c: 0, i: 4 }]);
+});
+
+test('a Quick quiz reply with several right answers: a list of texts, positions or letters', () => {
+  const reply = {
+    title: 'Animals',
+    sections: [
+      {
+        name: 'Mammals',
+        questions: [
+          { question: 'Which are mammals?', options: ['Whale', 'Shark', 'Bat', 'Frog'], answer: ['whale ', 'Bat'] },
+          { question: 'Which are birds?', options: ['Owl', 'Cat', 'Penguin', 'Eel'], answer: ['A', 'C'] },
+          { question: 'Which are fish?', options: ['Cod', 'Seal', 'Trout', 'Crab'], correct: [2, 0] },
+          { question: 'Just one in a list?', options: ['x', 'y', 'z', 'w'], answers: ['y'] },
+          { question: 'One known, one not', options: ['x', 'y', 'z', 'w'], answer: ['z', 'nope'] },
+          { question: 'All of them?', options: ['x', 'y', 'z', 'w'], answer: ['x', 'y', 'z', 'w'] },
+          { question: 'None known', options: ['x', 'y', 'z', 'w'], answer: ['q'] },
+        ],
+      },
+    ],
+  };
+  const { set, problems } = parseReply(JSON.stringify(reply), { kind: 'quick' });
+  assert.deepEqual(set.sections[0].questions.map((q) => q.correct), [[0, 2], [0, 2], [0, 2], 1, 2, [0, 1, 2, 3], undefined]);
+  assert.deepEqual(problems, [{ code: 'all-correct', c: 0, i: 5 }, { code: 'bad-correct', c: 0, i: 6 }]);
+});
+
+test('Quick quiz replies: kind, duplicates, and what is not a Quick quiz', () => {
+  const sections = [{ name: 'A', questions: [{ question: 'Q1?', options: ['x', 'Oslo', 'y', 'z'], answer: 'Oslo' }, { question: 'Q2?', options: ['Oslo', 'b', 'c', 'd'], answer: 'Oslo' }, { question: 'Q3?', options: ['True', 'False'], answer: 'True' }, { question: 'Q4?', options: ['True', 'False'], answer: 'True' }] }];
+  // A reply with both a board and sections is read as what was asked for.
+  const both = JSON.stringify({ title: 'T', categories: quiz({ cats: 3, rows: 3, final: false }).categories, sections });
+  assert.equal(parseReply(both).set.kind, undefined);
+  const made = parseReply(both, { kind: 'quick' });
+  assert.equal(made.set.kind, 'quick');
+  assert.deepEqual(made.duplicates, ['Oslo']); // true or false doesn't count
+  // No title: the default one. Nothing usable: not a quiz.
+  assert.equal(parseReply(JSON.stringify({ sections }), { title: 'AI quiz' }).set.title, 'AI quiz');
+  fails('{"title": "x", "sections": []}', 'not-a-quiz');
+  // A board reply in the Quick quiz dialog stays a board (the editor shows it as one).
+  assert.ok(parseReply(JSON.stringify(quiz()), { kind: 'quick' }).set.categories);
+});

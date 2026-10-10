@@ -1,7 +1,8 @@
 // Which background music plays when (the sound itself can only be heard, not tested here).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { moodFor, SONGS } from '../public/js/music.js';
+import { moodFor, SONGS, MOODS } from '../public/js/music.js';
+import { MUSIC_MOODS } from '../lib/game.js';
 
 const view = (phase, extra = {}) => ({ phase, settings: { music: true }, clip: null, deadline: null, ...extra });
 
@@ -15,11 +16,26 @@ test('the music follows the game', () => {
   assert.equal(moodFor(view('armed', { deadline: 10_000 }), 7500), 'hot'); // the last 3 seconds
   assert.equal(moodFor(view('armed')), 'thinking'); // no timer
   assert.equal(moodFor(view('answering')), 'answering');
-  assert.equal(moodFor(view('revealed')), 'silent');
+  assert.equal(moodFor(view('revealed')), 'calm'); // a soft tune after the answer's sting
   assert.equal(moodFor(view('finalWager')), 'final');
   assert.equal(moodFor(view('finalQuestion')), 'finalQ');
   assert.equal(moodFor(view('finalJudge')), 'judge');
   assert.equal(moodFor(view('over')), 'over');
+});
+
+test('the music follows a Quick quiz', () => {
+  assert.equal(moodFor(view('section')), 'board');
+  assert.equal(moodFor(view('ready', { deadline: 4000 })), 'thinking');
+  assert.equal(moodFor(view('open', { deadline: 20_000 }), 1000), 'thinking');
+  assert.equal(moodFor(view('open', { deadline: 20_000 }), 18_000), 'hot'); // the last 3 seconds
+  assert.equal(moodFor(view('result')), 'calm'); // after the reveal chime, a soft tune
+  assert.equal(moodFor(view('ranks')), 'calmUp'); // the same tune, a little fuller, under the top 5
+  assert.equal(moodFor(view('over')), 'over');
+  const clip = { file: 'song.mp3', start: 0 };
+  assert.equal(moodFor(view('ready', { clip })), 'silent');
+  assert.equal(moodFor(view('open', { clip })), 'silent');
+  assert.equal(moodFor(view('result', { clip })), 'silent'); // the clip plays on
+  assert.equal(moodFor(view('section', { clip: null, settings: { music: false } })), 'off');
 });
 
 test('quiet for sound clips, and off when switched off', () => {
@@ -27,6 +43,7 @@ test('quiet for sound clips, and off when switched off', () => {
   assert.equal(moodFor(view('reading', { clip })), 'silent');
   assert.equal(moodFor(view('armed', { clip })), 'silent');
   assert.equal(moodFor(view('finalQuestion', { clip })), 'silent');
+  assert.equal(moodFor(view('revealed', { clip })), 'silent');
   assert.equal(moodFor(view('lobby', { settings: { music: false } })), 'off');
   assert.equal(moodFor(null), 'off');
 });
@@ -40,5 +57,20 @@ test('the built-in songs are well formed', () => {
     }
     assert.ok(song.bars.every((chord) => chord.length >= 3));
     if (song.bass) assert.match(song.bass, /^[rfo.]+$/);
+  }
+});
+
+test('the calm tune is ambient and every mood has music', () => {
+  const glow = SONGS.glow;
+  for (const key of ['kick', 'snare', 'hat', 'shaker', 'openhat', 'melody']) assert.equal(glow[key], undefined, `glow.${key}`);
+  assert.ok(glow.bpm < 90);
+  assert.ok(MOODS.calm.delay > 0); // the reveal chime stands alone first
+  assert.equal(MOODS.calm.song, MOODS.calmUp.song); // so the top 5 only lifts it, no crossfade
+  const phases = ['lobby', 'board', 'round2', 'reading', 'armed', 'answering', 'revealed', 'special', 'finalWager', 'finalQuestion', 'finalJudge', 'over', 'section', 'ready', 'open', 'result', 'ranks'];
+  const moods = new Set(phases.flatMap((p) => [moodFor(view(p, { deadline: 10_000 }), 0), moodFor(view(p, { deadline: 10_000 }), 9000)]));
+  for (const mood of moods) if (mood !== 'silent' && mood !== 'off') assert.ok(MOODS[mood], mood);
+  for (const [name, m] of Object.entries(MOODS)) {
+    assert.ok(SONGS[m.song], `${name}.song`);
+    for (const f of [m.file, m.fallbackFile]) if (f) assert.ok(MUSIC_MOODS.includes(f), `${name}: ${f}`);
   }
 });

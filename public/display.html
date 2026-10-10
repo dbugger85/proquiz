@@ -12,10 +12,21 @@
 
   <section id="lobby" class="tv-lobby" hidden>
     <div>
+      <!-- The host's own logo and event name (branding), when set -->
+      <div id="tv-brand" class="tv-brand" hidden></div>
       <h1 class="call" data-t="scanToJoin">Scan to join</h1>
       <p class="call-url"><span data-t="orOpen">or open</span> <b id="url"></b></p>
+      <!-- Players join over the internet, but the address isn't ready yet -->
+      <p id="tv-wait" class="tv-wait" hidden></p>
     </div>
-    <div id="qr" class="qr"></div>
+    <!-- One QR code: the Wi-Fi one, or the internet one when players join over the internet -->
+    <div id="qrs" class="tv-qrs">
+      <figure class="tv-qr">
+        <figcaption id="qr-label" hidden></figcaption>
+        <div id="qr" class="qr"></div>
+        <p id="remote-pin" class="tv-pin" hidden></p>
+      </figure>
+    </div>
     <ul id="teams" class="tv-teams"></ul>
   </section>
 

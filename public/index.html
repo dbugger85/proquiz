@@ -10,12 +10,33 @@
 </head>
 <body class="phone">
   <form id="join" class="phone-join" hidden>
-    <span class="wordmark">ProQuiz</span>
+    <header class="join-head">
+      <span class="wordmark">ProQuiz</span>
+      <p id="brand-name" class="brand-name" hidden></p>
+    </header>
     <h1 data-t="joinTitle">Join the quiz</h1>
     <label class="field">
-      <span data-t="teamName">Team name</span>
+      <span id="name-label" data-t="teamName">Team name</span>
       <input id="name" type="text" maxlength="20" autocomplete="off" autocapitalize="words" enterkeyhint="done" data-t-placeholder="teamNamePlaceholder" required>
     </label>
+    <label class="field" id="pin-field" hidden>
+      <span data-t="pinLabel">PIN</span>
+      <input id="pin" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" enterkeyhint="done">
+    </label>
+    <fieldset id="avatar-field" class="avatar-field">
+      <legend id="avatar-title" data-t="avatarTitle">Your avatar</legend>
+      <div class="avatar-row">
+        <span id="avatar-preview" class="avatar avatar-big" role="img" data-t-aria-label="avatarPreview"></span>
+        <button id="avatar-random" class="avatar-dice" type="button" data-t-aria-label="avatarRandom" data-t-title="avatarRandom">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4.5" fill="#fff"/><g fill="#2c2a63"><circle cx="8" cy="8" r="1.8"/><circle cx="16" cy="8" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="8" cy="16" r="1.8"/><circle cx="16" cy="16" r="1.8"/></g></svg>
+        </button>
+        <button id="avatar-edit" class="btn avatar-edit" type="button" aria-expanded="false" aria-controls="avatar-builder" data-t="avatarCustomise">Customise</button>
+      </div>
+      <div id="avatar-builder" class="avatar-builder" hidden>
+        <div id="avatar-tabs" class="avatar-tabs" role="tablist"></div>
+        <div id="avatar-opts" class="avatar-opts" role="radiogroup"></div>
+      </div>
+    </fieldset>
     <fieldset>
       <legend data-t="pickColor">Pick your colour</legend>
       <div id="swatches" class="swatches"></div>
@@ -27,7 +48,7 @@
   <main id="team" class="phone-team" hidden>
     <header>
       <div id="me" class="me"></div>
-      <div id="score" class="score"></div>
+      <div id="score" class="score" data-count="score"></div>
     </header>
     <div id="stage" class="stage"></div>
   </main>

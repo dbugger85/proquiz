@@ -1,0 +1,40 @@
+{
+  "v": 1,
+  "kind": "quick",
+  "title": "Lynquiz-eksempel",
+  "sections": [
+    {
+      "name": "Oppvarming",
+      "seconds": 20,
+      "questions": [
+        { "question": "Hva er hovedstaden i Australia?", "options": ["Sydney", "Melbourne", "Canberra", "Perth"], "correct": 2 },
+        { "question": "Hvilket av disse er et pattedyr? (To er riktige.)", "options": ["Delfin", "Hai", "Flaggermus", "Pingvin"], "correct": [0, 2] },
+        { "question": "Sant eller usant: en gullfisk husker bare i tre sekunder.", "options": ["Sant", "Usant"], "correct": 1, "seconds": 10 },
+        { "question": "Hvilket nordisk land har flest innbyggere?", "options": ["Norge", "Danmark", "Sverige", "Finland"], "correct": 2 },
+        { "question": "Hvilken farge får du hvis du blander blått og gult?", "options": ["Grønn", "Lilla", "Oransje", "Brun"], "correct": 0 }
+      ]
+    },
+    {
+      "name": "Se og hør",
+      "seconds": 20,
+      "questions": [
+        { "question": "Hvilket land har dette flagget?", "image": "sample-flag-japan.svg", "options": ["Kina", "Japan", "Sør-Korea", "Bangladesh"], "correct": 1 },
+        { "question": "Hvilken barnesang er dette?", "audio": "sample-twinkle.mp3", "options": ["«Lisa gikk til skolen»", "«Twinkle, Twinkle, Little Star»", "«Lille Petter Edderkopp»", "«Hjulene på bussen»"], "correct": 1, "seconds": 30 },
+        { "question": "Hvem malte «Skrik»?", "options": ["Edvard Munch", "Vincent van Gogh", "Pablo Picasso", "Claude Monet"], "correct": 0 },
+        { "question": "Hva heter Norges høyeste fjell?", "options": ["Glittertind", "Galdhøpiggen", "Snøhetta", "Store Skagastølstind"], "correct": 1 },
+        { "question": "Hvilket år ble unionen mellom Norge og Sverige oppløst?", "options": ["1814", "1884", "1905", "1945"], "correct": 2 }
+      ]
+    },
+    {
+      "name": "Sluttspurt",
+      "seconds": 15,
+      "questions": [
+        { "question": "Hvilket hav er det største?", "options": ["Atlanterhavet", "Stillehavet", "Indiahavet", "Nordishavet"], "correct": 1 },
+        { "question": "Sant eller usant: en tomat er botanisk sett et bær.", "options": ["Sant", "Usant"], "correct": 0, "seconds": 10 },
+        { "question": "Hvilket grunnstoff har det kjemiske symbolet Fe?", "options": ["Fluor", "Jern", "Fosfor", "Fermium"], "correct": 1 },
+        { "question": "Hvor mange spillere har hvert lag på banen i en fotballkamp?", "options": ["9", "10", "11", "12"], "correct": 2 },
+        { "question": "Doble poeng! Hva er det største dyret som lever i dag?", "options": ["Afrikansk elefant", "Blåhval", "Sjiraff", "Hvalhai"], "correct": 1, "points": 2000 }
+      ]
+    }
+  ]
+}

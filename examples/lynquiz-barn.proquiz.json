@@ -1,0 +1,287 @@
+{
+ "proquiz": 1,
+ "set": {
+  "v": 1,
+  "kind": "quick",
+  "title": "Lynquiz for barn (6–9 år)",
+  "sections": [
+   {
+    "name": "Dyrenes verden",
+    "seconds": 30,
+    "questions": [
+     {
+      "question": "Hvilket dyr sier «mø»?",
+      "options": [
+       "Hest",
+       "Ku",
+       "Sau",
+       "Gris"
+      ],
+      "correct": 1
+     },
+     {
+      "question": "Hvor mange bein har en edderkopp?",
+      "options": [
+       "4",
+       "6",
+       "8",
+       "10"
+      ],
+      "correct": 2
+     },
+     {
+      "question": "Hvilket dyr er det aller største?",
+      "options": [
+       "Elefant",
+       "Giraff",
+       "Isbjørn",
+       "Blåhval"
+      ],
+      "correct": 3
+     },
+     {
+      "question": "Sant eller usant: Pingviner kan fly.",
+      "options": [
+       "Sant",
+       "Usant"
+      ],
+      "correct": 1,
+      "seconds": 20
+     },
+     {
+      "question": "Hva liker kaniner å spise?",
+      "options": [
+       "Gulrot",
+       "Pølse",
+       "Is",
+       "Fisk"
+      ],
+      "correct": 0
+     },
+     {
+      "question": "Hvilke av disse dyrene har fjær? (To er riktige.)",
+      "options": [
+       "Høne",
+       "Katt",
+       "Ugle",
+       "Hund"
+      ],
+      "correct": [
+       0,
+       2
+      ]
+     }
+    ]
+   },
+   {
+    "name": "Eventyr og tegnefilm",
+    "seconds": 30,
+    "questions": [
+     {
+      "question": "Hvem bor under brua i eventyret om de tre bukkene Bruse?",
+      "options": [
+       "En ulv",
+       "Et troll",
+       "En rev",
+       "En bjørn"
+      ],
+      "correct": 1
+     },
+     {
+      "question": "Hva heter snømannen i «Frost»?",
+      "options": [
+       "Sven",
+       "Hans",
+       "Olaf",
+       "Kristoffer"
+      ],
+      "correct": 2
+     },
+     {
+      "question": "Hva heter brødrene til Askeladden?",
+      "options": [
+       "Per og Pål",
+       "Ole og Dole",
+       "Kari og Ola",
+       "Knerten og Vesle"
+      ],
+      "correct": 0
+     },
+     {
+      "question": "Hvilket dyr er Ole Brumm?",
+      "options": [
+       "En gris",
+       "En tiger",
+       "Et esel",
+       "En bjørn"
+      ],
+      "correct": 3
+     },
+     {
+      "question": "Sant eller usant: Pippi Langstrømpe er så sterk at hun kan løfte hesten sin.",
+      "options": [
+       "Sant",
+       "Usant"
+      ],
+      "correct": 0,
+      "seconds": 20
+     },
+     {
+      "question": "Hvilken farge har hetta til Rødhette?",
+      "options": [
+       "Blå",
+       "Grønn",
+       "Rød",
+       "Gul"
+      ],
+      "correct": 2
+     }
+    ]
+   },
+   {
+    "name": "Tall og former",
+    "seconds": 30,
+    "questions": [
+     {
+      "question": "Hvor mange epler ser du?",
+      "options": [
+       "4",
+       "5",
+       "6",
+       "7"
+      ],
+      "correct": 1,
+      "image": "lynbarn-epler.svg"
+     },
+     {
+      "question": "Hva er 3 + 4?",
+      "options": [
+       "6",
+       "7",
+       "8",
+       "9"
+      ],
+      "correct": 1
+     },
+     {
+      "question": "Hva er klokka?",
+      "options": [
+       "Ett",
+       "Tre",
+       "Seks",
+       "Ni"
+      ],
+      "correct": 1,
+      "image": "lynbarn-klokke.svg"
+     },
+     {
+      "question": "Hvor mange sider har denne formen?",
+      "options": [
+       "4",
+       "5",
+       "6",
+       "8"
+      ],
+      "correct": 2,
+      "image": "lynbarn-sekskant.svg"
+     },
+     {
+      "question": "Hvilket tall er størst?",
+      "options": [
+       "19",
+       "91",
+       "9",
+       "90"
+      ],
+      "correct": 1
+     },
+     {
+      "question": "Hvilke av disse er partall? (To er riktige.)",
+      "options": [
+       "3",
+       "4",
+       "7",
+       "10"
+      ],
+      "correct": [
+       1,
+       3
+      ]
+     }
+    ]
+   },
+   {
+    "name": "Norge og verden",
+    "seconds": 30,
+    "questions": [
+     {
+      "question": "Hvilket land har dette flagget?",
+      "options": [
+       "Sverige",
+       "Danmark",
+       "Norge",
+       "Island"
+      ],
+      "correct": 2,
+      "image": "lynbarn-flagg.svg"
+     },
+     {
+      "question": "Hva heter hovedstaden i Norge?",
+      "options": [
+       "Bergen",
+       "Oslo",
+       "Trondheim",
+       "Tromsø"
+      ],
+      "correct": 1
+     },
+     {
+      "question": "Når er Norges nasjonaldag?",
+      "options": [
+       "1. januar",
+       "17. mai",
+       "17. juni",
+       "24. desember"
+      ],
+      "correct": 1
+     },
+     {
+      "question": "Hvilken årstid kommer etter vinteren?",
+      "options": [
+       "Våren",
+       "Sommeren",
+       "Høsten"
+      ],
+      "correct": 0
+     },
+     {
+      "question": "Sant eller usant: Sola er en stjerne.",
+      "options": [
+       "Sant",
+       "Usant"
+      ],
+      "correct": 0,
+      "seconds": 20
+     },
+     {
+      "question": "Finalespørsmål! Hvilken planet bor vi på?",
+      "options": [
+       "Mars",
+       "Jorda",
+       "Venus",
+       "Jupiter"
+      ],
+      "correct": 1,
+      "points": 2000
+     }
+    ]
+   }
+  ]
+ },
+ "files": {
+  "lynbarn-epler.svg": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI5MDAiIGhlaWdodD0iNTAwIiB2aWV3Qm94PSIwIDAgOTAwIDUwMCI+PHJlY3Qgd2lkdGg9IjkwMCIgaGVpZ2h0PSI1MDAiIGZpbGw9IiNlM2Y0ZmYiLz48cmVjdCB4PSIxNjUiIHk9IjE5MCIgd2lkdGg9IjEwIiBoZWlnaHQ9IjMwIiByeD0iNCIgZmlsbD0iIzZiM2UxZiIvPjxlbGxpcHNlIGN4PSIxOTIiIGN5PSIyMDQiIHJ4PSIyMiIgcnk9IjExIiBmaWxsPSIjM2ZhZTRhIiB0cmFuc2Zvcm09InJvdGF0ZSgtMjUgMTkyIDIwNCkiLz48Y2lyY2xlIGN4PSIxNTQiIGN5PSIyNjAiIHI9IjQ0IiBmaWxsPSIjZTUzOTM1Ii8+PGNpcmNsZSBjeD0iMTg2IiBjeT0iMjYwIiByPSI0NCIgZmlsbD0iI2U1MzkzNSIvPjxlbGxpcHNlIGN4PSIxNDYiIGN5PSIyNDIiIHJ4PSIxMCIgcnk9IjE2IiBmaWxsPSIjZmY4YTgwIiBvcGFjaXR5PSIuNyIvPjxyZWN0IHg9IjMwNSIgeT0iMjMwIiB3aWR0aD0iMTAiIGhlaWdodD0iMzAiIHJ4PSI0IiBmaWxsPSIjNmIzZTFmIi8+PGVsbGlwc2UgY3g9IjMzMiIgY3k9IjI0NCIgcng9IjIyIiByeT0iMTEiIGZpbGw9IiMzZmFlNGEiIHRyYW5zZm9ybT0icm90YXRlKC0yNSAzMzIgMjQ0KSIvPjxjaXJjbGUgY3g9IjI5NCIgY3k9IjMwMCIgcj0iNDQiIGZpbGw9IiNlNTM5MzUiLz48Y2lyY2xlIGN4PSIzMjYiIGN5PSIzMDAiIHI9IjQ0IiBmaWxsPSIjZTUzOTM1Ii8+PGVsbGlwc2UgY3g9IjI4NiIgY3k9IjI4MiIgcng9IjEwIiByeT0iMTYiIGZpbGw9IiNmZjhhODAiIG9wYWNpdHk9Ii43Ii8+PHJlY3QgeD0iNDQ1IiB5PSIxOTAiIHdpZHRoPSIxMCIgaGVpZ2h0PSIzMCIgcng9IjQiIGZpbGw9IiM2YjNlMWYiLz48ZWxsaXBzZSBjeD0iNDcyIiBjeT0iMjA0IiByeD0iMjIiIHJ5PSIxMSIgZmlsbD0iIzNmYWU0YSIgdHJhbnNmb3JtPSJyb3RhdGUoLTI1IDQ3MiAyMDQpIi8+PGNpcmNsZSBjeD0iNDM0IiBjeT0iMjYwIiByPSI0NCIgZmlsbD0iI2U1MzkzNSIvPjxjaXJjbGUgY3g9IjQ2NiIgY3k9IjI2MCIgcj0iNDQiIGZpbGw9IiNlNTM5MzUiLz48ZWxsaXBzZSBjeD0iNDI2IiBjeT0iMjQyIiByeD0iMTAiIHJ5PSIxNiIgZmlsbD0iI2ZmOGE4MCIgb3BhY2l0eT0iLjciLz48cmVjdCB4PSI1ODUiIHk9IjIzMCIgd2lkdGg9IjEwIiBoZWlnaHQ9IjMwIiByeD0iNCIgZmlsbD0iIzZiM2UxZiIvPjxlbGxpcHNlIGN4PSI2MTIiIGN5PSIyNDQiIHJ4PSIyMiIgcnk9IjExIiBmaWxsPSIjM2ZhZTRhIiB0cmFuc2Zvcm09InJvdGF0ZSgtMjUgNjEyIDI0NCkiLz48Y2lyY2xlIGN4PSI1NzQiIGN5PSIzMDAiIHI9IjQ0IiBmaWxsPSIjZTUzOTM1Ii8+PGNpcmNsZSBjeD0iNjA2IiBjeT0iMzAwIiByPSI0NCIgZmlsbD0iI2U1MzkzNSIvPjxlbGxpcHNlIGN4PSI1NjYiIGN5PSIyODIiIHJ4PSIxMCIgcnk9IjE2IiBmaWxsPSIjZmY4YTgwIiBvcGFjaXR5PSIuNyIvPjxyZWN0IHg9IjcyNSIgeT0iMTkwIiB3aWR0aD0iMTAiIGhlaWdodD0iMzAiIHJ4PSI0IiBmaWxsPSIjNmIzZTFmIi8+PGVsbGlwc2UgY3g9Ijc1MiIgY3k9IjIwNCIgcng9IjIyIiByeT0iMTEiIGZpbGw9IiMzZmFlNGEiIHRyYW5zZm9ybT0icm90YXRlKC0yNSA3NTIgMjA0KSIvPjxjaXJjbGUgY3g9IjcxNCIgY3k9IjI2MCIgcj0iNDQiIGZpbGw9IiNlNTM5MzUiLz48Y2lyY2xlIGN4PSI3NDYiIGN5PSIyNjAiIHI9IjQ0IiBmaWxsPSIjZTUzOTM1Ii8+PGVsbGlwc2UgY3g9IjcwNiIgY3k9IjI0MiIgcng9IjEwIiByeT0iMTYiIGZpbGw9IiNmZjhhODAiIG9wYWNpdHk9Ii43Ii8+PHJlY3QgeT0iNDAwIiB3aWR0aD0iOTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iIzhiYzM0YSIvPjwvc3ZnPg==",
+  "lynbarn-klokke.svg": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI5MDAiIGhlaWdodD0iNTAwIiB2aWV3Qm94PSIwIDAgOTAwIDUwMCI+PHJlY3Qgd2lkdGg9IjkwMCIgaGVpZ2h0PSI1MDAiIGZpbGw9IiNmZmYzYzQiLz48Y2lyY2xlIGN4PSI0NTAiIGN5PSIyNTAiIHI9IjIxNSIgZmlsbD0iI2ZmZmZmZiIgc3Ryb2tlPSIjMWU4OGU1IiBzdHJva2Utd2lkdGg9IjE4Ii8+PGxpbmUgeDE9IjQ1MC4wIiB5MT0iODUuMCIgeDI9IjQ1MC4wIiB5Mj0iNjAuMCIgc3Ryb2tlPSIjMjYzMjM4IiBzdHJva2Utd2lkdGg9IjEyIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz48bGluZSB4MT0iNTMyLjUiIHkxPSIxMDcuMSIgeDI9IjU0NS4wIiB5Mj0iODUuNSIgc3Ryb2tlPSIjMjYzMjM4IiBzdHJva2Utd2lkdGg9IjYiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjxsaW5lIHgxPSI1OTIuOSIgeTE9IjE2Ny41IiB4Mj0iNjE0LjUiIHkyPSIxNTUuMCIgc3Ryb2tlPSIjMjYzMjM4IiBzdHJva2Utd2lkdGg9IjYiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjxsaW5lIHgxPSI2MTUuMCIgeTE9IjI1MC4wIiB4Mj0iNjQwLjAiIHkyPSIyNTAuMCIgc3Ryb2tlPSIjMjYzMjM4IiBzdHJva2Utd2lkdGg9IjEyIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz48bGluZSB4MT0iNTkyLjkiIHkxPSIzMzIuNSIgeDI9IjYxNC41IiB5Mj0iMzQ1LjAiIHN0cm9rZT0iIzI2MzIzOCIgc3Ryb2tlLXdpZHRoPSI2IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz48bGluZSB4MT0iNTMyLjUiIHkxPSIzOTIuOSIgeDI9IjU0NS4wIiB5Mj0iNDE0LjUiIHN0cm9rZT0iIzI2MzIzOCIgc3Ryb2tlLXdpZHRoPSI2IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz48bGluZSB4MT0iNDUwLjAiIHkxPSI0MTUuMCIgeDI9IjQ1MC4wIiB5Mj0iNDQwLjAiIHN0cm9rZT0iIzI2MzIzOCIgc3Ryb2tlLXdpZHRoPSIxMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PGxpbmUgeDE9IjM2Ny41IiB5MT0iMzkyLjkiIHgyPSIzNTUuMCIgeTI9IjQxNC41IiBzdHJva2U9IiMyNjMyMzgiIHN0cm9rZS13aWR0aD0iNiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PGxpbmUgeDE9IjMwNy4xIiB5MT0iMzMyLjUiIHgyPSIyODUuNSIgeTI9IjM0NS4wIiBzdHJva2U9IiMyNjMyMzgiIHN0cm9rZS13aWR0aD0iNiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PGxpbmUgeDE9IjI4NS4wIiB5MT0iMjUwLjAiIHgyPSIyNjAuMCIgeTI9IjI1MC4wIiBzdHJva2U9IiMyNjMyMzgiIHN0cm9rZS13aWR0aD0iMTIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjxsaW5lIHgxPSIzMDcuMSIgeTE9IjE2Ny41IiB4Mj0iMjg1LjUiIHkyPSIxNTUuMCIgc3Ryb2tlPSIjMjYzMjM4IiBzdHJva2Utd2lkdGg9IjYiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjxsaW5lIHgxPSIzNjcuNSIgeTE9IjEwNy4xIiB4Mj0iMzU1LjAiIHkyPSI4NS41IiBzdHJva2U9IiMyNjMyMzgiIHN0cm9rZS13aWR0aD0iNiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PGxpbmUgeDE9IjQ1MCIgeTE9IjI1MCIgeDI9IjU2NSIgeTI9IjI1MCIgc3Ryb2tlPSIjMjYzMjM4IiBzdHJva2Utd2lkdGg9IjE2IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz48bGluZSB4MT0iNDUwIiB5MT0iMjUwIiB4Mj0iNDUwIiB5Mj0iOTUiIHN0cm9rZT0iI2U1MzkzNSIgc3Ryb2tlLXdpZHRoPSIxMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PGNpcmNsZSBjeD0iNDUwIiBjeT0iMjUwIiByPSIxNiIgZmlsbD0iIzI2MzIzOCIvPjwvc3ZnPg==",
+  "lynbarn-flagg.svg": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI5MDAiIGhlaWdodD0iNTAwIiB2aWV3Qm94PSIwIDAgOTAwIDUwMCI+PHJlY3Qgd2lkdGg9IjkwMCIgaGVpZ2h0PSI1MDAiIGZpbGw9IiNjZmU4ZmYiLz48ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSgyMDggNzQpIj48cmVjdCB3aWR0aD0iNDg0IiBoZWlnaHQ9IjM1MiIgZmlsbD0iI2JhMGMyZiIvPjxyZWN0IHg9IjEzMiIgd2lkdGg9Ijg4IiBoZWlnaHQ9IjM1MiIgZmlsbD0iI2ZmZiIvPjxyZWN0IHk9IjEzMiIgd2lkdGg9IjQ4NCIgaGVpZ2h0PSI4OCIgZmlsbD0iI2ZmZiIvPjxyZWN0IHg9IjE1NCIgd2lkdGg9IjQ0IiBoZWlnaHQ9IjM1MiIgZmlsbD0iIzAwMjA1YiIvPjxyZWN0IHk9IjE1NCIgd2lkdGg9IjQ4NCIgaGVpZ2h0PSI0NCIgZmlsbD0iIzAwMjA1YiIvPjwvZz48L3N2Zz4=",
+  "lynbarn-sekskant.svg": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI5MDAiIGhlaWdodD0iNTAwIiB2aWV3Qm94PSIwIDAgOTAwIDUwMCI+PHJlY3Qgd2lkdGg9IjkwMCIgaGVpZ2h0PSI1MDAiIGZpbGw9IiNlOGY1ZTkiLz48cG9seWdvbiBwb2ludHM9IjY0MC4wLDI1MC4wIDU0NS4wLDQxNC41IDM1NS4wLDQxNC41IDI2MC4wLDI1MC4wIDM1NS4wLDg1LjUgNTQ1LjAsODUuNSIgZmlsbD0iI2ZmYjMwMCIgc3Ryb2tlPSIjZTY1MTAwIiBzdHJva2Utd2lkdGg9IjE0IiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PC9zdmc+"
+ }
+}
