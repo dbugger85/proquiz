@@ -15,6 +15,8 @@ function audio() {
   if (!ctx) {
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return null;
+    // iPhone and iPad mute this kind of sound in silent mode: ask to play like a media app instead.
+    if (navigator.audioSession) navigator.audioSession.type = 'playback';
     ctx = new AC();
     // A gentle limiter so big layered sounds never clip on loud TV speakers.
     limiter = ctx.createDynamicsCompressor();

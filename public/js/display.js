@@ -48,7 +48,8 @@ function showUnlock() {
 }
 // The background music follows every update, and checks a few times a second for "time's nearly up".
 setInterval(() => view && syncMusic(view, net.now()), 250);
-for (const type of ['pointerdown', 'keydown']) {
+// iPad Safari only counts the end of a tap (touchend or click) as permission, so listen for those too.
+for (const type of ['pointerdown', 'touchend', 'click', 'keydown']) {
   document.addEventListener(type, () => {
     unlockAudio();
     setTimeout(() => {
