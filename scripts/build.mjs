@@ -36,7 +36,7 @@ const START_HERE = {
 Your quizzes and the autosave are kept in the ProQuiz folder in your user folder.
 
 The TV screen can also be shown on an iPad, another computer or a smart TV on the same Wi-Fi:
-open the "TV (other device)" address that ProQuiz shows in its browser. For an Apple TV, open it on an iPhone, iPad or Mac and use AirPlay screen mirroring.
+open the "TV (other device)" address that ProQuiz shows, in that device's browser. For an Apple TV, open it on an iPhone, iPad or Mac and use AirPlay screen mirroring.
 `,
   mac: `ProQuiz ${version}
 
@@ -50,7 +50,7 @@ Use "mac-apple-silicon" for Macs from late 2020 onwards (M1, M2, …) and "mac-i
 Your quizzes and the autosave are kept in the ProQuiz folder in your home folder.
 
 The TV screen can also be shown on an iPad, another computer or a smart TV on the same Wi-Fi:
-open the "TV (other device)" address that ProQuiz shows in its browser. For an Apple TV, open it on an iPhone, iPad or Mac and use AirPlay screen mirroring.
+open the "TV (other device)" address that ProQuiz shows, in that device's browser. For an Apple TV, open it on an iPhone, iPad or Mac and use AirPlay screen mirroring.
 `,
   linux: `ProQuiz ${version}
 
@@ -60,7 +60,7 @@ open the "TV (other device)" address that ProQuiz shows in its browser. For an A
 Your quizzes and the autosave are kept in ~/ProQuiz.
 
 The TV screen can also be shown on an iPad, another computer or a smart TV on the same Wi-Fi:
-open the "TV (other device)" address that ProQuiz shows in its browser. For an Apple TV, open it on an iPhone, iPad or Mac and use AirPlay screen mirroring.
+open the "TV (other device)" address that ProQuiz shows, in that device's browser. For an Apple TV, open it on an iPhone, iPad or Mac and use AirPlay screen mirroring.
 `,
 };
 
