@@ -79,7 +79,9 @@ A party quiz for the people in the room. A laptop runs the game, a TV shows it, 
 
 ## Get it
 
-Download the zip for your computer from the [latest release](https://github.com/dbugger85/proquiz/releases/latest) and unzip it. There's nothing to install. Each zip has a "START HERE" note. ProQuiz tells you in the lobby when a new version is out (your quizzes and settings stay where they are; you can turn the check off under **Look and branding**).
+Download the zip for your computer from the [latest release](https://github.com/dbugger85/proquiz/releases/latest) and unzip it. There's nothing to install. Each zip has a "START HERE" note.
+
+**New versions:** ProQuiz tells you in the lobby when one is out. Click **Update now** and it downloads the new version, checks it and restarts itself; the host page connects again by itself and your quizzes and settings stay where they are. The window ProQuiz runs in (the black window on Windows, the Terminal window on a Mac) stays, and closing it still stops ProQuiz. The old program is kept next to the new one as `ProQuiz.old` until the next start, and if anything goes wrong ProQuiz says so and keeps running as before; **Download** then opens the release page so you can do it by hand. You can turn the version check off under **Look and branding**.
 
 | Computer | Download |
 |---|---|
@@ -96,6 +98,11 @@ Download the zip for your computer from the [latest release](https://github.com/
 1. Start ProQuiz. Your browser opens the **host screen**.
 2. Click **Edit questions**. Then click **New board quiz** or **New quick quiz** (see below), or open one of the samples. Four sample quizzes are included: a board quiz and a Quick quiz, each in English and Norwegian. The editor saves by itself, and a list tells you what's missing.
 3. Try it once with two phones, so you know how it feels.
+
+### Every quiz
+
+- **Description and cover picture:** at the top of a quiz you can write a line or two about it (up to 300 letters) and choose a cover picture (**Choose a file** or **Find a free picture**). Both show in the editor's list and in the lobby under the quiz list, and they go with the quiz when you export it.
+- **Archive:** click **Archive** next to a quiz you're done with (the samples too). It leaves the lobby's list but is kept, folded away under **Archived** at the bottom of the editor's list; **Bring back** puts it back. This is personal to your computer and isn't part of the quiz file.
 
 ### Making a board quiz
 
@@ -146,10 +153,10 @@ These steps are the same for both kinds of quiz.
      - **Apple TV** has no web browser. Open the TV address on an iPhone, iPad or Mac, then use **Screen Mirroring** (AirPlay) to send it to the Apple TV. Turn the iPhone or iPad sideways, and keep it plugged in. Mirroring shows the picture a split second late, but that doesn't change who buzzed first.
      - Smart TV browsers differ, and ProQuiz hasn't been tested on them. If the sound or the board doesn't work there, use a cable or an iPad instead.
    - **Only one screen** (just the laptop, or the laptop mirrored to the TV)? Skip "Open TV screen". Once the game starts, the laptop shows the TV view itself, with the controls underneath: click the tiles on the board, and the answers stay hidden until you reveal them. Press **H** to peek at the host view (with the answer and score changes), and **H** again to go back. **F** is full screen.
-4. **Choose the quiz** and the language at the top of the lobby's settings. A Quick quiz says **Quick quiz** after its name in the list.
+4. **Choose the quiz** and the language at the top of the lobby's settings. A Quick quiz says **Quick quiz** after its name in the list, and the quiz's cover picture and description (if it has them) show under the list. Quizzes you archived in the editor aren't listed.
 5. **Players join:** they scan the QR code on the TV, type a name, build an avatar (or mascot) and pick one of 16 colours. In a board quiz, each phone is a team (every team its own colour), and teams can press **Try your buzzer** to hear their tone. The TV shows the newest player first, so whoever just joined sees their name at once.
 6. **Settings:** the lobby's settings come in folding sections, and a closed section shows a short summary of what's set. Some sections are only for one kind of quiz (see [Playing a board quiz](#playing-a-board-quiz) and [Playing a quick quiz](#playing-a-quick-quiz)). These are in both:
-   - **Sound:** effects, music and the volume. **Your own music**, at the end of this section, lets you choose a music file for each moment (lobby, between questions, thinking, final, after the game).
+   - **Sound:** effects and music, each with its own volume (both start at 80 %, so the TV is heard over a room; turn them down if it's too much). **Your own music**, at the end of this section, lets you choose a music file for each moment (lobby, between questions, thinking, final, after the game).
    - **Look and branding:** the **Glass look** (on by default): frosted, see-through panels with a soft glow slowly moving behind them, on the TV, the phones and the laptop. Untick it if the TV or an older laptop stutters, and every screen switches to the plain look at once. Underneath, your own [branding](#your-own-logo-and-colours).
    - **How players join:** on this Wi-Fi, or [over the internet](#playing-with-people-elsewhere).
 7. **Start game.**
@@ -287,7 +294,7 @@ ProQuiz remembers the choice. Next time, the internet address is made again when
   - If a company or school network blocks it, try another internet connection (like a phone's hotspot).
 - **No sound.** Click the TV screen once. Check **Sound effects** is on and the TV isn't muted. Sound clips play from the TV screen, or from the laptop when no TV screen is open.
 
-Your quizzes, their pictures and clips, your logo and colours, and the autosave are kept in a **ProQuiz** folder in your home folder. Use **Export** in the editor to share a quiz, pictures and clips included, and **Import** to open one.
+Your quizzes, their pictures and clips, your logo and colours, and the autosave are kept in a **ProQuiz** folder in your home folder. Use **Export** in the editor to share a quiz, pictures and clips included, and **Import** to open one. **Export all quizzes** (in the editor's list) puts every quiz you made into one file, a handy backup or a way to move to a new computer: **Import** reads it back and tells you how many quizzes it got (archived ones stay archived). A quiz made with a newer ProQuiz than yours says so when you import it: update ProQuiz to open it. The file is described in [docs/file-format.md](docs/file-format.md).
 
 ## For developers
 

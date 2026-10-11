@@ -388,7 +388,7 @@ test('saving keeps the credits of pictures in use, and an export and import carr
   const pkg = await store.exportPackage(id);
   assert.deepEqual(pkg.set.credits, { [name]: credit() });
   assert.ok(pkg.files[name]);
-  const copy = (await store.get(await store.importPackage(JSON.parse(JSON.stringify(pkg))))).set;
+  const copy = (await store.get((await store.importPackage(JSON.parse(JSON.stringify(pkg)))).ids[0])).set;
   assert.deepEqual(copy.credits, { [name]: credit() });
   // The picture removed: its credit goes too.
   delete saved.categories[0].questions[0].answerImage;

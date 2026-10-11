@@ -2,6 +2,7 @@
   "v": 1,
   "kind": "quick",
   "title": "Sample quick quiz",
+  "description": "A short multiple-choice quiz to try the Quick quiz with: three sections, with a picture, a sound clip and a double-points question.",
   "sections": [
     {
       "name": "Warm-up",

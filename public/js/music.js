@@ -355,7 +355,7 @@ export function syncMusic(view, now) {
   const mood = moodFor(view, now);
   if (typeof document !== 'undefined') document.body.dataset.music = mood;
   if (!ready()) return;
-  const v = view?.settings?.musicVolume ?? 35;
+  const v = view?.settings?.musicVolume ?? 80;
   if (v !== volume) {
     volume = v;
     ramp(out.gain, curve(v), 0.2);

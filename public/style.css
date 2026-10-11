@@ -484,6 +484,29 @@ select option {
 .update-text small {
   color: var(--muted);
 }
+/* Update now: how far it has got, or what went wrong */
+.update-status {
+  font-variant-numeric: tabular-nums;
+}
+.update-status.error {
+  color: var(--bad);
+}
+.update-status[hidden] {
+  display: none;
+}
+.update-banner.busy .update-icon {
+  animation: update-spin 1.6s linear infinite;
+}
+@keyframes update-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .update-banner.busy .update-icon {
+    animation: none;
+  }
+}
 .update-close {
   min-width: 48px;
   min-height: 48px;
@@ -2488,10 +2511,29 @@ fieldset.pill-field legend {
   display: grid;
   gap: 0.35rem;
 }
+/* A row in the list: the quiz button and its Archive / Bring back button side by side */
+.ed-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.ed-row > .ed-item {
+  flex: 1;
+  min-width: 0;
+}
+.ed-row.archived .ed-item {
+  opacity: 0.75;
+}
+.ed-archive {
+  flex: none;
+  white-space: nowrap;
+  font-size: 0.85rem;
+}
 .ed-item {
   width: 100%;
-  display: grid;
-  gap: 0.15rem;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
   text-align: left;
   padding: 0.7rem 0.9rem;
   border-radius: var(--r-m);
@@ -2515,6 +2557,81 @@ fieldset.pill-field legend {
 }
 .ed-item-sub.bad {
   color: var(--bad);
+}
+.ed-item-text {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+.ed-item-thumb {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  object-fit: cover;
+  border-radius: var(--r-s);
+  background: var(--glass);
+}
+.ed-item-desc {
+  font-size: 0.85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Archived quizzes: folded at the bottom of the list */
+.ed-archived {
+  margin-top: 1rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--edge);
+}
+.ed-archived > summary {
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  cursor: pointer;
+  color: var(--muted);
+  font-weight: 700;
+}
+.ed-archived .ed-list {
+  margin-top: 0.35rem;
+}
+
+/* Description and cover picture, under the quiz name */
+.ed-about {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 340px);
+  gap: 1rem 1.5rem;
+  align-items: start;
+}
+@media (max-width: 800px) {
+  .ed-about {
+    grid-template-columns: 1fr;
+  }
+}
+.ed-cover .btn {
+  min-height: 48px;
+}
+
+/* Host lobby: the chosen quiz's cover and description under the picker */
+.quiz-about {
+  display: flex;
+  gap: 0.9rem;
+  align-items: flex-start;
+}
+.quiz-about .quiz-cover {
+  width: 96px;
+  height: 96px;
+  flex: none;
+  object-fit: cover;
+  border-radius: var(--r-m);
+  border: 1px solid var(--edge);
+  background: var(--glass);
+}
+.quiz-about .quiz-desc {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
 }
 
 .ed-main {
@@ -2727,7 +2844,8 @@ fieldset.pill-field legend {
 .ed-dialog h2 {
   font-size: 1.3rem;
 }
-.ed-dialog textarea {
+.ed-dialog textarea,
+.ed-about textarea {
   width: 100%;
   min-height: 90px;
   padding: 0.7rem 0.9rem;
@@ -2738,8 +2856,12 @@ fieldset.pill-field legend {
   color: inherit;
   resize: vertical;
 }
-.ed-dialog textarea:focus {
+.ed-dialog textarea:focus,
+.ed-about textarea:focus {
   border-color: var(--light);
+}
+.ed-about textarea {
+  min-height: 4.5rem;
 }
 .ed-media-grid {
   display: grid;
@@ -6313,7 +6435,8 @@ body.glass input[type='text'],
 body.glass input[type='search'],
 body.glass input[type='number'],
 body.glass select,
-body.glass .ed-dialog textarea {
+body.glass .ed-dialog textarea,
+body.glass .ed-about textarea {
   background-color: rgb(0 0 0 / 0.22);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08), inset 0 2px 6px rgb(0 0 0 / 0.25);
 }

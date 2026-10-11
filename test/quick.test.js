@@ -288,7 +288,7 @@ test('the store keeps a quick quiz tidy, lists its kind and finds its files', as
   assert.equal(list.find((q) => q.id === 'sample').kind, 'board');
   assert.equal(list.find((q) => q.id === 'messy').questions, 2);
   // An exported quick quiz can be imported again.
-  const id = await store.importPackage(await store.exportPackage('quick-sample'));
+  const { ids: [id] } = await store.importPackage(await store.exportPackage('quick-sample'));
   assert.deepEqual(validateSet((await store.get(id)).set), []);
 });
 

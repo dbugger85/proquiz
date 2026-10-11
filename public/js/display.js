@@ -3,7 +3,7 @@ import { ranking, COLORS, unveilProgress, SHAPES, OPTION_COLORS } from '/lib/gam
 import { connect } from './net.js';
 import { t, pts, setLang, translatePage, fastestTitle, secondsText, licenseName } from './i18n.js';
 import { $, h, fill, qrSvg, shortUrl, urlNodes, countdown, runCountdowns, teamStyle, setGlass, shapeSvg, optionStyle, timerTotal, setBrand, brandLogo, longWord } from './ui.js';
-import { unlockAudio, audioReady, playEvent, playSound, startTicks, sounds } from './sounds.js';
+import { unlockAudio, audioReady, playEvent, playSound, startTicks, sounds, setSoundVolume } from './sounds.js';
 import { animateRanks, cancelRanks, countTo, shownCount, setTickSound, reducedMotion } from './rankanim.js';
 import { syncClip, preloadClips } from './clip.js';
 import { syncMusic } from './music.js';
@@ -37,6 +37,7 @@ const net = connect({
       connected = new Set(msg.connected);
       remote = msg.remote ?? remote;
       brand = msg.brand ?? null;
+      setSoundVolume(view.settings.soundVolume);
       const ev = view.event;
       if (ev && soundSeq !== null && ev.seq !== soundSeq) playEvent(view, ev, COLORS);
       soundSeq = ev?.seq ?? 0;

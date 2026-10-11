@@ -2,6 +2,7 @@
   "v": 1,
   "kind": "quick",
   "title": "Lynquiz-eksempel",
+  "description": "En kort flervalgsquiz for å prøve lynquizen: tre deler, med et bilde, et lydklipp og et spørsmål som gir dobbelt.",
   "sections": [
     {
       "name": "Oppvarming",

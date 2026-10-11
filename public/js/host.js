@@ -6,7 +6,7 @@ import { ranking, COLORS, KINDS, unveilProgress, MUSIC_MOODS, maxBet, SHAPES, OP
 import { connect } from './net.js';
 import { t, pts, setLang, translatePage, fastestTitle, secondsText, licenseName } from './i18n.js';
 import { $, h, fill, qrSvg, shortUrl, urlNodes, countdown, runCountdowns, teamStyle, setGlass, shapeSvg, optionStyle, setBrand, brandLogo, ACCENTS, ask, askNumber, askColor, modalOpen } from './ui.js';
-import { unlockAudio, audioReady, playEvent, playSound, startTicks } from './sounds.js';
+import { unlockAudio, audioReady, playEvent, playSound, startTicks, setSoundVolume } from './sounds.js';
 import { syncClip, stopClip } from './clip.js';
 import { syncMusic, stopMusic } from './music.js';
 import { ICONS, ruleFor, badgeFor } from './specials.js';
@@ -46,6 +46,7 @@ const net = connect({
       remote = msg.remote ?? remote;
       brand = msg.brand ?? null;
       update = msg.update ?? null;
+      setSoundVolume(view.settings.soundVolume);
       const ev = view.event;
       if (ev && soundSeq !== null && ev.seq !== soundSeq && displays === 0) playEvent(view, ev, COLORS);
       soundSeq = ev?.seq ?? 0;
@@ -53,6 +54,10 @@ const net = connect({
     } else if (msg.type === 'latency') {
       latency = msg.latency;
       if (view?.phase === 'lobby') renderTeams();
+    } else if (msg.type === 'update') {
+      // "Update now" moved on (a percent more downloaded, checking, restarting, or a problem)
+      update = msg.update ?? null;
+      if (view?.phase === 'lobby') renderUpdate();
     } else if (msg.type === 'sound') {
       playSound(view, msg, COLORS);
     } else if (msg.type === 'error') {
@@ -84,31 +89,76 @@ function showError(text) {
 }
 
 // A newer ProQuiz is out: a small banner at the top of the lobby, until the host closes it (for this browser
-// session, remembered per version). The Download button only ever opens ProQuiz's own releases page.
+// session, remembered per version). The Download button only ever opens ProQuiz's own releases page. In the
+// downloaded program (`update.canInstall`) there is also **Update now**, and `update.install` says how far it has
+// got (lib/selfupdate.js). After the restart the same banner says "ProQuiz was updated to …" (`info.updatedFrom`).
 const UPDATE_SEEN = 'proquiz.updateSeen';
 const RELEASES = 'https://github.com/dbugger85/proquiz/releases/';
+const UPDATE_BUSY = ['downloading', 'checking', 'restarting'];
+// Which banner would show: the new release, the "updated" note, or nothing.
+const updateKey = () => (update?.version ? update.version : info?.updatedFrom && info?.version ? `done-${info.version}` : null);
 function updateDismissed() {
   try {
-    return sessionStorage.getItem(UPDATE_SEEN) === update?.version;
+    return sessionStorage.getItem(UPDATE_SEEN) === updateKey();
   } catch {
     return false;
   }
 }
 function renderUpdate() {
   const el = $('#update');
-  const show = Boolean(update?.version) && !updateDismissed();
+  const key = updateKey();
+  const show = Boolean(key) && !updateDismissed();
   el.hidden = !show;
   if (!show) return;
+  const status = $('#update-status');
+  if (!update?.version) {
+    // Just restarted by Update now: a quiet "done" note.
+    $('#update-title').textContent = t('updateDone', { version: info.version });
+    $('#update-notes').hidden = true;
+    $('#update-keep').hidden = false;
+    status.hidden = true;
+    $('#update-now').hidden = true;
+    $('#update-link').hidden = true;
+    $('#update-close').hidden = false;
+    return;
+  }
+  const install = update.install ?? { stage: 'idle' };
+  const busy = UPDATE_BUSY.includes(install.stage);
   $('#update-title').textContent = t('updateTitle', { version: update.version });
   $('#update-notes').textContent = update.notes || '';
-  $('#update-notes').hidden = !update.notes;
+  $('#update-notes').hidden = !update.notes || busy;
+  $('#update-keep').hidden = busy || install.stage === 'failed';
   $('#update-link').href = typeof update.url === 'string' && update.url.startsWith(RELEASES) ? update.url : `${RELEASES}latest`;
+  $('#update-link').hidden = busy;
+  $('#update-link').classList.toggle('btn-primary', !update.canInstall);
+  $('#update-now').hidden = !update.canInstall || busy;
+  $('#update-close').hidden = busy;
+  const text =
+    install.stage === 'downloading'
+      ? t('updateDownloading', { pct: install.progress ?? 0 })
+      : install.stage === 'checking'
+        ? t('updateChecking')
+        : install.stage === 'restarting'
+          ? t('updateRestarting')
+          : install.stage === 'failed'
+            ? t(`updateErr-${install.error ?? 'download'}`)
+            : '';
+  status.textContent = text;
+  status.hidden = !text;
+  status.classList.toggle('error', install.stage === 'failed');
+  el.classList.toggle('busy', busy);
 }
 $('#update-close').addEventListener('click', () => {
   try {
-    sessionStorage.setItem(UPDATE_SEEN, update?.version ?? '');
+    sessionStorage.setItem(UPDATE_SEEN, updateKey() ?? '');
   } catch {}
   $('#update').hidden = true;
+});
+// Update now: ProQuiz's own question first, then the server downloads, checks, swaps and restarts.
+$('#update-now').addEventListener('click', async () => {
+  if (!update?.version) return;
+  const ok = await ask({ title: t('updateAskTitle', { version: update.version }), text: t('updateAskText'), ok: t('updateNow') });
+  if (ok) net.send({ type: 'updateNow' });
 });
 
 // Which ProQuiz this is, small under the settings.
@@ -306,6 +356,7 @@ function renderSettings() {
   $('#final-seconds').hidden = !st.finalRound;
   $('#negative-setting').hidden = st.penalty === 'none';
   $('#volume-setting').hidden = !st.music;
+  $('#sound-volume-setting').hidden = !st.sound;
   // A Quick quiz has its own group; the board's rules, Kaosmodus, round 2, final and specials don't apply.
   $('#group-quick').hidden = !quick();
   for (const id of ['#group-crazy', '#group-rules']) $(id).hidden = quick();
@@ -329,7 +380,7 @@ function renderSummaries() {
   const penalty = { none: 'penaltyNone', half: 'penaltyHalf', full: 'penaltyFull' }[st.penalty];
   $('#rules-status').textContent = t('rulesSummary', { penalty: t(penalty), buzz: secs(st.buzzSeconds), answer: secs(st.answerSeconds) });
   $('#sound-status').textContent = t('soundSummary', {
-    fx: t(st.sound ? 'stateOn' : 'stateOff'),
+    fx: st.sound ? t('musicLevel', { pct: st.soundVolume }) : t('stateOff'),
     music: st.music ? t('musicLevel', { pct: st.musicVolume }) : t('stateOff'),
   });
   const own = MUSIC_MOODS.filter((m) => st.musicFiles[m]).length;
@@ -573,14 +624,27 @@ function renderSetPicker() {
   const sel = $('#set-picker');
   // Edit opens the editor on the quiz chosen here.
   if (view?.setId) $('#edit-set').href = `/editor#${encodeURIComponent(view.setId)}`;
+  renderQuizAbout();
   if (!view || sel === document.activeElement) return;
-  const opts = quizList.map((q) => {
+  // Quizzes put away in the editor (archived) are left out, unless one of them is the quiz chosen right now.
+  const opts = quizList.filter((q) => !q.archived || q.id === view.setId).map((q) => {
     const title = q.kind === 'quick' ? `${q.title} · ${t('quickTag')}` : q.title; // a Quick quiz gets a small tag
     return h('option', { value: q.id, disabled: q.problems > 0 }, q.problems ? `${title} (${t('needsFixing')})` : title);
   });
   if (!quizList.some((q) => q.id === view.setId)) opts.unshift(h('option', { value: view.setId ?? '' }, view.set.title));
   sel.replaceChildren(...opts);
   sel.value = view.setId ?? '';
+}
+// The chosen quiz's cover picture and description, under the picker (nothing when it has neither).
+function renderQuizAbout() {
+  const box = $('#quiz-about');
+  const cover = view?.set.cover ?? '';
+  const description = view?.set.description ?? '';
+  box.hidden = !cover && !description;
+  const key = `${cover}|${description}`;
+  if (box.dataset.key === key) return; // keep the picture as it is between updates (no flicker)
+  box.dataset.key = key;
+  fill(box, cover ? h('img', { class: 'quiz-cover', src: `/files/${encodeURIComponent(cover)}`, alt: '' }) : null, description ? h('p', { class: 'quiz-desc' }, description) : null);
 }
 $('#set-picker').addEventListener('change', (e) => net.send({ type: 'chooseSet', id: e.target.value }));
 window.addEventListener('focus', loadQuizzes);

@@ -5,9 +5,13 @@
 //
 // The programs contain everything: the server, the pages, the fonts, the sample quizzes.
 // The Windows program gets the ProQuiz icon (assets/icon.ico, made from assets/icon.svg).
+// dist/SHA256SUMS.txt lists every zip's sha256 (sha256sum's format): "Update now" in a running ProQuiz downloads
+// the zip for its system and refuses it unless it matches this file, so upload it with the zips
+// (`gh release create v<version> dist/*`).
 
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, rmSync, writeFileSync, readFileSync, chmodSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync, readFileSync, chmodSync, existsSync, readdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 
 const root = new URL('..', import.meta.url).pathname;
@@ -36,6 +40,10 @@ const START_HERE = {
 
 Your quizzes and the autosave are kept in the ProQuiz folder in your user folder.
 
+New versions: the host screen tells you when one is out. Click "Update now" and ProQuiz downloads it, checks it
+and restarts itself (the black window stays, and the host screen connects again by itself). The old program is
+kept next to it as ProQuiz.old.exe until the next start. If Windows asks about network access again, click "Allow".
+
 The TV screen can also be shown on an iPad, another computer or a smart TV on the same Wi-Fi:
 open the "TV (other device)" address that ProQuiz shows, in that device's browser. For an Apple TV, open it on an iPhone, iPad or Mac and use AirPlay screen mirroring.
 Players who aren't in the room can join over the internet: in the lobby, open "How players join" and choose
@@ -53,6 +61,10 @@ Players who aren't in the room can join over the internet: in the lobby, open "H
 Use "mac-apple-silicon" for Macs from late 2020 onwards (M1, M2, …) and "mac-intel" for older Macs.
 Your quizzes and the autosave are kept in the ProQuiz folder in your home folder.
 
+New versions: the host screen tells you when one is out. Click "Update now" and ProQuiz downloads it, checks it
+and restarts itself (the Terminal window stays, and the host screen connects again by itself). The old program is
+kept next to it as ProQuiz.old until the next start. If macOS asks about incoming connections again, click "Allow".
+
 The TV screen can also be shown on an iPad, another computer or a smart TV on the same Wi-Fi:
 open the "TV (other device)" address that ProQuiz shows, in that device's browser. For an Apple TV, open it on an iPhone, iPad or Mac and use AirPlay screen mirroring.
 Players who aren't in the room can join over the internet: in the lobby, open "How players join" and choose
@@ -66,6 +78,10 @@ Then the QR code is the internet one. The laptop needs internet.
 2. Your web browser opens the host screen. Keep the terminal open while you play.
 
 Your quizzes and the autosave are kept in ~/ProQuiz.
+
+New versions: the host screen tells you when one is out. Click "Update now" and ProQuiz downloads it, checks it
+and restarts itself in the same terminal (the host screen connects again by itself). The old program is kept
+next to it as ProQuiz.old until the next start.
 
 The TV screen can also be shown on an iPad, another computer or a smart TV on the same Wi-Fi:
 open the "TV (other device)" address that ProQuiz shows, in that device's browser. For an Apple TV, open it on an iPhone, iPad or Mac and use AirPlay screen mirroring.
@@ -100,4 +116,20 @@ for (const t of targets) {
   execFileSync('zip', ['-q', '-r', '-X', `${dir}.zip`, `ProQuiz-${version}-${t.name}`], { cwd: dist });
   rmSync(dir, { recursive: true });
 }
-console.log(`\nDone. The zip files are in ${dist}`);
+writeSums();
+console.log(`\nDone. The zip files and SHA256SUMS.txt are in ${dist}`);
+
+// dist/SHA256SUMS.txt for every zip in dist/ (so building only some systems keeps the other lines right).
+function sumsText(dir) {
+  return (
+    readdirSync(dir)
+      .filter((f) => f.endsWith('.zip'))
+      .sort()
+      .map((f) => `${createHash('sha256').update(readFileSync(join(dir, f))).digest('hex')}  ${f}`)
+      .join('\n') + '\n'
+  );
+}
+function writeSums() {
+  if (!existsSync(dist)) return;
+  writeFileSync(join(dist, 'SHA256SUMS.txt'), sumsText(dist));
+}

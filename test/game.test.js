@@ -707,12 +707,20 @@ test('a slowly appearing picture keeps running while a team answers alone (Kaosm
   assert.equal(unveilProgress(s.q.unveil, 3000), 1);
 });
 
-test('music settings: on by default at 35%, own files only as sound file names for known moments', () => {
+test('sound and music settings: on by default at 80%, own files only as sound file names for known moments', () => {
   let s = newGame(small);
   assert.equal(s.settings.music, true);
-  assert.equal(s.settings.musicVolume, 35);
+  assert.equal(s.settings.musicVolume, 80);
+  assert.equal(s.settings.sound, true);
+  assert.equal(s.settings.soundVolume, 80);
   assert.deepEqual(s.settings.musicFiles, {});
-  s = apply(s, { type: 'settings', settings: { musicVolume: 80, musicFiles: { lobby: 'abc123.mp3', thinking: 'x.ogg' } } });
+  s = apply(s, { type: 'settings', settings: { soundVolume: 55 } });
+  assert.equal(s.settings.soundVolume, 55);
+  for (const bad of [{ soundVolume: 101 }, { soundVolume: -5 }, { soundVolume: 'loud' }]) {
+    assert.throws(() => apply(s, { type: 'settings', settings: bad }), { code: 'bad-settings' }, JSON.stringify(bad));
+  }
+  s = apply(s, { type: 'settings', settings: { musicVolume: 60, musicFiles: { lobby: 'abc123.mp3', thinking: 'x.ogg' } } });
+  assert.equal(s.settings.musicVolume, 60);
   assert.deepEqual(s.settings.musicFiles, { lobby: 'abc123.mp3', thinking: 'x.ogg' });
   s = apply(s, { type: 'settings', settings: { musicFiles: { calm: 'x.mp3' } } }); // after the answer, and the standings
   assert.deepEqual(s.settings.musicFiles, { calm: 'x.mp3' });

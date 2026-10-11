@@ -2,15 +2,19 @@
 //
 //   <data dir>/sets/<id>.json   the user's quizzes
 //   <data dir>/files/<name>     pictures and clips, named after their content ("3fa9c0d1e2b4a6f8.jpg")
+//   <data dir>/archived.json    the ids of the quizzes put away on this computer ({ v: 1, ids: [...] }); not part of any quiz
 //   sets/*.json                 the built-in quizzes (read-only, id = file name: "sample", "eksempel", "quick-sample", "lynquiz"), files in sets/files/
+//
+// Export and import use the .proquiz.json format described in lib/fileformat.js and docs/file-format.md.
 
 import { readFile, writeFile, readdir, mkdir, rename, unlink, stat } from 'node:fs/promises';
 import { createHash, randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { validateSet, modeOf, FILE_NAME, IMAGE_NAME, AUDIO_NAME, MAX_OPTION, rightSet, typeOf, usedFiles, cleanCredits } from './lib/validate.js';
+import { validateSet, modeOf, FILE_NAME, IMAGE_NAME, AUDIO_NAME, MAX_OPTION, MAX_DESCRIPTION, rightSet, typeOf, usedFiles, cleanCredits } from './lib/validate.js';
 import { KINDS } from './lib/crazy.js';
 import { MAX_LOGO } from './brand.js';
+import { FORMAT_VERSION, formatVersionOf, upgradeExport, FormatError } from './lib/fileformat.js';
 
 const ROOT = new URL('./', import.meta.url);
 export const SAMPLE_ID = 'sample';
@@ -19,9 +23,12 @@ const ID = /^[a-z0-9-]{1,60}$/;
 const MAX_FILE = 25 * 1024 * 1024; // one picture or clip
 const MAX_JSON = 80 * 1024 * 1024; // an imported quiz with its files
 
-export function createStore(dataDir) {
+// `version` is the running ProQuiz version (written into exports as `app`); `format` ({ upgrades, target }, for
+// upgradeExport) is only given by tests.
+export function createStore(dataDir, { version = null, format = {} } = {}) {
   const setsDir = path.join(dataDir, 'sets');
   const filesDir = path.join(dataDir, 'files');
+  const archivedFile = path.join(dataDir, 'archived.json');
   const setFile = (id) => path.join(setsDir, `${id}.json`);
 
   async function writeAtomic(file, data) {
@@ -42,7 +49,27 @@ export function createStore(dataDir) {
     }
   }
 
+  // ----- archived quizzes (put away on this computer; built-in samples can be put away too) -----
+
+  async function archivedIds() {
+    try {
+      const data = JSON.parse(await readFile(archivedFile, 'utf8'));
+      return Array.isArray(data?.ids) ? data.ids.filter((id) => typeof id === 'string' && ID.test(id)) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  async function setArchived(id, on) {
+    if (!(await get(id))) throw httpError(404, 'not-found');
+    const ids = (await archivedIds()).filter((x) => x !== id);
+    if (on) ids.push(id);
+    await writeAtomic(archivedFile, JSON.stringify({ v: 1, ids }, null, 2));
+    return Boolean(on);
+  }
+
   async function list() {
+    const archived = new Set(await archivedIds());
     const out = [];
     for (const id of BUILT_IN) out.push(summary(id, await readBuiltIn(id), true, 0));
     let names = [];
@@ -60,8 +87,7 @@ export function createStore(dataDir) {
       } catch {}
     }
     const own = out.filter((q) => !q.builtIn).sort((a, b) => b.updated - a.updated);
-    return [...out.filter((q) => q.builtIn), ...own];
-
+    return [...out.filter((q) => q.builtIn), ...own].map((q) => ({ ...q, archived: archived.has(q.id) }));
   }
 
   async function save(id, set) {
@@ -79,6 +105,8 @@ export function createStore(dataDir) {
   async function remove(id) {
     if (BUILT_IN.includes(id) || !ID.test(id)) throw httpError(400, 'read-only');
     await unlink(setFile(id)).catch(() => {});
+    const ids = await archivedIds();
+    if (ids.includes(id)) await writeAtomic(archivedFile, JSON.stringify({ v: 1, ids: ids.filter((x) => x !== id) }, null, 2));
   }
 
   // A picture or clip, stored under a name made from its content (the same file twice is stored once).
@@ -102,22 +130,61 @@ export function createStore(dataDir) {
     return null;
   }
 
+  // ----- export and import (lib/fileformat.js, docs/file-format.md) -----
+
+  // The pictures and clips of some quizzes, as base64 by file name (a file shared by several quizzes is stored once).
+  async function packFiles(sets) {
+    const files = {};
+    for (const set of sets) {
+      for (const name of filesOf(set)) {
+        if (files[name]) continue;
+        const bytes = await readUserFile(name);
+        if (bytes) files[name] = bytes.toString('base64');
+      }
+    }
+    return files;
+  }
+  const header = () => ({ proquiz: FORMAT_VERSION, app: version, exported: new Date().toISOString() });
+
   // A quiz with all its pictures and clips inside one file, for sharing.
   async function exportPackage(id) {
     const found = await get(id);
     if (!found) return null;
-    const files = {};
-    for (const name of filesOf(found.set)) {
-      const bytes = await readUserFile(name);
-      if (bytes) files[name] = bytes.toString('base64');
-    }
-    return { proquiz: 1, set: found.set, files };
+    return { ...header(), set: found.set, files: await packFiles([found.set]) };
   }
 
+  // Every quiz the host made (the built-in samples are left out), archived ones too, in one file.
+  async function exportAll() {
+    const archived = new Set(await archivedIds());
+    const sets = [];
+    for (const q of await list()) {
+      if (q.builtIn) continue;
+      const found = await get(q.id);
+      if (found) sets.push({ set: found.set, ...(archived.has(q.id) && { archived: true }) });
+    }
+    return { ...header(), sets, files: await packFiles(sets.map((s) => s.set)) };
+  }
+
+  const looksLikeSet = (set) => set && typeof set === 'object' && (Array.isArray(set.categories) || Array.isArray(set.sections));
+
+  // Reads a .proquiz.json (one quiz, or every quiz from "Export all quizzes"), or a plain quiz without files.
+  // A file from a newer ProQuiz is refused ('quiz-too-new'); an older one is brought up to date first.
+  // Returns { ids } of the new quizzes (archived ones from an export-all are archived here too).
   async function importPackage(pkg) {
-    // A plain set (without files) can be imported too.
-    const set = pkg?.proquiz === 1 ? pkg.set : pkg;
-    if (!set || typeof set !== 'object' || !(Array.isArray(set.categories) || Array.isArray(set.sections))) throw httpError(400, 'not-a-quiz');
+    let sets;
+    if (formatVersionOf(pkg) === null) {
+      if (!looksLikeSet(pkg)) throw httpError(400, 'not-a-quiz');
+      sets = [{ set: pkg }];
+    } else {
+      try {
+        pkg = upgradeExport(pkg, format);
+      } catch (err) {
+        if (err instanceof FormatError) throw httpError(400, err.code);
+        throw err;
+      }
+      sets = Array.isArray(pkg.sets) ? pkg.sets : [{ set: pkg.set }];
+      if (!sets.length || !sets.every((s) => looksLikeSet(s?.set))) throw httpError(400, 'not-a-quiz');
+    }
     for (const [name, b64] of Object.entries(pkg?.files ?? {})) {
       if (!FILE_NAME.test(name) || typeof b64 !== 'string') continue;
       const bytes = Buffer.from(b64, 'base64');
@@ -125,18 +192,24 @@ export function createStore(dataDir) {
       await mkdir(filesDir, { recursive: true });
       await writeFile(path.join(filesDir, name), bytes);
     }
-    return create(set);
+    const ids = [];
+    for (const { set, archived } of sets) {
+      const id = await create(set);
+      if (archived === true) await setArchived(id, true);
+      ids.push(id);
+    }
+    return { ids };
   }
 
-  return { get, list, save, create, remove, addFile, readUserFile, exportPackage, importPackage, filesDir };
+  return { get, list, save, create, remove, addFile, readUserFile, exportPackage, exportAll, importPackage, archivedIds, setArchived, filesDir };
 }
 
 // ----- the editor's HTTP API (only for the laptop itself) -----
 
 export function apiHandler(store, { onSetSaved = () => {}, getLang = () => 'en', brand = null, onBrand = () => {}, pictures = null } = {}) {
   return async function api(req, res, url) {
-    const parts = url.pathname.split('/').filter(Boolean); // ['api', 'sets', id]
-    const [, what, id] = parts;
+    const parts = url.pathname.split('/').filter(Boolean); // ['api', 'sets', id, sub?]
+    const [, what, id, sub] = parts;
     try {
       if (what === 'lang' && req.method === 'GET') return json(res, 200, { lang: getLang() });
       // Branding (brand.js): the logo, the event name and the accent colour.
@@ -174,19 +247,24 @@ export function apiHandler(store, { onSetSaved = () => {}, getLang = () => 'en',
         const newId = await store.create(body.set);
         return json(res, 201, { id: newId });
       }
-      if (what === 'sets' && id && req.method === 'GET') {
+      if (what === 'sets' && id && !sub && req.method === 'GET') {
         const found = await store.get(id);
         return found ? json(res, 200, found) : json(res, 404, { error: 'not-found' });
       }
-      if (what === 'sets' && id && req.method === 'PUT') {
+      if (what === 'sets' && id && !sub && req.method === 'PUT') {
         const body = await readJson(req);
         const problems = await store.save(id, body.set);
         onSetSaved(id, body.set, problems);
         return json(res, 200, { problems });
       }
-      if (what === 'sets' && id && req.method === 'DELETE') {
+      if (what === 'sets' && id && !sub && req.method === 'DELETE') {
         await store.remove(id);
         return json(res, 200, { ok: true });
+      }
+      // Put a quiz away (or take it back): personal to this computer, so built-in samples can be put away too.
+      if (what === 'sets' && id && sub === 'archived' && req.method === 'PUT') {
+        const body = await readJson(req);
+        return json(res, 200, { archived: await store.setArchived(id, Boolean(body.archived)) });
       }
       if (what === 'files' && req.method === 'POST') {
         const bytes = await readBody(req, MAX_FILE);
@@ -195,13 +273,17 @@ export function apiHandler(store, { onSetSaved = () => {}, getLang = () => 'en',
       if (what === 'export' && id && req.method === 'GET') {
         const pkg = await store.exportPackage(id);
         if (!pkg) return json(res, 404, { error: 'not-found' });
-        const filename = `${slug(pkg.set.title) || 'quiz'}.proquiz.json`;
-        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Disposition': `attachment; filename="${filename}"` });
-        return res.end(JSON.stringify(pkg));
+        return download(res, `${slug(pkg.set.title) || 'quiz'}.proquiz.json`, pkg);
+      }
+      // Every quiz the host made in one file ("Export all quizzes" in the editor).
+      if (what === 'export' && !id && req.method === 'GET') {
+        const pkg = await store.exportAll();
+        return download(res, `proquiz-all-${pkg.exported.slice(0, 10)}.proquiz.json`, pkg);
       }
       if (what === 'import' && req.method === 'POST') {
         const pkg = JSON.parse((await readBody(req, MAX_JSON)).toString('utf8'));
-        return json(res, 201, { id: await store.importPackage(pkg) });
+        const { ids } = await store.importPackage(pkg);
+        return json(res, 201, { id: ids[0], ids, count: ids.length });
       }
       json(res, 404, { error: 'not-found' });
     } catch (err) {
@@ -218,15 +300,32 @@ export function apiHandler(store, { onSetSaved = () => {}, getLang = () => 'en',
 function summary(id, set, builtIn, updated) {
   const count = (cats) => (cats ?? []).reduce((n, c) => n + (c.questions?.length ?? 0), 0);
   const questions = count(set.categories) + count(set.round2?.categories) + count(set.sections);
-  return { id, title: set.title || '', kind: modeOf(set), builtIn, updated, questions, problems: validateSet(set).length };
+  const firstLine = typeof set.description === 'string' ? set.description.split('\n').map((l) => l.trim()).find(Boolean) ?? '' : '';
+  return {
+    id,
+    title: set.title || '',
+    kind: modeOf(set),
+    builtIn,
+    updated,
+    questions,
+    problems: validateSet(set).length,
+    description: firstLine, // the first line only, for the editor's list
+    cover: typeof set.cover === 'string' && IMAGE_NAME.test(set.cover) ? set.cover : null,
+  };
 }
 
 // Every picture and clip a set uses (shared with the editor, which prunes picture credits with it).
 export const filesOf = usedFiles;
 
 // Only the fields ProQuiz knows, so a saved file stays tidy. Picture credits are kept only for pictures still in use.
-function clean(set) {
-  const out = modeOf(set) === 'quick' ? cleanQuick(set) : cleanBoard(set);
+// The description and cover picture (both kinds of quiz) come right after the title.
+export function clean(set) {
+  const { v, kind, title, ...rest } = modeOf(set) === 'quick' ? cleanQuick(set) : cleanBoard(set);
+  const out = { v, ...(kind && { kind }), title };
+  const description = typeof set?.description === 'string' ? set.description.replace(/\r\n?/g, '\n').trim().slice(0, MAX_DESCRIPTION) : '';
+  if (description) out.description = description;
+  if (typeof set?.cover === 'string' && IMAGE_NAME.test(set.cover)) out.cover = set.cover;
+  Object.assign(out, rest);
   const credits = cleanCredits(set?.credits, filesOf(out));
   if (Object.keys(credits).length) out.credits = credits;
   return out;
@@ -306,6 +405,12 @@ function httpError(status, code) {
 
 function json(res, status, data) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+  res.end(JSON.stringify(data));
+}
+
+// A JSON file the browser saves instead of showing.
+function download(res, filename, data) {
+  res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Disposition': `attachment; filename="${filename}"` });
   res.end(JSON.stringify(data));
 }
 

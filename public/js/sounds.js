@@ -9,7 +9,16 @@ let ctx = null;
 let master = null; // dry effects → limiter
 let send = null; // → room echo → limiter
 let limiter = null;
-let volume = 0.8;
+let back = null; // the room echo's level, which follows the volume
+let volume = soundGain(80); // the sound effects' gain (the `soundVolume` setting, 0–100, through soundGain)
+
+// The gain for the `soundVolume` setting (0–100). Before 2.3 the effects always played at 0.8: now 80% gives 1.0
+// (a little louder than that) and 100% gives 1.25. The limiter below catches the peaks, so 100% doesn't crackle.
+export function soundGain(pct) {
+  const n = Number(pct);
+  const v = Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : 80; // a game saved before the setting existed
+  return 1.25 * (v / 100);
+}
 
 function audio() {
   if (!ctx) {
@@ -30,7 +39,7 @@ function audio() {
     send = ctx.createGain();
     const verb = ctx.createConvolver();
     verb.buffer = room(1.6, 3);
-    const back = ctx.createGain();
+    back = ctx.createGain();
     back.gain.value = volume * 0.6;
     send.connect(verb).connect(back).connect(limiter);
   }
@@ -50,9 +59,13 @@ export function audioGraph() {
   return audioReady() ? { ctx, limiter } : null;
 }
 
-export function setVolume(v) {
+// The sound effects' loudness, from the `soundVolume` setting (0–100). Call it on every state message.
+export function setSoundVolume(pct) {
+  const v = soundGain(pct);
+  if (v === volume) return;
   volume = v;
   if (master) master.gain.value = v;
+  if (back) back.gain.value = v * 0.6;
 }
 
 const hz = (midi) => 440 * 2 ** ((midi - 69) / 12);

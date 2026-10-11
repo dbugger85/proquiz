@@ -18,7 +18,8 @@ import { apply, newGame, hostView, displayView, phoneView, GameError, DEFAULT_SE
 import { createTunnel } from './lib/tunnel.js';
 import { createBrand, logoHeaders } from './brand.js';
 import { createPictures } from './pictures.js';
-import { createUpdateCheck } from './lib/update.js';
+import { createUpdateCheck, parseVersion } from './lib/update.js';
+import { createSelfUpdate, isCompiled, cleanupOld } from './lib/selfupdate.js';
 
 const ROOT = new URL('./', import.meta.url);
 
@@ -212,9 +213,17 @@ function sameSite(req, { changes = true } = {}) {
 }
 const fromLaptop = (req, opts) => isLocal(req.socket.remoteAddress) && sameSite(req, opts);
 
+// Settings saved before 2.3 (no `soundVolume` yet) had the music at 35% by default; the default is 80% now, so a
+// save still at exactly 35 moves to 80, once. Any other value is the host's own choice and stays.
+export function louderSettings(saved) {
+  if (!saved || typeof saved !== 'object' || 'soundVolume' in saved || saved.musicVolume !== 35) return saved;
+  return { ...saved, musicVolume: 80 };
+}
+
 // Settings from a save, but only the ones this version knows (so an old save can't break a new game).
 function pickSettings(saved) {
   if (!saved) return {};
+  saved = louderSettings(saved);
   const out = {};
   for (const key of Object.keys(DEFAULT_SETTINGS)) if (key in saved) out[key] = saved[key];
   try {
@@ -287,9 +296,10 @@ function autosaver(dir) {
 // Players elsewhere: wrong PINs allowed per minute (for all remote phones together), so nobody can try them all.
 const PIN_TRIES_PER_MINUTE = 10;
 
-// Holds the one game and everyone connected to it. `tunnel` (lib/tunnel.js) is the internet tunnel, if any, and
-// `updates` (lib/update.js) the "a new version is out" check, asked when a host page connects.
-export function createHub({ set, info, saved = null, save = () => {}, store = null, tunnel = null, brand = null, updates = null }) {
+// Holds the one game and everyone connected to it. `tunnel` (lib/tunnel.js) is the internet tunnel, if any,
+// `updates` (lib/update.js) the "a new version is out" check, asked when a host page connects, and `selfUpdate`
+// (lib/selfupdate.js) the "Update now" of the compiled program. `hostInfo` goes in the host's welcome only.
+export function createHub({ set, info, hostInfo = {}, saved = null, save = () => {}, store = null, tunnel = null, brand = null, updates = null, selfUpdate = null }) {
   // A new game keeps the settings and the quiz from last time. A saved game with teams can be resumed from the lobby.
   const lastSet = saved?.state?.set && validateSet(saved.state.set).length === 0 ? saved.state : null;
   let state = newGame(lastSet ? lastSet.set : set, pickSettings(saved?.state?.settings), lastSet ? lastSet.setId : SAMPLE_ID);
@@ -424,7 +434,7 @@ export function createHub({ set, info, saved = null, save = () => {}, store = nu
     const serverNow = Date.now();
     const resume = resumable && summary(resumable);
     const brandView = brand?.view() ?? null; // the host's logo, event name and accent colour (the same for everyone)
-    const update = updates?.current() ?? null;
+    const update = updateFor();
     for (const c of clients) {
       if (!c.role) continue;
       const msg = { type: 'state', view: viewFor(c), connected, displays, tvs, serverNow, brand: brandView };
@@ -437,6 +447,37 @@ export function createHub({ set, info, saved = null, save = () => {}, store = nu
       if (c.role === 'phone' && c.remote && state.settings.remotePin && !c.teamId) msg.needPin = true;
       send(c.ws, msg);
     }
+  }
+
+  // A newer ProQuiz is out: the release plus whether this program can install it itself and how far that has got.
+  function updateFor() {
+    const release = updates?.current();
+    if (!release) return null;
+    return { ...release, canInstall: Boolean(selfUpdate?.available()), install: selfUpdate?.status() ?? null };
+  }
+
+  // "Update now" moved on (a percent more downloaded, checking, restarting, failed): only the host pages hear it,
+  // as a small message of its own rather than a whole new state for everyone.
+  function sendUpdate() {
+    const update = updateFor();
+    for (const c of clients) if (c.role === 'host' && !c.remote) send(c.ws, { type: 'update', update });
+  }
+
+  // The host pressed Update now: only the compiled program, only in the lobby, only a known newer release, one at
+  // a time. The download, check, swap and restart are lib/selfupdate.js's; `beforeRestart` there saves and closes.
+  function updateNow() {
+    if (!selfUpdate?.available()) throw new GameError('update-not-here');
+    if (state.phase !== 'lobby') throw new GameError('update-in-game');
+    const release = updates?.current();
+    if (!release) throw new GameError('update-none');
+    if (['downloading', 'checking', 'restarting'].includes(selfUpdate.status().stage)) throw new GameError('update-busy');
+    selfUpdate.run(release, { port: info.port }).catch(() => {});
+  }
+
+  // Before the program restarts for an update: the game that is waiting to be continued (kept only in memory after
+  // Main menu) or the lobby as it is goes to the autosave, so the new program offers or shows the same.
+  function saveForExit() {
+    save(resumable ? resumable.state : state);
   }
 
   // Something that isn't part of the game (a sound, a player's reaction): goes to the TV screens (the one inside
@@ -498,7 +539,7 @@ export function createHub({ set, info, saved = null, save = () => {}, store = nu
     const lobbyTeams = state.teams;
     const { joinMode, remotePin } = state.settings; // how players join is chosen in the lobby, not saved with the game
     state = { round: 1, ...resumable.state, deadline: null }; // games saved before round 2 existed are in round 1
-    state.settings = { ...state.settings, joinMode, remotePin };
+    state.settings = { ...DEFAULT_SETTINGS, ...louderSettings(state.settings), joinMode, remotePin }; // defaults: a game saved before a setting existed
     state.teams = state.teams.map((t) => ({ ...t, color: newColor(t.color) })); // saved with the colours before 1.7
     // Teams that joined in the lobby meanwhile play on with zero points (a free colour if theirs is taken;
     // in a Quick quiz colours may repeat).
@@ -592,7 +633,7 @@ export function createHub({ set, info, saved = null, save = () => {}, store = nu
         c.samples = []; // a new connection, maybe a reloaded page: measure the clock again
         if (fairOn()) burst(c);
       } else {
-        send(c.ws, { type: 'welcome', info });
+        send(c.ws, { type: 'welcome', info: c.role === 'host' ? { ...info, ...hostInfo } : info });
         if (c.role === 'host') {
           syncTunnel({ hostHello: true });
           checkUpdate();
@@ -658,6 +699,7 @@ export function createHub({ set, info, saved = null, save = () => {}, store = nu
       return msg.on ? tunnel.start() : tunnel.stop();
     }
     if (c.role === 'host' && msg.type === 'tunnelDownload' && tunnel) return tunnel.download();
+    if (c.role === 'host' && msg.type === 'updateNow') return updateNow();
     if (c.role === 'host' && msg.type === 'resume') return resume();
     if (c.role === 'host' && msg.type === 'mainMenu') return mainMenu();
     if (c.role === 'host' && msg.type === 'discardSave') {
@@ -727,6 +769,8 @@ export function createHub({ set, info, saved = null, save = () => {}, store = nu
     connect,
     setSaved,
     broadcast, // the internet tunnel's status changed
+    sendUpdate, // "Update now" moved on
+    saveForExit,
     dispatch, // for tests (e.g. placing Kaosmodus specials by hand)
     getState: () => state,
     stop() {
@@ -737,19 +781,55 @@ export function createHub({ set, info, saved = null, save = () => {}, store = nu
   };
 }
 
+// Test-only: with PROQUIZ_TEST_UPDATE=1, PROQUIZ_UPDATE_API and PROQUIZ_UPDATE_BASE point the new-version check and
+// the "Update now" download at a pretend release on this computer (http://127.0.0.1:…). Without that flag the two
+// addresses are ignored, so a compiled program can only ever download from ProQuiz's own GitHub release page.
+function testUpdateOverrides() {
+  if (process.env.PROQUIZ_TEST_UPDATE !== '1') return { check: {}, self: {} };
+  const out = { check: {}, self: {} };
+  const api = process.env.PROQUIZ_UPDATE_API;
+  const base = process.env.PROQUIZ_UPDATE_BASE;
+  if (api) out.check.url = api;
+  if (base) {
+    try {
+      out.self = { base, hosts: [new URL(base).hostname] };
+    } catch {}
+  }
+  return out;
+}
+
 // `tunnelOptions` is for tests (e.g. a pretend DNS check for a pretend cloudflared), and `pictureOptions` too
 // (a pretend `fetchImpl` instead of Openverse and Wikimedia Commons, see pictures.js), as is `updateOptions`
-// (a pretend `fetchImpl` and clock instead of GitHub's releases, see lib/update.js).
-export async function startServer({ port = START_PORT, quiet = false, dataDir = DATA_DIR, tunnelOptions = {}, pictureOptions = {}, updateOptions = {} } = {}) {
-  const sets = createStore(dataDir);
+// (a pretend `fetchImpl` and clock instead of GitHub's releases, see lib/update.js) and `selfUpdateOptions`
+// (a pretend compiled program, release and restart for "Update now", see lib/selfupdate.js).
+export async function startServer({ port = START_PORT, quiet = false, dataDir = DATA_DIR, tunnelOptions = {}, pictureOptions = {}, updateOptions = {}, selfUpdateOptions = {} } = {}) {
+  const version = await readVersion();
+  const sets = createStore(dataDir, { version }); // exports say which ProQuiz wrote them
   const brand = createBrand(dataDir);
   await brand.load();
-  const version = await readVersion();
-  const updates = createUpdateCheck({ version, ...updateOptions });
+  const overrides = testUpdateOverrides();
+  const updates = createUpdateCheck({ version, ...overrides.check, ...updateOptions });
+  // "Update now" (the compiled program only): before it restarts, the game is saved and this server lets go of its
+  // ports (prepareExit below). When this program was itself just started by an update, the host hears about it.
+  let hub = null;
+  let close = null;
+  const prepareExit = async () => {
+    hub?.saveForExit();
+    await close?.();
+  };
+  const selfUpdate = createSelfUpdate({
+    version,
+    beforeRestart: prepareExit,
+    onStatus: () => hub?.sendUpdate(),
+    log: (msg) => !quiet && console.log(msg),
+    initialError: process.env.PROQUIZ_UPDATE_ERROR === 'restart' ? 'restart' : null,
+    ...overrides.self,
+    ...selfUpdateOptions,
+  });
+  const updatedFrom = parseVersion(process.env.PROQUIZ_UPDATED_FROM) ? process.env.PROQUIZ_UPDATED_FROM : null;
   const set = (await sets.get(SAMPLE_ID)).set;
   const store = autosaver(dataDir);
   const saved = await store.load();
-  let hub = null;
   const getLang = () => hub?.getState().settings.lang ?? 'en';
   // The editor's "Find a free picture": the only thing that goes on the internet, and only from the editor.
   const pictures = createPictures({ store: sets, lang: getLang, ...pictureOptions });
@@ -802,10 +882,12 @@ export async function startServer({ port = START_PORT, quiet = false, dataDir = 
     });
   }
   const tunnel = createTunnel({ dataDir, open: openRemote, close: closeRemote, onChange: () => hub?.broadcast(), ...tunnelOptions });
-  hub = createHub({ set, info, saved, save: store.save, store: sets, tunnel, brand, updates });
+  // The host's welcome also says when this program was just started by "Update now" (the banner says so).
+  const hostInfo = updatedFrom ? { updatedFrom } : {};
+  hub = createHub({ set, info, hostInfo, saved, save: store.save, store: sets, tunnel, brand, updates, selfUpdate });
   wss.on('connection', (ws, req) => hub.connect(ws, req));
   if (!quiet) {
-    console.log(`\n  ProQuiz${version ? ` ${version}` : ''} is running!\n`);
+    console.log(`\n  ProQuiz${version ? ` ${version}` : ''} is running!${updatedFrom ? ` (updated from ${updatedFrom})` : ''}\n`);
     console.log(`  Host (this laptop):  ${info.hostUrl}`);
     console.log(`  TV screen:           ${info.displayUrl}`);
     if (info.tvUrl) console.log(`  TV (other device):   ${info.tvUrl}`);
@@ -813,7 +895,7 @@ export async function startServer({ port = START_PORT, quiet = false, dataDir = 
     console.log(`  Game is saved in:    ${store.file}`);
     console.log('\n  Keep this window open while you play. Close it (or press Ctrl+C) to stop.\n');
   }
-  const close = () =>
+  close = () =>
     new Promise(async (resolve) => {
       await new Promise((r) => setTimeout(r, 300)); // let a pending autosave start
       await store.flush();
@@ -826,7 +908,7 @@ export async function startServer({ port = START_PORT, quiet = false, dataDir = 
       server.closeAllConnections?.();
     });
   // openRemote is for tests: the tunnel's listener without the tunnel.
-  return { server, info, hub, close, openRemote, tunnel };
+  return { server, info, hub, close, openRemote, tunnel, selfUpdate, store: sets };
 }
 
 // Opens a page in the default web browser (so a double-click is all it takes).
@@ -841,8 +923,19 @@ function openBrowser(url) {
 }
 
 // Start only when run directly (not when a test imports this file). Works in Node and Deno.
-// PROQUIZ_NO_OPEN=1 stops it opening the browser.
+// PROQUIZ_NO_OPEN=1 stops it opening the browser. `--version` prints the version and ends ("Update now" runs the
+// freshly downloaded program with it before putting it in place).
 if (import.meta.main) {
-  const { info } = await startServer();
-  if (!process.env.PROQUIZ_NO_OPEN) openBrowser(info.hostUrl);
+  if (process.argv.slice(1).includes('--version')) {
+    process.stdout.write(`${(await readVersion()) ?? 'unknown'}\n`, () => process.exit(0));
+  } else {
+    // Leftovers of an earlier "Update now", but not when this start *is* the update's restart: the old program
+    // (ProQuiz.old) must stay until we know the new one runs, so it can be put back if not.
+    if (isCompiled() && !process.env.PROQUIZ_UPDATED_FROM && !process.env.PROQUIZ_UPDATE_ERROR) await cleanupOld(process.execPath);
+    const { info } = await startServer();
+    // Started by "Update now" on the same port as before: the host page that asked for it connects again by itself,
+    // so no second browser tab.
+    const sameTab = process.env.PROQUIZ_UPDATED_FROM && info.port === Number(process.env.PORT);
+    if (!process.env.PROQUIZ_NO_OPEN && !sameTab) openBrowser(info.hostUrl);
+  }
 }

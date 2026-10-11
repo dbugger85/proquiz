@@ -1,8 +1,9 @@
 // Which background music plays when (the sound itself can only be heard, not tested here).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { moodFor, SONGS, MOODS } from '../public/js/music.js';
-import { MUSIC_MOODS } from '../lib/game.js';
+import { moodFor, SONGS, MOODS, curve } from '../public/js/music.js';
+import { soundGain } from '../public/js/sounds.js';
+import { MUSIC_MOODS, DEFAULT_SETTINGS } from '../lib/game.js';
 
 const view = (phase, extra = {}) => ({ phase, settings: { music: true }, clip: null, deadline: null, ...extra });
 
@@ -73,4 +74,16 @@ test('the calm tune is ambient and every mood has music', () => {
     assert.ok(SONGS[m.song], `${name}.song`);
     for (const f of [m.file, m.fallbackFile]) if (f) assert.ok(MUSIC_MOODS.includes(f), `${name}: ${f}`);
   }
+});
+
+test('louder by default: both volumes start at 80, 80% effects are a little above the old level, 100% stays under the limiter', () => {
+  assert.equal(DEFAULT_SETTINGS.musicVolume, 80);
+  assert.equal(DEFAULT_SETTINGS.soundVolume, 80);
+  assert.ok(soundGain(80) > 0.8 && soundGain(80) <= 1.0, `80% gives ${soundGain(80)}`); // the effects played at 0.8 before 2.3
+  assert.ok(soundGain(100) <= 1.25);
+  assert.ok(soundGain(100) > soundGain(80));
+  assert.equal(soundGain(0), 0);
+  assert.equal(soundGain(undefined), soundGain(80)); // a game saved before the setting existed
+  assert.equal(soundGain(140), soundGain(100));
+  assert.ok(curve(80) > curve(35)); // the music is louder at the new default too
 });

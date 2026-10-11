@@ -1,6 +1,7 @@
 {
   "v": 1,
   "title": "Eksempelquiz",
+  "description": "En liten quiz for å prøve ProQuiz: fem kategorier, en runde 2 og et finalespørsmål.",
   "categories": [
     {
       "name": "Norge",

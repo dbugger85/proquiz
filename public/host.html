@@ -29,9 +29,12 @@
         <div class="update-text">
           <b id="update-title"></b>
           <span id="update-notes" hidden></span>
-          <small data-t="updateKeep"></small>
+          <small id="update-keep" data-t="updateKeep"></small>
+          <!-- "Update now" (lib/selfupdate.js, the downloaded program only): Downloading… 42%, Checking…, Restarting…, or what went wrong -->
+          <span id="update-status" class="update-status" aria-live="polite" hidden></span>
         </div>
-        <a id="update-link" class="btn btn-primary btn-small" href="https://github.com/dbugger85/proquiz/releases/latest" target="_blank" rel="noopener" data-t="updateDownload"></a>
+        <button id="update-now" class="btn btn-primary btn-small" type="button" data-t="updateNow" hidden></button>
+        <a id="update-link" class="btn btn-small" href="https://github.com/dbugger85/proquiz/releases/latest" target="_blank" rel="noopener" data-t="updateDownload"></a>
         <button id="update-close" class="btn btn-small btn-quiet update-close" type="button" data-t-aria-label="updateDismiss" data-t-title="updateDismiss">×</button>
       </div>
       <div id="resume" class="resume" hidden>
@@ -88,6 +91,8 @@
             <span data-t="questionSet">Questions</span>
             <span class="row picker-row"><select id="set-picker"></select> <a id="edit-set" class="btn btn-small" href="/editor" data-t="editShort"></a></span>
           </label>
+          <!-- The chosen quiz's cover picture and description (from the quiz file), when it has them -->
+          <div id="quiz-about" class="quiz-about" hidden></div>
           <fieldset class="field pill-field">
             <legend data-t="language">Language</legend>
             <div class="pills">
@@ -159,6 +164,10 @@
             <label class="check"><input type="checkbox" name="sound"> <span data-t="soundOn"></span></label>
             <button id="test-sound" class="btn btn-small" type="button" data-t="testSound"></button>
           </div>
+          <label class="field" id="sound-volume-setting">
+            <span data-t="soundVolume"></span>
+            <input type="range" name="soundVolume" min="0" max="100" step="5">
+          </label>
           <label class="check"><input type="checkbox" name="music"> <span data-t="musicOn"></span></label>
           <label class="field" id="volume-setting">
             <span data-t="musicVolume"></span>

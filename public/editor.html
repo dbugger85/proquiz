@@ -27,8 +27,14 @@
             <input id="import-file" type="file" accept=".json,application/json" hidden>
           </label>
           <button id="ai-quiz" class="btn" type="button" data-t="aiButton"></button>
+          <a id="export-all" class="btn" href="/api/export" download data-t="edExportAll"></a>
         </div>
         <ul id="quiz-list" class="ed-list"></ul>
+        <!-- Quizzes put away on this computer (Archive in the list): folded, with Bring back -->
+        <details id="quiz-archived" class="ed-archived" hidden>
+          <summary></summary>
+          <ul class="ed-list"></ul>
+        </details>
       </aside>
 
       <main id="ed-main" class="ed-main">

@@ -5,7 +5,7 @@
 // Needs Chromium (CHROMIUM=/path/to/chromium if not /usr/bin/chromium).
 // Screenshots go to test/screenshots/ (ignored by git). Look at them after UI changes.
 
-import { mkdirSync, mkdtempSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -195,6 +195,11 @@ try {
   await host.click('#group-look summary');
   await host.evaluate(() => document.querySelector('#settings').scrollIntoView({ block: 'start' }));
   await shot(host, 'host-1c-settings-open-no');
+  // The Sound group: effects and music each with a volume slider (both at 80 by default).
+  await host.evaluate(() => document.querySelector('#group-sound').scrollIntoView({ block: 'start' }));
+  assert.equal(await host.inputValue('input[name=soundVolume]'), '80');
+  assert.equal(await host.inputValue('input[name=musicVolume]'), '80');
+  await shot(host, 'host-1d-sound-settings-no');
   await pickPill(host, 'lang', 'en');
 
   // The glass look is on by default, and the Look section's tick turns it off (and on) for every screen at once.
@@ -775,6 +780,26 @@ try {
   const aiSaved = (await (await fetch(`${base}/api/sets`)).json()).find((x) => x.title === 'Barnas quiz');
   assert.equal(aiSaved.problems, 0);
 
+  // A description and a cover picture for the quiz (part of the quiz file, so exports carry them), at the top.
+  await ed.fill('.ed-about textarea', 'En quiz for de minste.\nHovedsteder, dyr og mat.');
+  await ed.locator('.ed-cover input[type=file]').setInputFiles(join(root, 'sets/files/sample-mercury.svg'));
+  await ed.waitForSelector('.ed-cover img');
+  await ed.waitForFunction(() => document.querySelector('#ed-status').textContent === 'Saved');
+  const about = (await (await fetch(`${base}/api/sets/${aiSaved.id}`)).json()).set;
+  assert.equal(about.description, 'En quiz for de minste.\nHovedsteder, dyr og mat.');
+  assert.match(about.cover, /^[0-9a-f]{16}\.svg$/);
+  // The list shows the cover as a thumbnail and the first line of the description.
+  await ed.waitForSelector('.ed-item:has-text("Barnas quiz") .ed-item-thumb');
+  assert.equal(await ed.textContent('.ed-item:has-text("Barnas quiz") .ed-item-desc'), 'En quiz for de minste.');
+  await scrollArea(ed, 0);
+  await shot(ed, 'editor-9-about');
+  // Remove asks nothing (a cover is easy to choose again) and clears the picture; choose it again for the lobby.
+  await ed.click('.ed-cover button:has-text("Remove")');
+  await ed.waitForSelector('.ed-cover img', { state: 'detached' });
+  await ed.locator('.ed-cover input[type=file]').setInputFiles(join(root, 'sets/files/sample-mercury.svg'));
+  await ed.waitForSelector('.ed-cover img');
+  await ed.waitForFunction(() => document.querySelector('#ed-status').textContent === 'Saved');
+
   // Fill only the empty spots of a quiz that is started: the AI sees what is there and nothing else changes.
   await ed.click('.ed-item:has-text("Musikkquiz")');
   await ed.waitForFunction(() => document.querySelector('.ed-name input')?.value === 'Musikkquiz');
@@ -823,7 +848,57 @@ try {
   await host.waitForSelector('body[data-phase=lobby]');
   await host.evaluate(() => window.dispatchEvent(new Event('focus')));
   await host.waitForFunction(() => [...document.querySelectorAll('#set-picker option')].some((o) => o.textContent.includes('needs fixing') && o.disabled));
+  assert.match(await host.textContent('#quiz-about .quiz-desc'), /A small board quiz/); // the sample's description, no cover
+  assert.equal(await host.locator('#quiz-about .quiz-cover').count(), 0);
   await shot(host, 'host-12-lobby-quizzes');
+
+  // The chosen quiz's cover picture and description show under the picker.
+  await host.selectOption('#set-picker', aiSaved.id);
+  await host.waitForSelector('#quiz-about:not([hidden]) .quiz-cover');
+  await host.waitForFunction(() => document.querySelector('#set-title').textContent === 'Barnas quiz');
+  assert.match(await host.textContent('#quiz-about .quiz-desc'), /En quiz for de minste/);
+  await shot(host, 'host-12b-lobby-about');
+
+  // Archive it in the editor: it moves to the folded "Archived" section at the bottom of the list. The lobby's
+  // picker leaves archived quizzes out, but keeps the one chosen right now, so the lobby isn't broken.
+  const picks = () => host.evaluate(() => [...document.querySelectorAll('#set-picker option')].map((o) => o.value));
+  const refreshPicker = async () => {
+    await host.evaluate(() => document.activeElement?.blur()); // the picker isn't redrawn while it has focus
+    await host.evaluate(() => window.dispatchEvent(new Event('focus')));
+  };
+  await ed.click('.ed-row:has(.ed-item:has-text("Barnas quiz")) .ed-archive');
+  await ed.waitForSelector('#quiz-archived:not([hidden])');
+  assert.match(await ed.textContent('#quiz-archived summary'), /Archived \(1\)/);
+  assert.equal(await ed.locator('#quiz-list .ed-item:has-text("Barnas quiz")').count(), 0);
+  await ed.click('#quiz-archived summary');
+  await ed.waitForSelector('#quiz-archived .ed-item:has-text("Barnas quiz")');
+  assert.equal(await ed.textContent('#quiz-archived .ed-archive'), 'Bring back');
+  await ed.locator('#quiz-archived .ed-item').scrollIntoViewIfNeeded();
+  await shot(ed, 'editor-10-archived');
+  await refreshPicker();
+  await host.waitForTimeout(300);
+  assert.ok((await picks()).includes(aiSaved.id), 'the chosen quiz stays in the picker while archived');
+  await host.selectOption('#set-picker', 'sample');
+  await host.waitForFunction(() => document.querySelector('#set-title').textContent === 'Sample quiz');
+  await refreshPicker();
+  await host.waitForFunction((id) => ![...document.querySelectorAll('#set-picker option')].some((o) => o.value === id), aiSaved.id);
+  assert.equal(await host.locator('#quiz-about .quiz-cover').count(), 0);
+  // Bring it back: it returns to the list and to the picker.
+  await ed.click('#quiz-archived .ed-archive');
+  await ed.waitForSelector('#quiz-archived[hidden]', { state: 'attached' });
+  await ed.waitForSelector('#quiz-list .ed-item:has-text("Barnas quiz")');
+  await refreshPicker();
+  await host.waitForFunction((id) => [...document.querySelectorAll('#set-picker option')].some((o) => o.value === id), aiSaved.id);
+
+  // Export all quizzes: one file with every quiz the host made (not the samples), pictures and clips included.
+  const [download] = await Promise.all([ed.waitForEvent('download'), ed.click('#export-all')]);
+  assert.match(download.suggestedFilename(), /^proquiz-all-\d{4}-\d\d-\d\d\.proquiz\.json$/);
+  const all = JSON.parse(readFileSync(await download.path(), 'utf8'));
+  assert.equal(all.proquiz, 1);
+  assert.match(all.app, /^\d+\.\d+\.\d+$/);
+  assert.deepEqual(all.sets.map((x) => x.set.title).sort(), ['Barnas quiz', 'Musikkquiz']);
+  assert.ok(Object.keys(all.files).includes(about.cover), 'the cover is in the file');
+  assert.ok(Object.keys(all.files).includes(saved.categories[0].questions[0].audio), 'the clip is in the file');
 
   // Keyboard help.
   await host.keyboard.press('?');

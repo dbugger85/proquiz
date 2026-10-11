@@ -1,5 +1,5 @@
 // The question editor (laptop only). Quizzes save themselves a moment after each change.
-import { validateSet, usedFiles, cleanCredits, modeOf, MAX_CATEGORIES, MAX_QUESTIONS, MAX_SECTIONS, MAX_SECTION_QUESTIONS, MAX_OPTION, MIN_SECONDS, MAX_SECONDS, DEFAULT_SECONDS, rightSet, typeOf, QUESTION_TYPES } from '/lib/validate.js';
+import { validateSet, usedFiles, cleanCredits, modeOf, MAX_DESCRIPTION, MAX_CATEGORIES, MAX_QUESTIONS, MAX_SECTIONS, MAX_SECTION_QUESTIONS, MAX_OPTION, MIN_SECONDS, MAX_SECONDS, DEFAULT_SECONDS, rightSet, typeOf, QUESTION_TYPES } from '/lib/validate.js';
 import { buildRequest, parseReply, splitTopics, AiQuizError, DIFFICULTIES, FILL_DIFFICULTIES, MIN_SIZE, QUICK_SECTIONS, QUICK_PER_SECTION, gapsOf, guessLanguage, buildFillRequest, parseFill } from '/lib/aiquiz.js';
 import { SHAPES, OPTION_COLORS } from '/lib/quick.js';
 import { t, pts, setLang, getLang, translatePage, licenseName } from './i18n.js';
@@ -65,7 +65,11 @@ function saveNow() {
     .then(() => {
       if (id === currentId && !saveTimer) setStatus('edSaved');
       const item = quizzes.find((q) => q.id === id);
-      if (item) Object.assign(item, { title: body.set.title, problems: validateSet(body.set).length });
+      if (item) {
+        // What the list shows: the name, whether it is ready, the cover and the first line of the description.
+        const description = String(body.set.description ?? '').split('\n').map((l) => l.trim()).find(Boolean) ?? '';
+        Object.assign(item, { title: body.set.title, problems: validateSet(body.set).length, cover: body.set.cover ?? null, description });
+      }
       renderList();
     })
     .catch(() => setStatus('edSaveFailed'));
@@ -84,16 +88,22 @@ function changed({ board = false } = {}) {
 
 // ----- the list of quizzes -----
 
+// Each row: the quiz (cover thumbnail, title, the first line of its description) and Archive / Bring back.
+// Archived quizzes sit in a folded "Archived (n)" section at the bottom (archiving is personal to this computer).
 function renderList() {
-  fill($('#quiz-list'), 
-    ...quizzes.map((q) =>
+  const row = (q) =>
+    h(
+      'li',
+      { class: `ed-row${q.archived ? ' archived' : ''}` },
       h(
-        'li',
-        {},
+        'button',
+        { class: `ed-item${q.id === currentId ? ' on' : ''}`, type: 'button', onclick: () => select(q.id).then(foldList) },
+        q.cover ? h('img', { class: 'ed-item-thumb', src: `/files/${encodeURIComponent(q.cover)}`, alt: '' }) : null,
         h(
-          'button',
-          { class: `ed-item${q.id === currentId ? ' on' : ''}`, type: 'button', onclick: () => select(q.id).then(foldList) },
+          'span',
+          { class: 'ed-item-text' },
           h('span', { class: 'ed-item-title' }, q.title || t('edNewQuizTitle')),
+          q.description ? h('span', { class: 'ed-item-desc' }, q.description) : null,
           h(
             'span',
             { class: `ed-item-sub${q.problems ? ' bad' : ''}` },
@@ -101,8 +111,26 @@ function renderList() {
           ),
         ),
       ),
-    ),
-  );
+      h(
+        'button',
+        { class: 'btn btn-small btn-quiet ed-archive', type: 'button', title: t(q.archived ? 'edUnarchiveTitle' : 'edArchiveTitle'), onclick: () => setArchived(q, !q.archived) },
+        t(q.archived ? 'edUnarchive' : 'edArchive'),
+      ),
+    );
+  const archived = quizzes.filter((q) => q.archived);
+  fill($('#quiz-list'), ...quizzes.filter((q) => !q.archived).map(row));
+  const box = $('#quiz-archived');
+  box.hidden = archived.length === 0;
+  box.querySelector('summary').textContent = t('edArchived', { n: archived.length });
+  fill(box.querySelector('ul'), ...archived.map(row));
+}
+
+async function setArchived(q, on) {
+  try {
+    const { archived } = await call('PUT', `/api/sets/${q.id}/archived`, { archived: on });
+    q.archived = archived;
+  } catch {}
+  renderList();
 }
 
 // On a narrow window the list sits above the quiz: picking a quiz folds it away (the heading opens it again).
@@ -162,11 +190,13 @@ $('#import-file').addEventListener('change', async (e) => {
   e.target.value = '';
   if (!file) return;
   try {
-    const { id } = await call('POST', '/api/import', undefined, await file.text());
+    const { id, count } = await call('POST', '/api/import', undefined, await file.text());
     await loadList();
     await select(id);
-  } catch {
-    tell({ title: t('dlgImportTitle'), text: t('edImportFailed') });
+    if (count > 1) tell({ title: t('dlgImportedTitle'), text: t('edImportedMany', { n: count }) }); // an "Export all quizzes" file
+  } catch (err) {
+    // A file from a newer ProQuiz says so plainly (lib/fileformat.js); anything else isn't a quiz.
+    tell({ title: t('dlgImportTitle'), text: t(err.code === 'quiz-too-new' ? 'edImportTooNew' : 'edImportFailed') });
   }
 });
 
@@ -239,12 +269,104 @@ function renderMain() {
             t('edDelete'),
           ),
     ),
+    aboutBlock(),
     quick() ? h('div', { id: 'ed-sections', class: 'ed-sections' }) : [h('div', { id: 'ed-board' }), h('div', { id: 'ed-round2' }), h('div', { id: 'ed-final' })],
     h('div', { id: 'ed-problems' }),
     h('div', { id: 'ed-credits' }),
   );
   renderBoard();
   renderProblems();
+}
+
+// The quiz's description and cover picture (part of the quiz file, so exports carry them), under the name.
+// The cover works like a question's picture: Choose a file, Find a free picture (with its credit), Remove.
+function aboutBlock() {
+  const box = h('div', { class: 'ed-about' });
+  const setCover = (name) => {
+    if (name) set.cover = name;
+    else delete set.cover;
+    changed();
+    draw();
+  };
+  const draw = (status = '') => {
+    const cover = set.cover;
+    const credit = cover ? set.credits?.[cover] : null;
+    const input = h('input', {
+      type: 'file',
+      accept: 'image/*',
+      hidden: true,
+      onchange: async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        draw(t('edUploading'));
+        try {
+          const up = await call('POST', `/api/files?name=${encodeURIComponent(file.name)}`, undefined, file);
+          if (up.kind !== 'image') throw new Error('wrong kind');
+          setCover(up.name);
+        } catch {
+          draw(t('edUploadFailed'));
+        }
+      },
+    });
+    fill(
+      box,
+      h(
+        'label',
+        { class: 'field ed-desc' },
+        h('span', {}, t('edDescription')),
+        h(
+          'textarea',
+          {
+            name: 'description',
+            rows: 3,
+            maxlength: MAX_DESCRIPTION,
+            disabled: builtIn,
+            oninput: (e) => {
+              set.description = e.target.value;
+              changed();
+            },
+          },
+          set.description ?? '',
+        ),
+        h('small', {}, t('edDescriptionHint', { max: MAX_DESCRIPTION })),
+      ),
+      h(
+        'div',
+        { class: 'ed-media ed-cover' },
+        h('span', { class: 'ed-media-label' }, t('edCover')),
+        h('small', {}, t('edCoverHint')),
+        cover ? h('img', { src: `/files/${encodeURIComponent(cover)}`, alt: '' }) : null,
+        credit ? h('small', { class: 'ed-credit' }, creditNodes(credit)) : null,
+        builtIn
+          ? null
+          : h(
+              'span',
+              { class: 'row' },
+              h('label', { class: 'btn' }, t('edChooseFile'), input),
+              h(
+                'button',
+                {
+                  class: 'btn ed-pic-search',
+                  type: 'button',
+                  onclick: () =>
+                    openPictureDialog({
+                      query: suggestQuery(set.title),
+                      onPick: ({ name: picked, credit: found }) => {
+                        set.credits = { ...(set.credits ?? {}), [picked]: found };
+                        setCover(picked);
+                      },
+                    }),
+                },
+                t('picSearch'),
+              ),
+              cover ? h('button', { class: 'btn btn-quiet', type: 'button', onclick: () => setCover(null) }, t('edRemove')) : null,
+            ),
+        status ? h('p', { class: `ed-media-status${status === t('edUploadFailed') ? ' bad' : ''}` }, status) : null,
+      ),
+    );
+  };
+  draw();
+  return box;
 }
 
 // The categories of a board: r = 1 is the main board, r = 2 the round 2 board.

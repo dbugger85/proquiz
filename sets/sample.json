@@ -1,6 +1,7 @@
 {
   "v": 1,
   "title": "Sample quiz",
+  "description": "A small board quiz to try ProQuiz with: five categories, a round 2 and a final question.",
   "categories": [
     {
       "name": "Capitals",

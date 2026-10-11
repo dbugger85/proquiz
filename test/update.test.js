@@ -190,7 +190,10 @@ test('nothing is asked when ProQuiz starts; a host page connecting asks once, an
   const host = await client('host');
   assert.equal(host.msgs.find((m) => m.type === 'welcome').info.version, version, 'the host learns which ProQuiz this is');
   const s = await host.wait((m) => m.type === 'state' && m.update);
-  assert.deepEqual(s.update, { version: '9.9.0', url: TAG_URL('9.9.0'), notes: 'Faster buzzers and a new look.' });
+  const { canInstall, install, ...release } = s.update;
+  assert.deepEqual(release, { version: '9.9.0', url: TAG_URL('9.9.0'), notes: 'Faster buzzers and a new look.' });
+  assert.equal(canInstall, false, 'under npm start there is no Update now (lib/selfupdate.js)');
+  assert.equal(install.stage, 'idle');
   assert.equal(gh.calls.length, 1);
 
   await settle();

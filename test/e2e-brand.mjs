@@ -3,9 +3,15 @@
 // screen and a Quick quiz to the podium, both with the glass look on and off; then a dark PNG logo on a white
 // backing with a colour of your own, a refused file, and removing the logo again.
 //
-// Screenshots: test/screenshots/brand-*.png
+// Also "Update now" (lib/selfupdate.js) at the end: the server pretends to be the downloaded program with a
+// pretend release served slowly, so the banner shows the button, the question, "Downloading… 42%", "Checking…"
+// and "Restarting…" (the restart itself is pretend; the swap is real, on a little shell script in a temp folder).
+//
+// Screenshots: test/screenshots/brand-*.png, host-update-*.png
 
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync, readFileSync, chmodSync, existsSync } from 'node:fs';
+import { execFileSync, spawn } from 'node:child_process';
+import { EventEmitter } from 'node:events';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,6 +19,7 @@ import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
 import { startServer } from '../server.js';
 import { COLORS } from '../lib/game.js';
+import { sha256 } from '../lib/selfupdate.js';
 
 const shots = fileURLToPath(new URL('./screenshots', import.meta.url));
 mkdirSync(shots, { recursive: true });
@@ -27,7 +34,45 @@ const fakeGitHub = async () => ({
     body: '## What’s new\n\n**Faster buzzers** and a [new look](https://example.com) for the TV.\n\n- more below',
   }),
 });
-const srv = await startServer({ port: 3486, quiet: true, dataDir: join(tmp, 'data'), updateOptions: { fetchImpl: fakeGitHub } });
+// A pretend downloaded ProQuiz for "Update now": a shell script that answers --version, and a pretend release
+// (the zip with the "new" program and SHA256SUMS.txt) streamed slowly so the progress can be seen.
+const appDir = join(tmp, 'app');
+mkdirSync(join(appDir, 'ProQuiz-9.9.0-linux-x64'), { recursive: true });
+const program = (v) => `#!/bin/sh\necho ${v}\n# ${'x'.repeat(1_100_000)}\n`;
+const exe = join(appDir, 'ProQuiz');
+writeFileSync(exe, program('2.2.1'));
+chmodSync(exe, 0o755);
+writeFileSync(join(appDir, 'ProQuiz-9.9.0-linux-x64', 'ProQuiz'), program('9.9.0'));
+writeFileSync(join(appDir, 'ProQuiz-9.9.0-linux-x64', 'START-HERE.txt'), 'ProQuiz 9.9.0\n');
+execFileSync('zip', ['-q', '-r', '-X', 'release.zip', 'ProQuiz-9.9.0-linux-x64'], { cwd: appDir });
+const zip = readFileSync(join(appDir, 'release.zip'));
+const fakeRelease = async (url) => {
+  if (url.endsWith('/SHA256SUMS.txt')) return new Response(`${sha256(zip)}  ProQuiz-9.9.0-linux-x64.zip\n`);
+  if (!url.endsWith('/ProQuiz-9.9.0-linux-x64.zip')) return new Response('nope', { status: 404 });
+  const size = Math.ceil(zip.length / 60);
+  let at = 0;
+  const stream = new ReadableStream({
+    async pull(c) {
+      if (at >= zip.length) return c.close();
+      await new Promise((r) => setTimeout(r, 60));
+      c.enqueue(new Uint8Array(zip.subarray(at, at + size)));
+      at += size;
+    },
+  });
+  return new Response(stream, { status: 200, headers: { 'content-length': String(zip.length) } });
+};
+const restarts = [];
+const fakeRelaunch = (opts) => {
+  restarts.push(opts);
+  return new EventEmitter(); // the "new program": never ends during the test
+};
+const srv = await startServer({
+  port: 3486,
+  quiet: true,
+  dataDir: join(tmp, 'data'),
+  updateOptions: { fetchImpl: fakeGitHub },
+  selfUpdateOptions: { compiled: true, exe, system: 'linux-x64', fetchImpl: fakeRelease, relaunchImpl: fakeRelaunch, spawnImpl: spawn, beforeRestart: async () => restarts.push('saved') },
+});
 const base = `http://127.0.0.1:${srv.info.port}`;
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM || '/usr/bin/chromium' });
 const errors = [];
@@ -118,6 +163,7 @@ try {
   // the banner, also through later state messages. The TV page has no such thing.
   await host.waitForSelector('#update:not([hidden])');
   assert.equal(await host.textContent('#update-title'), 'ProQuiz 9.9.0 is available');
+  assert.equal(await host.isVisible('#update-now'), true, 'the downloaded program has Update now');
   assert.equal(await host.textContent('#update-notes'), 'Faster buzzers and a new look for the TV.');
   assert.equal(await host.getAttribute('#update-link', 'href'), 'https://github.com/dbugger85/proquiz/releases/tag/v9.9.0');
   assert.equal(await host.getAttribute('#update-link', 'target'), '_blank');
@@ -304,8 +350,58 @@ try {
   await host.click('label.accent:has(> input[value=violet])');
   await tv.waitForFunction(() => document.body.dataset.accent === '' && document.documentElement.style.getPropertyValue('--light-rgb') === '');
 
+  // ----- Update now (a fresh host page: the first one closed the banner for its session) -----
+  const up = await open('/host', { width: 1366, height: 768 }, 'host-update');
+  up.on('dialog', (d) => {
+    errors.push(`host-update: a browser ${d.type()} appeared: ${d.message()}`);
+    d.dismiss().catch(() => {});
+  });
+  await up.waitForSelector('#update:not([hidden])');
+  await up.waitForSelector('#update-now:not([hidden])');
+  // ProQuiz's own question first; Cancel changes nothing.
+  await up.click('#update-now');
+  await up.waitForSelector('dialog.pq-modal');
+  assert.match(await up.textContent('dialog.pq-modal'), /Update to ProQuiz 9\.9\.0\?/);
+  assert.match(await up.textContent('dialog.pq-modal'), /quizzes and settings stay/);
+  await up.waitForTimeout(400); // the dialog fades in
+  await shot(up, 'host-update-ask');
+  await up.click('dialog.pq-modal button[value=cancel]');
+  await up.waitForSelector('dialog.pq-modal', { state: 'detached' });
+  await up.waitForTimeout(200);
+  assert.equal(await up.isHidden('#update-status'), true);
+  assert.equal(readFileSync(exe, 'utf8'), program('2.2.1'), 'nothing happened');
+  // OK: downloading with a percentage, checking, restarting (the restart is pretend). Every status text is noted.
+  await up.evaluate(() => {
+    window.__statuses = [];
+    const el = document.querySelector('#update-status');
+    new MutationObserver(() => window.__statuses.push(el.textContent)).observe(el, { childList: true, characterData: true, subtree: true });
+  });
+  await up.click('#update-now');
+  await up.click('dialog.pq-modal button[value=ok]');
+  await up.waitForFunction(() => /Downloading… [1-9]\d?%/.test(document.querySelector('#update-status')?.textContent ?? ''), null, { timeout: 10_000 });
+  assert.equal(await up.isHidden('#update-now'), true, 'no second press while it runs');
+  assert.equal(await up.isHidden('#update-close'), true);
+  assert.equal(await up.isHidden('#update-link'), true);
+  await shot(up, 'host-update-progress');
+  await up.waitForFunction(() => /Restarting ProQuiz/.test(document.querySelector('#update-status')?.textContent ?? ''), null, { timeout: 15_000 });
+  await shot(up, 'host-update-restarting');
+  assert.equal(readFileSync(exe, 'utf8'), program('9.9.0'), 'the new program is in place');
+  assert.equal(readFileSync(`${exe}.old`, 'utf8'), program('2.2.1'), 'the old one is kept');
+  assert.equal(existsSync(`${exe}.new`), false);
+  assert.equal(restarts[0], 'saved', 'saved and closed before the restart');
+  assert.equal(restarts[1].exe, exe);
+  assert.equal(restarts[1].extraEnv.PORT, String(srv.info.port));
+  // The texts came in order: downloading (percentages going up), checking, restarting.
+  const seen = await up.evaluate(() => window.__statuses);
+  const kinds = [...new Set(seen.map((x) => x.split(/…| /)[0]))];
+  assert.deepEqual(kinds, ['Downloading', 'Checking', 'Restarting'], JSON.stringify(seen));
+  const pcts = seen.filter((x) => x.startsWith('Downloading')).map((x) => Number(/(\d+)%/.exec(x)[1]));
+  assert.ok(pcts.length > 3 && pcts.every((p, i) => i === 0 || p >= pcts[i - 1]), JSON.stringify(pcts));
+  assert.equal(await tv.evaluate(() => document.body.innerText.includes('Restarting')), false, 'the TV knows nothing');
+  await up.close();
+
   assert.deepEqual(errors, []);
-  console.log('Branding e2e passed. Screenshots in test/screenshots/brand-*.png');
+  console.log('Branding e2e passed. Screenshots in test/screenshots/brand-*.png and host-update-*.png');
 } finally {
   await browser.close();
   await srv.close();
