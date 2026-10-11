@@ -33,9 +33,9 @@ This file holds the owner's decisions, the status and the open items. What was b
 
 ## Status and open items (2026-10-11)
 
-**Latest release: v2.3.1** (Quit button). Releases this weekend: 2.0.0, 2.0.1, 2.0.2, 2.1.0 (picture search), 2.2.0 (tick-all / put-in-order questions, reactions, 100 players, 16 colours), 2.2.1 (icon, new-version notice, review fixes), 2.3.0 (Update now, louder defaults, archive, quiz description and cover, versioned export), 2.3.1 (Quit ProQuiz).
+**Latest release: v2.4.0** (2026-10-11: song clips, quiz languages, Quick quiz reveal, editor tidy-up; commit 0a2c875). Releases this weekend: 2.0.0, 2.0.1, 2.0.2, 2.1.0 (picture search), 2.2.0 (tick-all / put-in-order questions, reactions, 100 players, 16 colours), 2.2.1 (icon, new-version notice, review fixes), 2.3.0 (Update now, louder defaults, archive, quiz description and cover, versioned export), 2.3.1 (Quit ProQuiz).
 
-**Built on 2026-10-11, not yet committed or released:** clip trimming with the trim bar, Find a song clip, extra languages in a quiz, slowly appearing pictures in the Quick quiz and the blur style, Fill empty spots with AI for Quick quizzes, the fixes after the first real game, the New quiz chooser, the editor tidy-ups and layout pass, and the docs/tests housekeeping (CLAUDE.md split into `docs/dev/`, per-suite `npm run e2e:*` scripts). `npm test` (282) and the full `npm run e2e` passed after the last change. **Next step:** the owner tries it all (start with `npm start`), then commit, push and release, probably as 2.4.0. Ask before committing.
+**Released as v2.4.0 on 2026-10-11:** everything built that day (see "Decisions since").
 
 **Small layout issues seen in the last screenshot (`test/screenshots/editor-space-question-1280.png`), left for later at the owner's choice:** in the two-column question dialog with a picture, a clip and the slow reveal, the right column is much longer than the left (half empty), and the floating Done button covers part of the sound clip's player. Possible fix: move the sound clip under the words on the left and give Done its own bar at the bottom.
 
