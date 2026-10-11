@@ -4955,7 +4955,7 @@ body[data-rankanim='move'] .top-list li {
   font-size: 3.6vh;
   line-height: 1;
 }
-.top-list li:first-child .rank-plate {
+.top-list li.lead .rank-plate {
   font-size: 4.4vh;
   padding-block: 2.2vh;
   box-shadow: 0 2vh 7vh color-mix(in srgb, var(--team) 50%, transparent);
@@ -5728,7 +5728,7 @@ body.logo-corner .tv-stage {
   color: #fff;
   box-shadow: 0 0 0 0.12em var(--team);
 }
-.top-list li:first-child .rank-face .rank-n {
+.top-list li.lead .rank-face .rank-n {
   background: #ffd34d;
   color: #3a2a00;
 }

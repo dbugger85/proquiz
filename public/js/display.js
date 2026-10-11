@@ -538,7 +538,7 @@ function rankRow(e, i, was = e) {
   const arrow = e.move === 'up' ? `▲ ${e.places}` : e.move === 'down' ? `▼ ${e.places}` : e.move === 'new' ? '★' : '–';
   return h(
     'li',
-    { 'data-id': e.id, style: `${teamStyle(e)}; --i: ${i}` },
+    { 'data-id': e.id, class: was.rank === 1 ? 'lead' : null, style: `${teamStyle(e)}; --i: ${i}` }, // everyone in 1st place (ties too) is big
     h('span', { class: `move ${e.move ?? 'same'}` }, arrow),
     h(
       'span',

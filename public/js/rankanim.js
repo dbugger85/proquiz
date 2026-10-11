@@ -119,6 +119,7 @@ export function animateRanks(ol, before, after, { swap = () => {}, reduced = red
       const li = row(e.id);
       if (!li) continue;
       li.querySelector('.rank-n').textContent = String(e.rank);
+      li.classList.toggle('lead', e.rank === 1);
       li.querySelector('.rank-score').textContent = pts(e.score);
       li.classList.remove('waiting');
       ol.append(li);
