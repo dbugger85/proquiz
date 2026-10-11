@@ -2,7 +2,7 @@
 import { COLORS, newColor, SHAPES, OPTION_COLORS, REACTIONS } from '/lib/game.js';
 import { connect } from './net.js';
 import { t, pts, setLang, guessLang, translatePage, secondsText } from './i18n.js';
-import { $, h, inkFor, countdown, runCountdowns, setGlass, shapeSvg, optionStyle, setBrand } from './ui.js';
+import { $, h, inkFor, countdown, runCountdowns, setGlass, shapeSvg, optionStyle, setBrand, longWord } from './ui.js';
 import { keepAwake } from './wake.js';
 import { countTo, shownCount } from './rankanim.js';
 import { AVATAR_PARTS, AVATAR_KEYS, isValidAvatar, randomAvatar } from '/lib/avatar.js';
@@ -304,11 +304,6 @@ function answer(e, option) {
 }
 
 const optionText = (i) => view.q?.options?.[i] ?? null;
-// A smaller text size for options with a long word, so it isn't broken in two on a narrow phone.
-function longWord(text) {
-  const longest = Math.max(0, ...String(text).split(/\s+/).map((w) => w.length));
-  return longest >= 12 ? ' longer' : longest >= 8 ? ' long' : '';
-}
 
 // A "tick all" or "put in order" question: a tap ticks a shape (or gives it the next number; tapping a numbered
 // one takes its number and every later one away), and Submit sends them all.
@@ -762,6 +757,23 @@ function react() {
   }
 }
 
+// The name in the header wraps between words only (style.css). A word too wide for the room beside the score pill
+// gets smaller text in two steps, and as a last resort the name ends in a … (never broken in the middle).
+function fitName() {
+  const name = $('#me .me-name');
+  if (!name) return;
+  name.classList.remove('smaller', 'smallest', 'cut');
+  for (const step of ['smaller', 'smallest', 'cut']) {
+    if (name.scrollWidth <= name.clientWidth + 1) return;
+    name.classList.add(step);
+  }
+}
+// The room for the name changes without a redraw too: the score pill widens while new points count up, the font
+// arrives, or the phone turns.
+new ResizeObserver(fitName).observe($('#me'));
+addEventListener('resize', fitName);
+document.fonts?.ready.then(fitName);
+
 function render() {
   if (view) setLang(view.lang);
   if (view) setGlass(view.settings.glass);
@@ -805,6 +817,7 @@ function render() {
   if (shownScore?.id === me.id && shownScore.score !== me.score) countTo('score', shownCount('score', shownScore.score), me.score, { ms: 600, tick: false, format: (n) => t('points', { n: pts(n) }) });
   shownScore = { id: me.id, score: me.score };
   $('#score').textContent = t('points', { n: pts(shownCount('score', me.score)) });
+  fitName();
   const key = stageKeyFor();
   if (key !== stageKey) {
     stageKey = key;

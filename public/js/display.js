@@ -2,7 +2,7 @@
 import { ranking, COLORS, unveilProgress, SHAPES, OPTION_COLORS } from '/lib/game.js';
 import { connect } from './net.js';
 import { t, pts, setLang, translatePage, fastestTitle, secondsText, licenseName } from './i18n.js';
-import { $, h, fill, qrSvg, shortUrl, urlNodes, countdown, runCountdowns, teamStyle, setGlass, shapeSvg, optionStyle, timerTotal, setBrand, brandLogo } from './ui.js';
+import { $, h, fill, qrSvg, shortUrl, urlNodes, countdown, runCountdowns, teamStyle, setGlass, shapeSvg, optionStyle, timerTotal, setBrand, brandLogo, longWord } from './ui.js';
 import { unlockAudio, audioReady, playEvent, playSound, startTicks, sounds } from './sounds.js';
 import { animateRanks, cancelRanks, countTo, shownCount, setTickSound, reducedMotion } from './rankanim.js';
 import { syncClip, preloadClips } from './clip.js';
@@ -86,16 +86,29 @@ const face = (team, cls) => avatarEl(team?.avatar, cls);
 
 // ----- players' reactions (Quick quiz) -----
 
-// A `reaction` message from the server: "🔥 Alex" floats up from the bottom edge at a random spot and fades out
-// (style.css; with "reduce motion" it only fades). At most MAX_REACTIONS on screen, the oldest goes first, so a
-// hundred players can't flood the TV. Nothing about it is in the game state.
+// A `reaction` message from the server: "🔥 Alex" floats up from the bottom edge and fades out (style.css; with
+// "reduce motion" it only fades). At most MAX_REACTIONS on screen, the oldest goes first, so a hundred players
+// can't flood the TV. Nothing about it is in the game state.
+// Lanes keep them tidy: six spots along the left and right edges (never over the bars, the verdict or the top 5 in
+// the middle), each new reaction taking the lane that has been quiet the longest, and one that comes within a
+// second of the last in its lane starts a step higher (--lift), so a burst stacks instead of piling up.
 const MAX_REACTIONS = 12;
+const LANES = [6, 94, 15, 85, 10.5, 89.5].map((left) => ({ left, used: 0, stack: 0 })); // % from the left, alternating sides
+const LANE_LIFT = [0, 0, 26, 26, 13, 13]; // vh: the three lanes on a side start at different heights (one is ~12vh tall)
+const STACK_LIFT = 39; // vh: a lane used twice within a second puts the second one above all three
+function laneFor(now) {
+  const lane = LANES.reduce((best, l) => (l.used < best.used ? l : best));
+  lane.stack = now - lane.used < 1000 ? Math.min(lane.stack + 1, 1) : 0;
+  lane.used = now;
+  return { left: lane.left, lift: LANE_LIFT[LANES.indexOf(lane)] + lane.stack * STACK_LIFT };
+}
 function showReaction(r) {
   const box = $('#reactions');
   while (box.children.length >= MAX_REACTIONS) box.firstChild.remove();
+  const { left, lift } = laneFor(performance.now());
   const el = h(
     'div',
-    { class: 'reaction', style: `${teamStyle(r)}; left: ${8 + Math.random() * 84}%; --drift: ${((Math.random() - 0.5) * 10).toFixed(1)}vw` },
+    { class: 'reaction', style: `${teamStyle(r)}; left: ${left}%; --lift: ${lift}vh; --drift: ${((Math.random() - 0.5) * 3).toFixed(1)}vw` },
     h('span', { class: 'reaction-emoji' }, r.emoji),
     h('span', { class: 'plate reaction-name' }, face(r), h('span', {}, r.name)),
   );
@@ -723,7 +736,7 @@ function renderFinal() {
           'li',
           { class: `judge-card${r ? ' shown' : ''}${verdict === true ? ' right' : verdict === false ? ' wrong' : ''}`, style: teamStyle(tm) },
           h('span', { class: 'who' }, face(tm), h('span', {}, tm.name)),
-          h('span', { class: 'what' }, r ? r.answer || '—' : '?'),
+          h('span', { class: `what${r ? longWord(r.answer, JUDGE_WORD_STEPS) : ''}` }, r ? r.answer || '—' : '?'),
           r ? h('span', { class: 'bet' }, r.wager === 0 ? '0' : `${verdict ? '+' : '−'}${pts(r.wager)}`) : null,
         );
       }),
@@ -770,6 +783,9 @@ function renderOver(fresh) {
     h('ol', {}, ranked.map((tm) => h('li', { class: 'plate', style: teamStyle(tm) }, h('span', { class: 'over-name' }, face(tm), h('span', {}, tm.name)), h('span', { 'data-count': key(tm) }, pts(shownCount(key(tm), tm.score)))))),
   );
 }
+
+// A judge card (a quarter of the TV) holds about 15 letters of one word at full size; longer words get smaller text.
+const JUDGE_WORD_STEPS = [15, 19, 23];
 
 // The score strip along the bottom. A team's score bumps when it changes, and counts to its new value.
 const stripScores = new Map(); // team id → the score the strip last showed
@@ -828,6 +844,24 @@ function renderGame() {
     // A Quick quiz has no score strip: too many players, and the top 5 shows after every question.
     h('div', { class: `tv-game${view.mode === 'quick' ? ' quick' : ''}` }, takeover, h('div', { class: 'tv-stage' }, stage), p === 'over' || view.mode === 'quick' ? null : renderScores(bumped)),
   );
+  fitScores();
+}
+
+// Full names on the score strip: the strip is measured with every team's final score in place, and shrunk in steps
+// (--strip-scale, see style.css) until no name is cut; then the counting numbers are put back.
+const STRIP_SCALES = [1, 0.92, 0.84, 0.76, 0.7];
+function fitScores() {
+  const strip = $('#game .tv-scores');
+  if (!strip) return;
+  const pts$ = [...strip.querySelectorAll('.pts')];
+  const shown = pts$.map((el) => el.textContent);
+  for (const [i, team] of view.teams.entries()) if (pts$[i]) pts$[i].textContent = pts(team.score);
+  const cut = () => [...strip.querySelectorAll('.name')].some((el) => el.scrollWidth > el.clientWidth + 1);
+  for (const scale of STRIP_SCALES) {
+    strip.style.setProperty('--strip-scale', scale);
+    if (!cut()) break;
+  }
+  pts$.forEach((el, i) => (el.textContent = shown[i]));
 }
 
 function render() {

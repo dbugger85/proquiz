@@ -92,7 +92,7 @@ function renderList() {
         {},
         h(
           'button',
-          { class: `ed-item${q.id === currentId ? ' on' : ''}`, type: 'button', onclick: () => select(q.id) },
+          { class: `ed-item${q.id === currentId ? ' on' : ''}`, type: 'button', onclick: () => select(q.id).then(foldList) },
           h('span', { class: 'ed-item-title' }, q.title || t('edNewQuizTitle')),
           h(
             'span',
@@ -104,6 +104,15 @@ function renderList() {
     ),
   );
 }
+
+// On a narrow window the list sits above the quiz: picking a quiz folds it away (the heading opens it again).
+const narrow = () => matchMedia('(max-width: 800px)').matches;
+function foldList() {
+  if (!narrow()) return;
+  $('.ed-side').classList.add('folded');
+  $('.ed-layout').scrollTop = 0;
+}
+$('#ed-side-toggle').addEventListener('click', () => narrow() && $('.ed-side').classList.toggle('folded'));
 
 async function select(id) {
   await saveNow();

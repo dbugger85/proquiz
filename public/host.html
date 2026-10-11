@@ -23,6 +23,17 @@
     <p id="remote-warn" class="remote-warn" role="alert" hidden></p>
 
     <section id="lobby" class="lobby" hidden>
+      <!-- A newer ProQuiz is out (lib/update.js): only the host laptop hears about it; × hides it for this session -->
+      <div id="update" class="update-banner" role="status" hidden>
+        <span class="update-icon" aria-hidden="true">✦</span>
+        <div class="update-text">
+          <b id="update-title"></b>
+          <span id="update-notes" hidden></span>
+          <small data-t="updateKeep"></small>
+        </div>
+        <a id="update-link" class="btn btn-primary btn-small" href="https://github.com/dbugger85/proquiz/releases/latest" target="_blank" rel="noopener" data-t="updateDownload"></a>
+        <button id="update-close" class="btn btn-small btn-quiet update-close" type="button" data-t-aria-label="updateDismiss" data-t-title="updateDismiss">×</button>
+      </div>
       <div id="resume" class="resume" hidden>
         <div>
           <h2 data-t="resumeTitle"></h2>
@@ -164,6 +175,7 @@
           <summary><span class="group-title" data-t="groupLook"></span> <span class="group-status" id="look-status"></span></summary>
           <label class="check with-hint"><input type="checkbox" name="glass"> <span><span data-t="glassLook"></span><br><small data-t="glassHint"></small></span></label>
           <label class="check with-hint"><input type="checkbox" name="showCredits"> <span><span data-t="showCreditsSetting"></span><br><small data-t="showCreditsHint"></small></span></label>
+          <label class="check with-hint"><input type="checkbox" name="updateCheck"> <span><span data-t="updateCheckSetting"></span><br><small data-t="updateCheckHint"></small></span></label>
           <!-- Branding (brand.js): kept in the ProQuiz folder for every quiz, not a game setting, so nothing here has a
                `name` the settings form would send. Changed through /api/brand. -->
           <div id="brand" class="brand-settings">
@@ -218,6 +230,8 @@
             <p id="remote-note" class="remote-note" hidden data-t="remoteQuickNote"></p>
           </div>
         </details>
+        <!-- Which ProQuiz this is (from the server's welcome) -->
+        <p id="about-line" class="about-line" hidden></p>
       </form>
     </section>
 

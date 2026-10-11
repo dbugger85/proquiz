@@ -4,6 +4,7 @@
 //   npm run build -- windows  (only some systems: windows, mac-apple-silicon, mac-intel, linux-x64, linux-arm64)
 //
 // The programs contain everything: the server, the pages, the fonts, the sample quizzes.
+// The Windows program gets the ProQuiz icon (assets/icon.ico, made from assets/icon.svg).
 
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, rmSync, writeFileSync, readFileSync, chmodSync } from 'node:fs';
@@ -89,7 +90,9 @@ for (const t of targets) {
   console.log(`Building ${t.name}…`);
   execFileSync(
     'deno',
-    ['compile', '-A', '--quiet', '--target', t.target, '--include', 'public', '--include', 'lib', '--include', 'sets', '--output', join(dir, t.file), 'server.js'],
+    // package.json goes in too: the server reads its own version from it (readVersion() in server.js) for the lobby's
+    // version line and the "a new version is out" check.
+    ['compile', '-A', '--quiet', '--target', t.target, ...(t.os === 'windows' ? ['--icon', 'assets/icon.ico'] : []), '--include', 'public', '--include', 'lib', '--include', 'sets', '--include', 'package.json', '--output', join(dir, t.file), 'server.js'],
     { cwd: root, stdio: 'inherit' },
   );
   if (t.os !== 'windows') chmodSync(join(dir, t.file), 0o755);

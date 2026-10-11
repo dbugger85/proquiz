@@ -18,8 +18,20 @@ import { apply, newGame, hostView, displayView, phoneView, GameError, DEFAULT_SE
 import { createTunnel } from './lib/tunnel.js';
 import { createBrand, logoHeaders } from './brand.js';
 import { createPictures } from './pictures.js';
+import { createUpdateCheck } from './lib/update.js';
 
 const ROOT = new URL('./', import.meta.url);
+
+// Which ProQuiz this is, from package.json (packed into the program by scripts/build.mjs with `--include package.json`).
+// Null if it can't be read: then the lobby shows no version and no new-version check is made.
+export async function readVersion() {
+  try {
+    const { version } = JSON.parse(await readFile(new URL('./package.json', ROOT), 'utf8'));
+    return typeof version === 'string' && /^\d+\.\d+\.\d+$/.test(version) ? version : null;
+  } catch {
+    return null;
+  }
+}
 const START_PORT = Number(process.env.PORT) || 3000;
 // Where the autosave (and later the question sets) live: a ProQuiz folder in the user's home folder.
 const DATA_DIR = process.env.PROQUIZ_DATA || path.join(os.homedir(), 'ProQuiz');
@@ -275,8 +287,9 @@ function autosaver(dir) {
 // Players elsewhere: wrong PINs allowed per minute (for all remote phones together), so nobody can try them all.
 const PIN_TRIES_PER_MINUTE = 10;
 
-// Holds the one game and everyone connected to it. `tunnel` (lib/tunnel.js) is the internet tunnel, if any.
-export function createHub({ set, info, saved = null, save = () => {}, store = null, tunnel = null, brand = null }) {
+// Holds the one game and everyone connected to it. `tunnel` (lib/tunnel.js) is the internet tunnel, if any, and
+// `updates` (lib/update.js) the "a new version is out" check, asked when a host page connects.
+export function createHub({ set, info, saved = null, save = () => {}, store = null, tunnel = null, brand = null, updates = null }) {
   // A new game keeps the settings and the quiz from last time. A saved game with teams can be resumed from the lobby.
   const lastSet = saved?.state?.set && validateSet(saved.state.set).length === 0 ? saved.state : null;
   let state = newGame(lastSet ? lastSet.set : set, pickSettings(saved?.state?.settings), lastSet ? lastSet.setId : SAMPLE_ID);
@@ -411,11 +424,14 @@ export function createHub({ set, info, saved = null, save = () => {}, store = nu
     const serverNow = Date.now();
     const resume = resumable && summary(resumable);
     const brandView = brand?.view() ?? null; // the host's logo, event name and accent colour (the same for everyone)
+    const update = updates?.current() ?? null;
     for (const c of clients) {
       if (!c.role) continue;
       const msg = { type: 'state', view: viewFor(c), connected, displays, tvs, serverNow, brand: brandView };
       if (c.role === 'host' && resume) msg.resume = resume;
       if (c.role === 'host' && fairOn()) msg.latency = latency();
+      // A newer ProQuiz is out: only the host laptop hears about it (never the TV, the phones or anyone over the tunnel).
+      if (c.role === 'host' && !c.remote && update) msg.update = update;
       if (c.role !== 'phone') msg.remote = remoteFor(c);
       // A phone joining over the internet types the PIN when the host has set one.
       if (c.role === 'phone' && c.remote && state.settings.remotePin && !c.teamId) msg.needPin = true;
@@ -525,6 +541,17 @@ export function createHub({ set, info, saved = null, save = () => {}, store = nu
     }
   }
 
+  // "A new version is out": asked when a host page connects (not when ProQuiz starts), and lib/update.js makes sure
+  // it is at most once every 6 hours. Off with the setting `updateCheck`. A new answer reaches the host at once.
+  function checkUpdate() {
+    if (!updates || !state.settings.updateCheck) return;
+    const before = updates.current();
+    updates
+      .check()
+      .then((found) => found !== before && broadcast())
+      .catch(() => {});
+  }
+
   // Runs one action through the rules; everyone gets the new state if something changed.
   function dispatch(action) {
     const before = state;
@@ -566,7 +593,10 @@ export function createHub({ set, info, saved = null, save = () => {}, store = nu
         if (fairOn()) burst(c);
       } else {
         send(c.ws, { type: 'welcome', info });
-        if (c.role === 'host') syncTunnel({ hostHello: true });
+        if (c.role === 'host') {
+          syncTunnel({ hostHello: true });
+          checkUpdate();
+        }
       }
       return broadcast();
     }
@@ -708,11 +738,14 @@ export function createHub({ set, info, saved = null, save = () => {}, store = nu
 }
 
 // `tunnelOptions` is for tests (e.g. a pretend DNS check for a pretend cloudflared), and `pictureOptions` too
-// (a pretend `fetchImpl` instead of Openverse and Wikimedia Commons, see pictures.js).
-export async function startServer({ port = START_PORT, quiet = false, dataDir = DATA_DIR, tunnelOptions = {}, pictureOptions = {} } = {}) {
+// (a pretend `fetchImpl` instead of Openverse and Wikimedia Commons, see pictures.js), as is `updateOptions`
+// (a pretend `fetchImpl` and clock instead of GitHub's releases, see lib/update.js).
+export async function startServer({ port = START_PORT, quiet = false, dataDir = DATA_DIR, tunnelOptions = {}, pictureOptions = {}, updateOptions = {} } = {}) {
   const sets = createStore(dataDir);
   const brand = createBrand(dataDir);
   await brand.load();
+  const version = await readVersion();
+  const updates = createUpdateCheck({ version, ...updateOptions });
   const set = (await sets.get(SAMPLE_ID)).set;
   const store = autosaver(dataDir);
   const saved = await store.load();
@@ -734,6 +767,7 @@ export async function startServer({ port = START_PORT, quiet = false, dataDir = 
   const ip = lanAddresses()[0];
   const info = {
     port: actual,
+    version, // shown small in the host lobby
     hostUrl: `http://localhost:${actual}/host`,
     displayUrl: `http://localhost:${actual}/display`,
     phoneUrl: ip ? `http://${ip}:${actual}/` : null,
@@ -768,10 +802,10 @@ export async function startServer({ port = START_PORT, quiet = false, dataDir = 
     });
   }
   const tunnel = createTunnel({ dataDir, open: openRemote, close: closeRemote, onChange: () => hub?.broadcast(), ...tunnelOptions });
-  hub = createHub({ set, info, saved, save: store.save, store: sets, tunnel, brand });
+  hub = createHub({ set, info, saved, save: store.save, store: sets, tunnel, brand, updates });
   wss.on('connection', (ws, req) => hub.connect(ws, req));
   if (!quiet) {
-    console.log('\n  ProQuiz is running!\n');
+    console.log(`\n  ProQuiz${version ? ` ${version}` : ''} is running!\n`);
     console.log(`  Host (this laptop):  ${info.hostUrl}`);
     console.log(`  TV screen:           ${info.displayUrl}`);
     if (info.tvUrl) console.log(`  TV (other device):   ${info.tvUrl}`);

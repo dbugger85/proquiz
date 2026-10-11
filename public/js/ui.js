@@ -25,6 +25,14 @@ export function inkFor(hex) {
   return lum > 0.3 ? '#10131f' : '#ffffff';
 }
 
+// A class for text with a long word (' long', ' longer' or ' longest', else ''): the screens give it smaller text,
+// so the word is never broken in two. The steps are the word lengths each size holds: the phone's narrow answer
+// tiles use the default, the TV's wider final judging cards pass their own.
+export function longWord(text, steps = [8, 12, 16]) {
+  const longest = Math.max(0, ...String(text).split(/\s+/).map((w) => w.length));
+  return longest >= steps[2] ? ' longest' : longest >= steps[1] ? ' longer' : longest >= steps[0] ? ' long' : '';
+}
+
 // A QR code as an SVG element (dark squares on white, with the required quiet border).
 export function qrSvg(text) {
   const qr = qrcode(0, 'M');

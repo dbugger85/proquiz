@@ -451,6 +451,53 @@ select option {
 .remote-warn[hidden] {
   display: none;
 }
+/* The lobby's "a new version is out" banner (lib/update.js): friendly, out of the way, closable */
+.update-banner {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  padding: 0.6rem 0.6rem 0.6rem 1.1rem;
+  border-radius: var(--r-l);
+  border: 1px solid rgb(46 229 157 / 0.4);
+  background: linear-gradient(90deg, rgb(46 229 157 / 0.14), rgb(var(--light-rgb) / 0.16));
+  font-size: 0.95rem;
+}
+.update-banner[hidden] {
+  display: none;
+}
+.update-icon {
+  font-size: 1.3rem;
+  color: var(--good);
+}
+.update-text {
+  flex: 1 1 260px;
+  min-width: 0;
+  display: grid;
+  gap: 0.15rem;
+}
+.update-text b {
+  font-family: var(--display);
+  font-size: 1rem;
+}
+.update-text small {
+  color: var(--muted);
+}
+.update-close {
+  min-width: 48px;
+  min-height: 48px;
+  padding: 0;
+  font-size: 1.4rem;
+  line-height: 1;
+}
+/* Which ProQuiz this is, under the settings */
+.about-line {
+  margin: 0.25rem 0 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+  text-align: right;
+}
 .remote-state {
   margin: 0.8rem 0;
   font-size: 0.95rem;
@@ -805,9 +852,9 @@ fieldset.pill-field legend {
 }
 .score-row {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 0.4rem 0.5rem;
+  gap: 0.4rem 0.75rem;
   padding: 0.7rem 0.9rem;
 }
 .score-row .name {
@@ -815,12 +862,21 @@ fieldset.pill-field legend {
   font-weight: 700;
   font-size: 0.95rem;
   line-height: 1.2;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 0.45rem;
+}
+.score-row .name > * {
+  flex: none;
+}
+/* A long team name ends in a … (the text sits in its own span: a flex container can't cut its own text) */
+.score-row .name-text {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .score-row .pts {
   font-family: var(--display);
@@ -1415,21 +1471,24 @@ fieldset.pill-field legend {
   box-shadow: 0 2vh 6vh color-mix(in srgb, var(--team) 55%, transparent);
 }
 
+/* Names come first: a plate is as wide as its name needs, and fitScores() in display.js shrinks the whole strip
+   (--strip-scale) in steps until every name fits. Only when it can't (8 teams with long names) a name gets a … */
 .tv-scores {
+  --strip-scale: 1;
   display: flex;
   gap: 1vw;
   padding: 0 3vw 3vh;
   margin: 0;
 }
 .tv-scores li {
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
   list-style: none;
-  padding: 1.6vh 1.4vw;
+  padding: calc(1.6vh * var(--strip-scale)) calc(1.4vw * var(--strip-scale));
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 1vw;
+  gap: calc(1vw * var(--strip-scale));
   font-family: var(--display);
   line-height: 1;
   position: relative;
@@ -1437,15 +1496,16 @@ fieldset.pill-field legend {
 }
 .tv-scores .name {
   font-weight: 700;
-  font-size: 2.3vh;
+  font-size: calc(2.3vh * var(--strip-scale));
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .tv-scores .pts {
+  flex: none;
   font-weight: 800;
-  font-size: 4vh;
+  font-size: calc(4vh * var(--strip-scale));
   letter-spacing: -0.03em;
   font-variant-numeric: tabular-nums;
 }
@@ -1632,9 +1692,31 @@ fieldset.pill-field legend {
   font-size: 1.35rem;
   line-height: 1.1;
   letter-spacing: -0.02em;
-  overflow-wrap: anywhere;
+}
+/* The name wraps only between words (two lines at most). A long word never breaks in the middle: fitName() in
+   phone.js shrinks the name in two steps, and as a last resort cuts it with a … */
+.me-name {
+  min-width: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+.me-name.smaller {
+  font-size: 1.1rem;
+}
+.me-name.smallest {
+  font-size: 0.9rem;
+}
+.me-name.cut {
+  display: block;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .phone-team .score {
+  flex: none;
   font-family: var(--display);
   font-weight: 700;
   font-size: 0.95rem;
@@ -2115,8 +2197,18 @@ fieldset.pill-field legend {
   font-weight: 700;
   font-size: 4.4vh;
   line-height: 1.15;
-  overflow-wrap: anywhere;
+  overflow-wrap: normal; /* a long word gets smaller text (longWord() in ui.js) instead of breaking in the middle */
   color: var(--muted);
+}
+.judge-card .what.long {
+  font-size: 3.6vh;
+}
+.judge-card .what.longer {
+  font-size: 3vh;
+}
+.judge-card .what.longest {
+  font-size: 2.4vh;
+  overflow-wrap: break-word; /* a word of 20+ letters still can't push past the card */
 }
 .judge-card.shown {
   background: var(--team);
@@ -2376,6 +2468,13 @@ fieldset.pill-field legend {
 }
 .ed-side h2 {
   font-size: 1.1rem;
+}
+/* The heading is a button so a narrow window can fold the list; on a laptop it looks like plain text. */
+.ed-side-toggle {
+  all: unset;
+  font: inherit;
+  color: inherit;
+  cursor: default;
 }
 .ed-side-actions {
   display: flex;
@@ -2697,14 +2796,43 @@ fieldset.pill-field legend {
   justify-content: flex-end;
 }
 @media (max-width: 800px) {
-  /* One column: the list and the quiz scroll together, under the bar. */
+  /* One column: the quiz list above the quiz, both scrolling together under the bar. (Not a grid: its rows would
+     share the fixed height and the list would be drawn over the quiz.) */
   .ed-layout {
-    grid-template-columns: 1fr;
+    display: block;
     overflow-y: auto;
   }
   .ed-side,
   .ed-main {
     overflow: visible;
+  }
+  .ed-side {
+    border-right: 0;
+    border-bottom: 1px solid var(--edge);
+  }
+  /* The heading folds the list away once a quiz is picked (editor.js), so the quiz starts right under the bar. */
+  .ed-side-toggle {
+    display: block;
+    cursor: pointer;
+    min-height: 48px;
+    width: 100%;
+    text-align: left;
+  }
+  .ed-side-toggle::before {
+    content: '▾';
+    display: inline-block;
+    color: var(--muted);
+    margin-right: 0.5rem;
+    transition: transform 120ms;
+  }
+  .ed-side.folded .ed-side-toggle::before {
+    transform: rotate(-90deg);
+  }
+  .ed-side.folded > :not(h2) {
+    display: none;
+  }
+  .ed-main {
+    padding-inline: 1.25rem;
   }
   .ed-media-grid {
     grid-template-columns: 1fr;
@@ -3838,7 +3966,7 @@ kbd {
   border: 1px solid var(--edge);
   border-radius: var(--r-m);
   padding: 0.6rem 0.9rem 0.8rem;
-  margin: 0;
+  margin: 0.6rem 0 0; /* the legend sits on the top edge, so it needs room under the hint above */
   min-width: 0; /* a fieldset is as wide as its contents by default, which pushed it past the panel */
 }
 .crazy-kinds legend {
@@ -4796,19 +4924,22 @@ body.display.embedded {
   pointer-events: none;
   z-index: 20;
 }
+/* Each reaction gets a lane (display.js): a spot along the left or right edge, away from the bars, the verdict and
+   the top 5 in the middle, and a --lift so ones that arrive together start at different heights instead of on top
+   of each other. It rises through the lower part of the screen and fades out before the question at the top. */
 .reaction {
   position: absolute;
-  bottom: 0;
+  bottom: var(--lift, 0vh);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.8vh;
-  transform: translate(-50%, 16vh);
+  gap: 0.6vh;
+  transform: translate(-50%, 100%);
   animation: reaction-up 3s cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
   will-change: transform, opacity;
 }
 .reaction-emoji {
-  font-size: 9vh;
+  font-size: 7vh;
   line-height: 1;
   filter: drop-shadow(0 1vh 2vh rgb(0 0 0 / 0.45));
 }
@@ -4816,20 +4947,28 @@ body.display.embedded {
   display: inline-flex;
   align-items: center;
   gap: 0.8vh;
+  max-width: 11vw;
   font-family: var(--display);
   font-weight: 700;
-  font-size: 2.6vh;
+  font-size: 2.2vh;
   line-height: 1;
-  padding: 0.9vh 2vh;
+  padding: 0.8vh 1.6vh;
   border-radius: var(--pill);
   box-shadow: 0 1vh 3vh rgb(0 0 0 / 0.35);
 }
+.reaction-name > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .reaction-name .avatar {
+  flex: none;
   font-size: 1.3em;
 }
 @keyframes reaction-up {
   0% {
-    transform: translate(-50%, 16vh);
+    transform: translate(-50%, 100%);
     opacity: 0;
   }
   12% {
@@ -4839,13 +4978,13 @@ body.display.embedded {
     opacity: 1;
   }
   100% {
-    transform: translate(calc(-50% + var(--drift, 0vw)), -70vh);
+    transform: translate(calc(-50% + var(--drift, 0vw)), -50vh);
     opacity: 0;
   }
 }
 @media (prefers-reduced-motion: reduce) {
   .reaction {
-    bottom: 12vh;
+    bottom: calc(12vh + var(--lift, 0vh));
     transform: translateX(-50%);
     animation: reaction-fade 3s ease-out forwards;
   }
@@ -5687,8 +5826,9 @@ body.logo-corner .tv-stage {
 }
 /* The board quiz's score strip. */
 .tv-scores li .avatar {
-  width: 4.4vh;
-  height: 4.4vh;
+  flex: none;
+  width: calc(4.4vh * var(--strip-scale));
+  height: calc(4.4vh * var(--strip-scale));
   margin: -0.6vh 0 -0.6vh -0.6vw;
 }
 .tv-scores .name {
@@ -5731,6 +5871,9 @@ body.logo-corner .tv-stage {
 .top-list li.lead .rank-face .rank-n {
   background: #ffd34d;
   color: #3a2a00;
+  /* A ring in the plate's text colour (dark on yellow, lime, white …; white on dark colours), so the gold badge stands
+     out on every one of the 16 colours. */
+  box-shadow: 0 0 0 0.12em var(--team), 0 0 0 0.26em var(--team-ink, #fff);
 }
 /* The podium: the face stands on the name. */
 .step-face.avatar {
@@ -5811,6 +5954,10 @@ body.logo-corner .tv-stage {
   align-items: center;
   gap: 0.6rem;
   min-width: 0;
+  flex: 1;
+}
+.me-avatar.avatar {
+  flex: none;
 }
 .me-avatar.avatar {
   width: 44px;

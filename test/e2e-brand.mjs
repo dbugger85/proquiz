@@ -18,7 +18,16 @@ const shots = fileURLToPath(new URL('./screenshots', import.meta.url));
 mkdirSync(shots, { recursive: true });
 const tmp = mkdtempSync(join(tmpdir(), 'proquiz-brand-e2e-'));
 
-const srv = await startServer({ port: 3486, quiet: true, dataDir: join(tmp, 'data') });
+// A pretend GitHub saying a newer ProQuiz is out (lib/update.js), for the lobby's banner. Never the real internet.
+const fakeGitHub = async () => ({
+  status: 200,
+  json: async () => ({
+    tag_name: 'v9.9.0',
+    html_url: 'https://github.com/dbugger85/proquiz/releases/tag/v9.9.0',
+    body: '## What’s new\n\n**Faster buzzers** and a [new look](https://example.com) for the TV.\n\n- more below',
+  }),
+});
+const srv = await startServer({ port: 3486, quiet: true, dataDir: join(tmp, 'data'), updateOptions: { fetchImpl: fakeGitHub } });
 const base = `http://127.0.0.1:${srv.info.port}`;
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM || '/usr/bin/chromium' });
 const errors = [];
@@ -103,6 +112,24 @@ try {
     errors.push(`host: a browser ${d.type()} appeared: ${d.message()}`); // ProQuiz asks with its own pop-ups now
     d.dismiss().catch(() => {});
   });
+
+  // A newer ProQuiz is out (the pretend GitHub above): the banner at the top of the lobby with the notes and a
+  // Download link to ProQuiz's own releases page in a new tab, the version line under the settings, and × hides
+  // the banner, also through later state messages. The TV page has no such thing.
+  await host.waitForSelector('#update:not([hidden])');
+  assert.equal(await host.textContent('#update-title'), 'ProQuiz 9.9.0 is available');
+  assert.equal(await host.textContent('#update-notes'), 'Faster buzzers and a new look for the TV.');
+  assert.equal(await host.getAttribute('#update-link', 'href'), 'https://github.com/dbugger85/proquiz/releases/tag/v9.9.0');
+  assert.equal(await host.getAttribute('#update-link', 'target'), '_blank');
+  assert.match(await host.getAttribute('#update-link', 'rel'), /\bnoopener\b/);
+  assert.match(await host.textContent('#about-line'), /^ProQuiz \d+\.\d+\.\d+$/);
+  await shot(host, 'host-update-banner');
+  assert.equal(await tv.evaluate(() => document.body.innerText.includes('9.9.0')), false);
+  await host.click('#update-close');
+  await host.waitForSelector('#update[hidden]', { state: 'attached' });
+  srv.hub.broadcast();
+  await host.waitForTimeout(250);
+  assert.equal(await host.isHidden('#update'), true, 'stays closed');
 
   // No branding yet: the wordmark everywhere, no logo, ProQuiz's own violet.
   assert.equal(await tv.textContent('.display > .wordmark'), 'ProQuiz');

@@ -79,7 +79,7 @@ A party quiz for the people in the room. A laptop runs the game, a TV shows it, 
 
 ## Get it
 
-Download the zip for your computer from the [latest release](https://github.com/dbugger85/proquiz/releases/latest) and unzip it. There's nothing to install. Each zip has a "START HERE" note.
+Download the zip for your computer from the [latest release](https://github.com/dbugger85/proquiz/releases/latest) and unzip it. There's nothing to install. Each zip has a "START HERE" note. ProQuiz tells you in the lobby when a new version is out (your quizzes and settings stay where they are; you can turn the check off under **Look and branding**).
 
 | Computer | Download |
 |---|---|

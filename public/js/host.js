@@ -28,6 +28,7 @@ let latency = {}; // fair buzzing: teamId → the phone's measured delay (ms)
 let remote = { status: 'off', url: null, reason: null, progress: null, remoteTeams: [] }; // players elsewhere (the internet tunnel)
 let brand = null; // the host's logo, event name and accent colour (brand.js, changed through /api/brand)
 let remoteQuickDone = false; // turned on the question text on the phones for this tunnel (once, so the host can turn it off again)
+let update = null; // a newer ProQuiz is out: {version, url, notes} from the server (lib/update.js), or null
 
 const net = connect({
   role: 'host',
@@ -44,6 +45,7 @@ const net = connect({
       latency = msg.latency ?? {};
       remote = msg.remote ?? remote;
       brand = msg.brand ?? null;
+      update = msg.update ?? null;
       const ev = view.event;
       if (ev && soundSeq !== null && ev.seq !== soundSeq && displays === 0) playEvent(view, ev, COLORS);
       soundSeq = ev?.seq ?? 0;
@@ -79,6 +81,41 @@ function showError(text) {
   const el = $('#host-error');
   el.textContent = text;
   el.hidden = !text;
+}
+
+// A newer ProQuiz is out: a small banner at the top of the lobby, until the host closes it (for this browser
+// session, remembered per version). The Download button only ever opens ProQuiz's own releases page.
+const UPDATE_SEEN = 'proquiz.updateSeen';
+const RELEASES = 'https://github.com/dbugger85/proquiz/releases/';
+function updateDismissed() {
+  try {
+    return sessionStorage.getItem(UPDATE_SEEN) === update?.version;
+  } catch {
+    return false;
+  }
+}
+function renderUpdate() {
+  const el = $('#update');
+  const show = Boolean(update?.version) && !updateDismissed();
+  el.hidden = !show;
+  if (!show) return;
+  $('#update-title').textContent = t('updateTitle', { version: update.version });
+  $('#update-notes').textContent = update.notes || '';
+  $('#update-notes').hidden = !update.notes;
+  $('#update-link').href = typeof update.url === 'string' && update.url.startsWith(RELEASES) ? update.url : `${RELEASES}latest`;
+}
+$('#update-close').addEventListener('click', () => {
+  try {
+    sessionStorage.setItem(UPDATE_SEEN, update?.version ?? '');
+  } catch {}
+  $('#update').hidden = true;
+});
+
+// Which ProQuiz this is, small under the settings.
+function renderAbout() {
+  const version = info?.version;
+  $('#about-line').hidden = !version;
+  $('#about-line').textContent = version ? t('versionLine', { version }) : '';
 }
 
 // The join card: one QR code. On this Wi-Fi it's the laptop's address; over the internet it's the internet
@@ -301,6 +338,7 @@ function renderSummaries() {
   $('#look-status').textContent = [
     t('lookSummary', { state: t(st.glass ? 'stateOn' : 'stateOff') }),
     st.showCredits ? null : t('lookCreditsOff'),
+    st.updateCheck ? null : t('lookUpdateOff'),
     brand?.logo ? t('brandHasLogo') : null,
     accent === 'violet' ? null : t(`accent-${accent}`),
   ]
@@ -1004,7 +1042,7 @@ function renderScores() {
           { class: 'name' },
           h('span', { class: `dot${connected.has(team.id) ? ' on' : ''}`, title: connected.has(team.id) ? t('online') : t('offline') }),
           face(team),
-          team.name,
+          h('span', { class: 'name-text' }, team.name),
         ),
         h('span', { class: 'pts' }, pts(team.score)),
         h(
@@ -1133,7 +1171,7 @@ function renderQuickScores() {
           h('span', { class: `dot${connected.has(e.id) ? ' on' : ''}`, title: connected.has(e.id) ? t('online') : t('offline') }),
           h('span', { class: 'rank-small' }, `${e.rank}.`),
           face(e),
-          e.name,
+          h('span', { class: 'name-text' }, e.name),
           answered ? h('span', { class: 'answered-tick' }, '✓') : null,
         ),
         h('span', { class: 'pts' }, gain ? h('small', { class: 'gain' }, `+${pts(gain)} `) : null, pts(e.score)),
@@ -1216,9 +1254,11 @@ function render() {
   $('#game').hidden = inLobby;
   $('#menu-btn').hidden = inLobby;
   if (inLobby) {
+    renderUpdate();
     renderResume();
     renderTeams();
     renderSettings();
+    renderAbout();
     renderSetPicker();
   } else {
     renderGame();
