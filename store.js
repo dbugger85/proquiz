@@ -8,7 +8,7 @@ import { readFile, writeFile, readdir, mkdir, rename, unlink, stat } from 'node:
 import { createHash, randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { validateSet, modeOf, FILE_NAME, IMAGE_NAME, AUDIO_NAME, MAX_OPTION, rightSet, usedFiles, cleanCredits } from './lib/validate.js';
+import { validateSet, modeOf, FILE_NAME, IMAGE_NAME, AUDIO_NAME, MAX_OPTION, rightSet, typeOf, usedFiles, cleanCredits } from './lib/validate.js';
 import { KINDS } from './lib/crazy.js';
 import { MAX_LOGO } from './brand.js';
 
@@ -257,7 +257,8 @@ function cleanBoard(set) {
 
 // A Quick quiz. Empty answer options are dropped (except ones marked right, so the editor still shows
 // the problem), and `correct` follows its option(s): a number for one right answer, a list for several,
-// left out when no option is marked right.
+// left out when no option is marked right. `type` is kept only for the new kinds ('multi', whose `correct` is
+// always a list, and 'order', which has none), so older files come out exactly as they went in.
 function cleanQuick(set) {
   const media = (x, out) => {
     if (x.image) out.image = x.image;
@@ -267,14 +268,15 @@ function cleanQuick(set) {
   };
   const seconds = (x) => (Number.isInteger(Number(x)) && Number(x) > 0 ? { seconds: Number(x) } : {});
   const q = (x = {}) => {
+    const type = typeOf(x);
     const raw = (Array.isArray(x.options) ? x.options : []).map((o) => String(o ?? '').slice(0, MAX_OPTION));
-    const marked = rightSet(x).filter((n) => n < raw.length); // none marked yet stays unmarked (the editor asks for it)
+    const marked = type === 'order' ? [] : rightSet(x).filter((n) => n < raw.length); // none marked yet stays unmarked (the editor asks for it)
     const keep = raw.map((o, n) => n).filter((n) => raw[n].trim() !== '' || marked.includes(n));
-    const out = { question: String(x.question ?? ''), options: keep.map((n) => raw[n]) };
-    // One right answer is saved as a number (as before), several as a list.
+    const out = { question: String(x.question ?? ''), ...(type !== 'choice' && { type }), options: keep.map((n) => raw[n]) };
+    // One right answer is saved as a number (as before), several as a list; "tick all" always a list.
     const right = marked.map((n) => keep.indexOf(n));
-    if (right.length === 1) out.correct = right[0];
-    else if (right.length > 1) out.correct = right;
+    if (right.length === 1 && type !== 'multi') out.correct = right[0];
+    else if (right.length > 0) out.correct = right;
     Object.assign(out, seconds(x.seconds));
     if ([0, 2000].includes(Number(x.points)) && x.points !== null && x.points !== '') out.points = Number(x.points);
     return media(x, out);

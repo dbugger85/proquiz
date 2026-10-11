@@ -214,6 +214,7 @@ function renderTeams() {
   const teams = view.teams;
   $('#team-count').textContent = `${teams.length}/${quick() ? MAX_PLAYERS : MAX_TEAMS}`;
   $('#no-teams').hidden = teams.length > 0;
+  $('#many-note').hidden = !(quick() && teams.length > 30); // more than 30 hasn't been tried in a real game yet
   $('#teams').replaceChildren(
     ...teams.map((team) => {
       const on = connected.has(team.id);
@@ -309,6 +310,7 @@ function renderSummaries() {
     read: st.quickReadSeconds ? t('nSeconds', { n: st.quickReadSeconds }) : t('quickUntilSpace'),
     streak: t(st.quickStreak ? 'stateOn' : 'stateOff'),
     text: t(st.quickPhoneText ? 'stateOn' : 'stateOff'),
+    reactions: t(st.quickReactions ? 'stateOn' : 'stateOff'),
   });
 }
 
@@ -1033,28 +1035,36 @@ function quickWhere() {
     q ? h('b', {}, sec.name) : null, // the section card has the name as its heading
     q ? t('quickQuestionOf', { n: view.pos.i + 1, total: sec.questions.length }) : null,
     q?.points === 2000 ? h('span', { class: 'pts-badge double' }, `×2 ${t('quickDouble')}`) : q?.points === 0 ? h('span', { class: 'pts-badge' }, t('quickSurvey')) : null,
+    q?.type === 'multi' || q?.type === 'order' ? h('span', { class: 'pts-badge kind' }, t(q.type === 'order' ? 'quickStyleOrder' : 'quickStyleMulti')) : null,
   );
 }
 
-// The options as the host sees them: the right one marked, and how many picked each after the answers close.
-function quickOptions(src) {
+// The options as the host sees them (in the order the TV and phones show them): the right ones marked, and after
+// the answers close how many picked (ticked) each. A "put in order" question shows each option's right place.
+function quickOptions() {
   const q = view.q;
   const settled = q.counts != null && ['result', 'ranks'].includes(view.phase);
-  const rights = [].concat(q.correct ?? []); // one or more right options
-  return h(
-    'ol',
-    { class: 'host-opts' },
-    src.options.map((text, i) =>
-      h(
-        'li',
-        { class: `host-opt${rights.includes(i) ? ' right' : ''}`, style: optionStyle(OPTION_COLORS[i]) },
-        h('span', { class: 'opt-shape' }, shapeSvg(SHAPES[i])),
-        h('span', { class: 'opt-text' }, text),
-        rights.includes(i) ? h('span', { class: 'opt-right', title: t('quickRightMark') }, '✓') : null,
-        settled ? h('span', { class: 'opt-count' }, t('quickPicked', { n: q.counts[i] })) : null,
+  const order = q.type === 'order';
+  const rights = [].concat(q.correct ?? []); // the right options, or the shown positions in the right order
+  const countKey = order ? 'quickPlaced' : q.type === 'multi' ? 'quickTicked' : 'quickPicked';
+  return [
+    h(
+      'ol',
+      { class: 'host-opts' },
+      q.options.map((text, i) =>
+        h(
+          'li',
+          { class: `host-opt${!order && rights.includes(i) ? ' right' : ''}`, style: optionStyle(OPTION_COLORS[i]) },
+          order ? h('b', { class: 'opt-place' }, `${rights.indexOf(i) + 1}.`) : null,
+          h('span', { class: 'opt-shape' }, shapeSvg(SHAPES[i])),
+          h('span', { class: 'opt-text' }, text),
+          !order && rights.includes(i) ? h('span', { class: 'opt-right', title: t('quickRightMark') }, '✓') : null,
+          settled ? h('span', { class: 'opt-count' }, t(countKey, { n: q.counts[i] })) : null,
+        ),
       ),
     ),
-  );
+    order ? h('p', { class: 'host-order-note' }, t('quickHostOrderNote')) : null,
+  ];
 }
 
 function quickStatus() {
@@ -1063,11 +1073,12 @@ function quickStatus() {
   const answered = Object.keys(q.answers).filter((id) => view.teams.some((tm) => tm.id === id)).length;
   if (p === 'ready') return h('p', { class: 'host-status' }, t(view.deadline == null ? 'quickHostReadyWait' : 'quickHostReady'));
   if (p === 'open') return h('p', { class: 'host-status' }, t('quickAnswered', { n: answered, total: view.teams.length }));
-  const right = [].concat(q.correct ?? []).reduce((n, i) => n + (q.counts?.[i] ?? 0), 0); // everyone who picked a right one
+  const right = q.nRight ?? [].concat(q.correct ?? []).reduce((n, i) => n + (q.counts?.[i] ?? 0), 0); // everyone who got it right
+  const gotKey = q.type === 'order' ? 'quickGotOrder' : q.type === 'multi' ? 'quickGotAll' : 'quickGotIt';
   const fastest = q.fastest
     ? h('span', { class: 'fastest' }, `⚡ ${fastestTitle(view.pos)}`, h('span', { class: 'plate', style: teamStyle(q.fastest) }, face(q.fastest), q.fastest.name), secondsText(q.fastest.ms))
     : null;
-  if (p === 'result') return h('p', { class: 'host-status' }, q.points === 0 ? t('quickSurvey') : right ? t('quickGotIt', { n: right, total: view.teams.length }) : t('quickNobodyRight'), fastest);
+  if (p === 'result') return h('p', { class: 'host-status' }, q.points === 0 ? t('quickSurvey') : right ? t(gotKey, { n: right, total: view.teams.length }) : t('quickNobodyRight'), fastest);
   return h('p', { class: 'host-status' }, t('quickHostRanks'));
 }
 
@@ -1094,7 +1105,7 @@ function renderQuickHost() {
     quickWhere(),
     src.image ? h('div', { class: 'host-imgs' }, img(src.image, 'host-img', t('picQuestion'))) : null,
     src.question ? h('p', { class: 'question' }, src.question) : null,
-    quickOptions(src),
+    quickOptions(),
     clipLine(src),
     quickStatus(),
     p === 'ready' || p === 'open' ? countdown(view) : null,
@@ -1102,7 +1113,7 @@ function renderQuickHost() {
   );
 }
 
-// Everyone's score, highest first (a Quick quiz can have up to 30 players), with a tick for who has answered.
+// Everyone's score, highest first (a Quick quiz can have up to 100 players, so the list scrolls), with a tick for who has answered.
 function renderQuickScores() {
   const q = view.q;
   const p = view.phase;

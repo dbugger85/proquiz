@@ -14,7 +14,7 @@ import { FILE_NAME, validateSet } from './lib/validate.js';
 import { createStore, apiHandler, SAMPLE_ID } from './store.js';
 import { randomUUID } from 'node:crypto';
 import { WebSocketServer } from 'ws';
-import { apply, newGame, hostView, displayView, phoneView, GameError, DEFAULT_SETTINGS, nextTimerAt, MAX_SLACK_MS, MAX_REMOTE_SLACK_MS, COLORS, MAX_TEAMS, MAX_PLAYERS, newColor, resumeFix } from './lib/game.js';
+import { apply, newGame, hostView, displayView, phoneView, GameError, DEFAULT_SETTINGS, nextTimerAt, MAX_SLACK_MS, MAX_REMOTE_SLACK_MS, COLORS, MAX_TEAMS, MAX_PLAYERS, newColor, resumeFix, reactionFor } from './lib/game.js';
 import { createTunnel } from './lib/tunnel.js';
 import { createBrand, logoHeaders } from './brand.js';
 import { createPictures } from './pictures.js';
@@ -163,6 +163,9 @@ const HOST_ACTIONS = new Set([
   'skip', // Quick quiz
 ]);
 const PHONE_ACTIONS = new Set(['buzz', 'wager', 'finalAnswer', 'pick', 'freezePick', 'bet', 'answer']);
+
+// Quick quiz reactions: a phone may send one this often; extra ones are dropped (100 players can't flood the TV).
+const REACT_EVERY_MS = 1000;
 
 // Fair buzzing: how the server measures each phone's clock (see clockSample() and pressTime() below).
 const CLOCK_EVERY_MS = 5000; // one measurement per phone this often, while the setting is on
@@ -420,14 +423,15 @@ export function createHub({ set, info, saved = null, save = () => {}, store = nu
     }
   }
 
-  // A sound that isn't part of the game: goes to the TV screens, or to the host laptop if no TV is open in the room.
-  // TV pages opened elsewhere always get it too.
-  function soundToRoom(sound) {
+  // Something that isn't part of the game (a sound, a player's reaction): goes to the TV screens (the one inside
+  // the host page too), or to the host laptop if no TV is open in the room. TV pages opened elsewhere always get it.
+  function toRoom(msg) {
     const tvs = [...clients].filter((c) => c.role === 'display' && !c.remote);
     const targets = tvs.length ? tvs : [...clients].filter((c) => c.role === 'host');
     targets.push(...[...clients].filter((c) => c.role === 'display' && c.remote));
-    for (const c of targets) send(c.ws, { type: 'sound', ...sound });
+    for (const c of targets) send(c.ws, msg);
   }
+  const soundToRoom = (sound) => toRoom({ type: 'sound', ...sound });
 
   // Players elsewhere: wrong PINs, at most PIN_TRIES_PER_MINUTE a minute for everyone together.
   function checkPin(c, pin) {
@@ -598,9 +602,20 @@ export function createHub({ set, info, saved = null, save = () => {}, store = nu
       const { at, slack } = pressTime(c, msg.at);
       return dispatch({ type: 'buzz', teamId: c.teamId, at, slack, wait: buzzWait(c) });
     }
+    // Quick quiz: a player's emoji reaction after a question (`emoji` is an index into REACTIONS). Not a game
+    // action: the rules (reactionFor) say whether it is allowed right now, and it only goes to the TV.
+    if (c.role === 'phone' && msg.type === 'react') {
+      const now = Date.now();
+      if (!c.teamId || now - (c.reactedAt ?? 0) < REACT_EVERY_MS) return;
+      const reaction = reactionFor(state, c.teamId, msg.emoji);
+      if (!reaction) return;
+      c.reactedAt = now;
+      return toRoom({ type: 'reaction', ...reaction });
+    }
     if (c.role === 'phone' && msg.type === 'answer' && c.teamId) {
       // Quick quiz: the press time counts like a buzz's (faster answers score more).
-      return dispatch({ type: 'answer', teamId: c.teamId, option: msg.option, ...pressTime(c, msg.at) });
+      // `option`, `options` or `order` by the question's kind; the rules check the shape.
+      return dispatch({ type: 'answer', teamId: c.teamId, option: msg.option, options: msg.options, order: msg.order, ...pressTime(c, msg.at) });
     }
     if (c.role === 'phone' && PHONE_ACTIONS.has(msg.type) && c.teamId) {
       return dispatch({ ...msg, teamId: c.teamId });

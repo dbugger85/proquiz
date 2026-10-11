@@ -2,7 +2,7 @@
 import { ranking, COLORS, unveilProgress, SHAPES, OPTION_COLORS } from '/lib/game.js';
 import { connect } from './net.js';
 import { t, pts, setLang, translatePage, fastestTitle, secondsText, licenseName } from './i18n.js';
-import { $, h, qrSvg, shortUrl, urlNodes, countdown, runCountdowns, teamStyle, setGlass, shapeSvg, optionStyle, timerTotal, setBrand, brandLogo } from './ui.js';
+import { $, h, fill, qrSvg, shortUrl, urlNodes, countdown, runCountdowns, teamStyle, setGlass, shapeSvg, optionStyle, timerTotal, setBrand, brandLogo } from './ui.js';
 import { unlockAudio, audioReady, playEvent, playSound, startTicks, sounds } from './sounds.js';
 import { animateRanks, cancelRanks, countTo, shownCount, setTickSound, reducedMotion } from './rankanim.js';
 import { syncClip, preloadClips } from './clip.js';
@@ -31,6 +31,7 @@ const net = connect({
   onMessage(msg) {
     if (msg.type === 'welcome') info = msg.info;
     if (msg.type === 'sound') playSound(view, msg, COLORS);
+    if (msg.type === 'reaction') showReaction(msg);
     if (msg.type === 'state') {
       view = msg.view;
       connected = new Set(msg.connected);
@@ -83,7 +84,29 @@ const teamById = (id) => view.teams.find((tm) => tm.id === id);
 // A team's avatar (its mascot, or a Quick quiz player's face), or nothing for a team without one.
 const face = (team, cls) => avatarEl(team?.avatar, cls);
 
+// ----- players' reactions (Quick quiz) -----
+
+// A `reaction` message from the server: "🔥 Alex" floats up from the bottom edge at a random spot and fades out
+// (style.css; with "reduce motion" it only fades). At most MAX_REACTIONS on screen, the oldest goes first, so a
+// hundred players can't flood the TV. Nothing about it is in the game state.
+const MAX_REACTIONS = 12;
+function showReaction(r) {
+  const box = $('#reactions');
+  while (box.children.length >= MAX_REACTIONS) box.firstChild.remove();
+  const el = h(
+    'div',
+    { class: 'reaction', style: `${teamStyle(r)}; left: ${8 + Math.random() * 84}%; --drift: ${((Math.random() - 0.5) * 10).toFixed(1)}vw` },
+    h('span', { class: 'reaction-emoji' }, r.emoji),
+    h('span', { class: 'plate reaction-name' }, face(r), h('span', {}, r.name)),
+  );
+  el.addEventListener('animationend', () => el.remove());
+  setTimeout(() => el.remove(), 4000); // in case the browser never plays the animation
+  box.append(el);
+}
+
 // ----- lobby -----
+
+const LOBBY_PLATES = 48; // name plates on the TV lobby at most (then the newest, plus "+ n more")
 
 function renderLobby() {
   // The host's logo (big) and event name above "Scan to join".
@@ -120,14 +143,21 @@ function renderLobby() {
   const pin = ready && view.settings.remotePin;
   $('#remote-pin').hidden = !pin;
   $('#remote-pin').textContent = pin ? t('pinOnTv', { pin }) : '';
+  // The newest player first, so whoever just joined sees their name at once. Over LOBBY_PLATES players the
+  // newest ones show and the rest are counted ("+ 24 more"), so a lobby of 100 still fits on the TV.
+  const newest = [...view.teams].reverse();
+  const shown = newest.length > LOBBY_PLATES ? newest.slice(0, LOBBY_PLATES - 1) : newest;
   $('#lobby').classList.toggle('crowd', view.teams.length > 12);
   $('#lobby').classList.toggle('packed', view.teams.length > 20);
-  $('#teams').replaceChildren(
-    ...view.teams.map((team) => {
+  $('#lobby').classList.toggle('horde', view.teams.length > 40);
+  fill(
+    $('#teams'),
+    ...shown.map((team) => {
       const isNew = !seen.has(team.id);
       seen.add(team.id);
       return h('li', { class: `plate${isNew ? ' new' : ''}${connected.has(team.id) ? '' : ' away'}${team.avatar ? ' has-face' : ''}`, style: teamStyle(team) }, face(team), h('span', {}, team.name));
     }),
+    newest.length > shown.length ? h('li', { class: 'more' }, t('lobbyMore', { n: newest.length - shown.length })) : null,
   );
 }
 
@@ -379,25 +409,61 @@ function answeredCount(q) {
   return h('div', { class: 'q-count' }, h('b', {}, String(q.answered)), h('span', {}, t('quickAnsweredOf', { total: q.total })));
 }
 
-// The right options (a list, from the result on; several when any of them counts), or null before.
+// The right options (a list, from the result on; several when any of them counts), or for a "put in order"
+// question the right order (the shown positions, first first), or null before.
 const rightOf = (q) => (q.correct == null ? null : [].concat(q.correct));
+
+// "Tick all that are right" / "Put in the right order" under the question, so everyone knows what to do.
+// Never how many are right.
+function styleLine(q) {
+  if (q.type !== 'multi' && q.type !== 'order') return null;
+  return h('p', { class: `quick-style ${q.type}` }, h('span', { class: 'style-icon', 'aria-hidden': 'true' }, q.type === 'order' ? '1 2 3' : '✓✓'), t(q.type === 'order' ? 'quickStyleOrder' : 'quickStyleMulti'));
+}
 
 function optionTiles(q) {
   const rights = rightOf(q);
   const settled = rights !== null;
+  const order = q.type === 'order';
   return h(
     'div',
     { class: `quick-opts n${q.n}` },
     q.options.map((text, i) =>
       h(
         'div',
-        { class: `quick-opt${settled ? (rights.includes(i) ? ' right' : ' wrong') : ''}`, style: `${optStyle(i)}; --i: ${i}` },
+        { class: `quick-opt${settled ? (order ? ' placed' : rights.includes(i) ? ' right' : ' wrong') : ''}`, style: `${optStyle(i)}; --i: ${i}` },
         h('span', { class: 'opt-shape' }, shapeSvg(SHAPES[i])),
         h('span', { class: 'opt-text' }, text),
-        settled && rights.includes(i) ? h('span', { class: 'opt-tick' }, '✓') : null,
+        // The tick on a right option; on a "put in order" question, its right place.
+        settled && order ? h('span', { class: 'opt-tick opt-rank' }, String(rights.indexOf(i) + 1)) : settled && rights.includes(i) ? h('span', { class: 'opt-tick' }, '✓') : null,
       ),
     ),
   );
+}
+
+// After a "put in order" question: the options in the right order, each with how many put it in that place.
+function orderResult(q) {
+  return h(
+    'ol',
+    { class: 'quick-order-result' },
+    rightOf(q).map((p, k) =>
+      h(
+        'li',
+        { style: `${optStyle(p)}; --i: ${k}` },
+        h('b', { class: 'order-n' }, String(k + 1)),
+        h('span', { class: 'opt-shape' }, shapeSvg(SHAPES[p])),
+        h('span', { class: 'opt-text' }, q.options[p]),
+        h('span', { class: 'order-count' }, t('quickPlaced', { n: q.counts[p] })),
+      ),
+    ),
+  );
+}
+
+// "4 of 6 got it right", in the kind's words.
+function verdictText(q) {
+  if (q.points === 0) return t('quickSurvey');
+  const n = q.nRight ?? rightOf(q).reduce((sum, i) => sum + (q.counts[i] ?? 0), 0); // everyone who picked a right one
+  if (!n) return t('quickNobodyRight');
+  return t(q.type === 'order' ? 'quickGotOrder' : q.type === 'multi' ? 'quickGotAll' : 'quickGotIt', { n, total: q.total });
 }
 
 // After the answers: a bar per option, as tall as how many picked it.
@@ -430,32 +496,25 @@ function quickQuestion(fresh) {
       img(q.image, 'q-img'),
       q.image ? null : clipViz(),
       q.question ? h('p', { class: 'question' }, q.question) : h('div', { class: 'spacer' }),
+      styleLine(q),
       q.image ? clipViz() : null,
       h('div', { class: 'band' }, h('span', { class: 'muted' }, t(view.deadline == null ? 'quickAnswersSpace' : 'quickAnswersSoon')), countdown(view)),
     );
   }
   const settled = p === 'result' || p === 'ranks';
-  const right = settled ? rightOf(q).reduce((n, i) => n + (q.counts[i] ?? 0), 0) : 0; // everyone who picked a right one
   const media = img(q.image, 'q-img') ?? (view.clip ? clipViz() : null);
   return h(
     'div',
     { class: `quick-q${settled ? ' settled' : ''}${fresh ? ' fresh' : ''}` },
-    h('div', { class: 'quick-head' }, quickWhere(q), h('p', { class: 'question' }, q.question)),
+    h('div', { class: 'quick-head' }, quickWhere(q), h('p', { class: 'question' }, q.question), styleLine(q)),
     h(
       'div',
       { class: `quick-mid${media && !settled ? ' has-media' : ''}` },
       settled ? null : timerRing(),
-      settled ? answerBars(q) : h('div', { class: 'quick-media' }, media),
+      settled ? (q.type === 'order' ? orderResult(q) : answerBars(q)) : h('div', { class: 'quick-media' }, media),
       settled ? null : answeredCount(q),
     ),
-    settled
-      ? h(
-          'div',
-          { class: 'quick-verdict' },
-          h('span', {}, q.points === 0 ? t('quickSurvey') : right ? t('quickGotIt', { n: right, total: q.total }) : t('quickNobodyRight')),
-          fastestBadge(q.fastest),
-        )
-      : null,
+    settled ? h('div', { class: 'quick-verdict' }, h('span', {}, verdictText(q)), fastestBadge(q.fastest)) : null,
     settled ? creditLine(q.credit) : null,
     optionTiles(q),
   );
@@ -489,6 +548,7 @@ function rankRow(e, i, was = e) {
       e.delta ? h('span', { class: 'rank-delta' }, `+${pts(e.delta)}`) : null,
       h('span', { class: 'rank-score' }, pts(was.score)),
     ),
+    h('span', { class: 'move-pad', 'aria-hidden': 'true' }), // as wide as the arrow column, so the plate sits centred under the title
   );
 }
 

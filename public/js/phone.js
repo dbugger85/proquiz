@@ -1,5 +1,5 @@
 // A team's phone: join with a name and colour, then act as the buzzer.
-import { COLORS, newColor, SHAPES, OPTION_COLORS } from '/lib/game.js';
+import { COLORS, newColor, SHAPES, OPTION_COLORS, REACTIONS } from '/lib/game.js';
 import { connect } from './net.js';
 import { t, pts, setLang, guessLang, translatePage, secondsText } from './i18n.js';
 import { $, h, inkFor, countdown, runCountdowns, setGlass, shapeSvg, optionStyle, setBrand } from './ui.js';
@@ -275,43 +275,135 @@ function stage() {
 }
 
 // ----- Quick quiz (multiple choice): big coloured shapes to press -----
+// Three kinds of question (`q.type`): 'choice' (press one shape and it's sent), 'multi' (tick every right one,
+// then Submit) and 'order' (tap the shapes in order, each gets its number, then Submit). The ticks and numbers
+// live in `draft` until the server confirms the answer, so a redraw of the stage doesn't lose them.
 
-let pressed = null; // the option pressed on this phone, until the server confirms it
+let draft = { picks: [], sent: false }; // this phone's ticks (or tap order) for the question showing
+
+// The moment the finger touched the screen, on this phone's stopwatch (for timing the answer fairly), as for a buzz.
+function pressAt(e) {
+  const now = net.stamp();
+  return e.timeStamp > 0 && Math.abs(now - e.timeStamp) < 1000 ? e.timeStamp : now;
+}
+
+// Sends the answer once: `{ option }`, `{ options }` or `{ order }`.
+function sendAnswer(e, payload) {
+  if (draft.sent) return false;
+  if (!net.send({ type: 'answer', ...payload, at: pressAt(e) })) return false;
+  draft.sent = true;
+  navigator.vibrate?.(30);
+  return true;
+}
 
 function answer(e, option) {
   e.preventDefault();
-  if (pressed !== null) return;
-  // When the finger touched the screen, on this phone's stopwatch (for timing the answer fairly), as for a buzz.
-  const now = net.stamp();
-  const at = e.timeStamp > 0 && Math.abs(now - e.timeStamp) < 1000 ? e.timeStamp : now;
-  if (!net.send({ type: 'answer', option, at })) return;
-  pressed = option;
+  if (!sendAnswer(e, { option })) return;
   const grid = e.currentTarget.parentElement;
   for (const b of grid.children) b.classList.toggle(b === e.currentTarget ? 'chosen' : 'faded', true);
-  navigator.vibrate?.(30);
 }
 
 const optionText = (i) => view.q?.options?.[i] ?? null;
+// A smaller text size for options with a long word, so it isn't broken in two on a narrow phone.
+function longWord(text) {
+  const longest = Math.max(0, ...String(text).split(/\s+/).map((w) => w.length));
+  return longest >= 12 ? ' longer' : longest >= 8 ? ' long' : '';
+}
 
+// A "tick all" or "put in order" question: a tap ticks a shape (or gives it the next number; tapping a numbered
+// one takes its number and every later one away), and Submit sends them all.
+function togglePick(i, grid, bar) {
+  if (draft.sent) return;
+  const type = view.q.type;
+  const k = draft.picks.indexOf(i);
+  if (k < 0) draft.picks = [...draft.picks, i];
+  else draft.picks = type === 'order' ? draft.picks.slice(0, k) : draft.picks.filter((p) => p !== i);
+  navigator.vibrate?.(15);
+  showPicks(grid, bar);
+}
+
+// Puts the ticks or numbers from `draft` on the tiles, and lets Submit go once the answer is complete.
+function showPicks(grid, bar) {
+  const q = view.q;
+  [...grid.children].forEach((b, i) => {
+    const k = draft.picks.indexOf(i);
+    b.classList.toggle('ticked', k >= 0);
+    b.setAttribute('aria-pressed', k >= 0 ? 'true' : 'false');
+    b.querySelector('.pick-badge').textContent = k < 0 ? '' : q.type === 'order' ? String(k + 1) : '✓';
+  });
+  const complete = q.type === 'order' ? draft.picks.length === q.n : draft.picks.length > 0;
+  bar.querySelector('#submit-answers').disabled = !complete || draft.sent;
+  const clear = bar.querySelector('#clear-picks');
+  if (clear) clear.disabled = draft.picks.length === 0 || draft.sent;
+}
+
+// The answer buttons (and, for the kinds with a Submit button, the bar under them), as a list of elements.
 function choiceButtons() {
   const q = view.q;
-  return h(
+  const picking = q.type === 'multi' || q.type === 'order';
+  const grid = h(
     'div',
-    { class: `choices n${q.n}${q.options ? ' with-text' : ''}` },
+    { class: `choices n${q.n}${q.options ? ' with-text' : ''}${picking ? ' picking' : ''}` },
     Array.from({ length: q.n }, (_, i) =>
       h(
         'button',
-        { class: 'choice', type: 'button', style: optionStyle(OPTION_COLORS[i]), 'aria-label': optionText(i) ?? t('quickOption', { n: i + 1 }), onpointerdown: (e) => answer(e, i) },
+        {
+          class: 'choice',
+          type: 'button',
+          style: optionStyle(OPTION_COLORS[i]),
+          'aria-label': optionText(i) ?? t('quickOption', { n: i + 1 }),
+          ...(picking ? { onclick: () => togglePick(i, grid, bar) } : { onpointerdown: (e) => answer(e, i) }),
+        },
+        picking ? h('span', { class: 'pick-badge', 'aria-hidden': 'true' }) : null,
         shapeSvg(SHAPES[i]),
-        optionText(i) ? h('span', { class: 'choice-text' }, optionText(i)) : null,
+        optionText(i) ? h('span', { class: `choice-text${longWord(optionText(i))}` }, optionText(i)) : null,
       ),
     ),
   );
+  if (!picking) return [grid];
+  const submit = (e) => {
+    const payload = q.type === 'order' ? { order: draft.picks } : { options: draft.picks };
+    if (sendAnswer(e, payload)) showPicks(grid, bar);
+  };
+  const bar = h(
+    'div',
+    { class: 'answer-bar' },
+    h('p', { class: 'small' }, t(q.type === 'order' ? 'quickOrderHint' : 'quickTickHint')),
+    h(
+      'div',
+      { class: 'answer-bar-btns' },
+      q.type === 'order' ? h('button', { class: 'btn btn-quiet', type: 'button', id: 'clear-picks', onclick: () => ((draft.picks = []), showPicks(grid, bar)) }, t('quickClear')) : null,
+      h('button', { class: 'btn btn-ink', type: 'button', id: 'submit-answers', onpointerdown: submit }, t('quickSubmit')),
+    ),
+  );
+  showPicks(grid, bar);
+  return [grid, bar];
 }
 
-// One option as a coloured chip: its shape (and its text when the phones get the text).
-function optionChip(i, big = false) {
-  return h('span', { class: `opt-chip${big ? ' big' : ''}`, style: optionStyle(OPTION_COLORS[i]) }, shapeSvg(SHAPES[i]), optionText(i) && !big ? h('span', {}, optionText(i)) : null);
+// One option as a coloured chip: its shape (and its text when the phones get the text). `n` puts a number in
+// front (a place in an order).
+function optionChip(i, big = false, n = null) {
+  return h(
+    'span',
+    { class: `opt-chip${big ? ' big' : ''}${n ? ' numbered' : ''}`, style: optionStyle(OPTION_COLORS[i]) },
+    n ? h('b', { class: 'chip-n' }, String(n)) : null,
+    shapeSvg(SHAPES[i]),
+    optionText(i) && !big ? h('span', {}, optionText(i)) : null,
+  );
+}
+
+// The chips for an answer: ticks as a row, an order as a numbered list.
+const answerChips = (q, a) => (q.type === 'order' ? a.order.map((p, k) => optionChip(p, false, k + 1)) : q.type === 'multi' ? a.options.map((p) => optionChip(p)) : [optionChip(a.option)]);
+
+// Is my own answer right? (`correct` is the right options, or for "put in order" the right order.)
+function mineRight(q) {
+  const rights = [].concat(q?.correct ?? []);
+  const m = q?.mine;
+  if (!m) return false;
+  const same = (list) => Array.isArray(list) && list.length === rights.length && list.every((x, k) => x === rights[k]);
+  if (q.type === 'multi') return same(m.options);
+  if (q.type === 'order') return same(m.order);
+  return rights.includes(m.option);
 }
 
 const whereText = () => {
@@ -336,10 +428,42 @@ function gapLine() {
   return h('p', { class: 'gap-line' }, before, h('span', { class: 'gap-name', style: `--team: ${other.color}; --team-ink: ${inkFor(other.color)}` }, avatarEl(other.avatar), other.name), after);
 }
 
+// Emoji reactions after a question (lobby setting `quickReactions`): a tap sends the emoji's index, and the TV
+// shows it with the player's name. One a second (the server drops extra ones too); the tapped one bounces.
+let reactedAt = 0;
+function reactionRow() {
+  if (!view.settings.quickReactions) return null;
+  return h(
+    'div',
+    { class: 'reactions', role: 'group', 'aria-label': t('sendReaction') },
+    REACTIONS.map((emoji, i) =>
+      h(
+        'button',
+        {
+          class: 'reaction-btn',
+          type: 'button',
+          'aria-label': `${t('sendReaction')}: ${emoji}`,
+          onclick: (e) => {
+            const now = Date.now();
+            if (now - reactedAt < 1000 || !net.send({ type: 'react', emoji: i })) return;
+            reactedAt = now;
+            const btn = e.currentTarget;
+            btn.classList.remove('sent');
+            void btn.offsetWidth; // restart the bounce
+            btn.classList.add('sent');
+            navigator.vibrate?.(30);
+          },
+        },
+        emoji,
+      ),
+    ),
+  );
+}
+
 function quickStage() {
   const s = view.status;
   const q = view.q;
-  if (s !== 'answer') pressed = null;
+  if (s !== 'answer') draft = { picks: [], sent: false };
   if (s === 'lobby') {
     return [
       h('div', { class: 'big' }, t('youreIn')),
@@ -369,20 +493,21 @@ function quickStage() {
     ];
   }
   if (s === 'answer') {
-    return [q.question ? h('p', { class: 'phone-question' }, q.question) : null, choiceButtons(), countdown(view)];
+    return [q.question ? h('p', { class: 'phone-question' }, q.question) : null, ...choiceButtons(), countdown(view)];
   }
   if (s === 'answered') {
+    const one = q.type !== 'multi' && q.type !== 'order';
     return [
-      h('div', { class: 'locked-shape', style: optionStyle(OPTION_COLORS[q.mine]) }, shapeSvg(SHAPES[q.mine])),
+      one ? h('div', { class: 'locked-shape', style: optionStyle(OPTION_COLORS[q.mine.option]) }, shapeSvg(SHAPES[q.mine.option])) : null,
       h('div', { class: 'big' }, t('quickLocked')),
-      optionText(q.mine) ? h('p', { class: 'small' }, optionText(q.mine)) : null,
+      one ? (optionText(q.mine.option) ? h('p', { class: 'small' }, optionText(q.mine.option)) : null) : h('div', { class: `right-chips${q.type === 'order' ? ' as-list' : ''}` }, answerChips(q, q.mine)),
       h('p', { class: 'small' }, t('quickLockedSmall')),
       countdown(view),
     ];
   }
   if (s === 'result' || s === 'ranks') {
-    const rights = [].concat(q?.correct ?? []); // one or more right options; any of them counts
-    const right = q && q.mine !== null && rights.includes(q.mine);
+    const rights = [].concat(q?.correct ?? []); // the right options (any of them counts for 'choice'), or the right order
+    const right = mineRight(q);
     const none = q && q.mine === null;
     const verdict = !q
       ? null
@@ -399,9 +524,14 @@ function quickStage() {
         right && q.points ? h('p', { class: 'result' }, t('quickPlus', { n: pts(q.gained) })) : null,
         !q.points ? h('p', { class: 'small' }, t('quickNoPointsQ')) : null,
         right && view.you.streak >= 2 && q.points ? h('p', { class: 'streak' }, `🔥 ${t('quickStreakN', { n: view.you.streak })}`) : null,
-        !right ? h('div', { class: 'right-was' }, h('span', {}, t(rights.length > 1 ? 'quickRightWere' : 'quickRightWas')), h('div', { class: 'right-chips' }, rights.map((i) => optionChip(i)))) : null,
+        !right && q.type === 'order'
+          ? h('div', { class: 'right-was' }, h('span', {}, t('quickRightOrder')), h('div', { class: 'right-chips as-list' }, rights.map((p, k) => optionChip(p, false, k + 1))))
+          : !right
+            ? h('div', { class: 'right-was' }, h('span', {}, t(rights.length > 1 ? 'quickRightWere' : 'quickRightWas')), h('div', { class: 'right-chips' }, rights.map((i) => optionChip(i))))
+            : null,
         q.points ? h('p', { class: 'small' }, t('place', { n: view.rank, total: view.total })) : null,
         q.points ? gapLine() : null,
+        reactionRow(),
       ];
     }
     return [
@@ -409,6 +539,7 @@ function quickStage() {
       view.rank === 1 && view.you.score > 0 ? h('p', { class: 'small' }, t('place', { n: view.rank, total: view.total })) : null,
       moved(),
       gapLine(),
+      reactionRow(),
     ];
   }
   if (s === 'over') {
@@ -584,7 +715,7 @@ function answerStage() {
 // don't change it, so typing is never wiped out.
 let stageKey = '';
 function stageKeyFor() {
-  if (quick()) return JSON.stringify([view.lang, view.status, view.pos, view.q, view.rank, view.rankBefore, view.total, view.you, view.deadline, view.sections, view.behind, view.ahead, view.status === 'section' ? view.teams.some((tm) => tm.score > 0) : null]);
+  if (quick()) return JSON.stringify([view.lang, view.status, view.pos, view.q, view.rank, view.rankBefore, view.total, view.you, view.deadline, view.sections, view.behind, view.ahead, view.settings.quickReactions, view.status === 'section' ? view.teams.some((tm) => tm.score > 0) : null]);
   const f = view.final;
   if (!view.canPick) pickCat = null;
   return JSON.stringify([
@@ -609,8 +740,7 @@ function react() {
   };
   // Quick quiz: the result is the same event for everyone; each phone compares its own answer.
   if (!first && ev.type === 'quickResult' && view.q) {
-    const right = view.q.mine !== null && [].concat(view.q.correct ?? []).includes(view.q.mine);
-    if (right) {
+    if (mineRight(view.q)) {
       again('cheer');
       navigator.vibrate?.([60, 40, 60, 40, 160]);
     } else {

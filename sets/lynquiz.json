@@ -8,10 +8,10 @@
       "seconds": 20,
       "questions": [
         { "question": "Hva er hovedstaden i Australia?", "options": ["Sydney", "Melbourne", "Canberra", "Perth"], "correct": 2 },
-        { "question": "Hvilket av disse er et pattedyr? (To er riktige.)", "options": ["Delfin", "Hai", "Flaggermus", "Pingvin"], "correct": [0, 2] },
+        { "question": "Hvilke av disse er pattedyr?", "type": "multi", "options": ["Delfin", "Hai", "Flaggermus", "Pingvin"], "correct": [0, 2] },
         { "question": "Sant eller usant: en gullfisk husker bare i tre sekunder.", "options": ["Sant", "Usant"], "correct": 1, "seconds": 10 },
         { "question": "Hvilket nordisk land har flest innbyggere?", "options": ["Norge", "Danmark", "Sverige", "Finland"], "correct": 2 },
-        { "question": "Hvilken farge får du hvis du blander blått og gult?", "options": ["Grønn", "Lilla", "Oransje", "Brun"], "correct": 0 }
+        { "question": "Sett disse i rekkefølge, fra eldst til nyest.", "type": "order", "options": ["Pyramidene i Giza", "Colosseum", "Eiffeltårnet", "Operaen i Oslo"] }
       ]
     },
     {

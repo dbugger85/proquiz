@@ -332,6 +332,9 @@ test('the Quick quiz request asks for sections, options, the topics, level and l
   assert.match(text, /add 1 more section of your own/);
   assert.match(text, /exactly 4 options, and usually exactly one of them is right/);
   assert.match(text, /"answer" is a list of all the right options/);
+  assert.match(text, /"tick all that are right" question: "type": "multi"/);
+  assert.match(text, /"put in order" question: "type": "order"/);
+  assert.match(text, /Never say in the question how many options are right/);
   assert.match(text, /\["Sant", "Usant"\]/);
   assert.match(text, /Easy: things most adults know/);
   assert.match(text, /Norwegian \(bokmål\)/);
@@ -343,8 +346,13 @@ test('the Quick quiz request asks for sections, options, the topics, level and l
   assert.equal(set.kind, 'quick');
   assert.equal(set.sections[0].name, 'Dyr');
   assert.equal(set.sections[0].questions[0].correct, 1); // "Ku"
-  assert.deepEqual(set.sections[0].questions[2].correct, [0, 2]); // "Hval" and "Flaggermus": two right
-  assert.match(example, /"answer": \["Hval", "Flaggermus"\] \}/); // kept on one line like the others
+  assert.equal(set.sections[0].questions[0].type, undefined);
+  assert.deepEqual(set.sections[0].questions[2], { question: 'Hvilke av disse er pattedyr?', type: 'multi', options: ['Hval', 'Hai', 'Flaggermus', 'Frosk'], correct: [0, 2] });
+  assert.deepEqual(set.sections[1].questions[2], { question: 'Sett disse i rekkefølge, fra eldst til nyest.', type: 'order', options: ['Pyramidene i Giza', 'Colosseum', 'Eiffeltårnet', 'Operaen i Oslo'] });
+  assert.match(example, /"type": "multi", "options": \["Hval", "Hai", "Flaggermus", "Frosk"\], "answer": \["Hval", "Flaggermus"\] \}/); // kept on one line like the others
+  assert.match(example, /"type": "order", "options": \["Pyramidene i Giza", "Colosseum", "Eiffeltårnet", "Operaen i Oslo"\] \}/);
+  // No question in the example says how many are right.
+  assert.doesNotMatch(example, /er riktige|are right|To av|Two of/i);
   const en = buildRequest({ kind: 'quick', sections: 1, perSection: 5 });
   assert.match(en, /Exactly 1 section with exactly 5 questions each/);
   assert.match(en, /Choose a fun topic for the section yourself/);
@@ -402,6 +410,50 @@ test('a Quick quiz reply with several right answers: a list of texts, positions 
   const { set, problems } = parseReply(JSON.stringify(reply), { kind: 'quick' });
   assert.deepEqual(set.sections[0].questions.map((q) => q.correct), [[0, 2], [0, 2], [0, 2], 1, 2, [0, 1, 2, 3], undefined]);
   assert.deepEqual(problems, [{ code: 'all-correct', c: 0, i: 5 }, { code: 'bad-correct', c: 0, i: 6 }]);
+});
+
+test('a Quick quiz reply with "tick all" and "put in order" questions: types and their other names, the order by text', () => {
+  const reply = {
+    title: 'Kinds',
+    sections: [
+      {
+        name: 'S',
+        questions: [
+          { question: 'Which are mammals?', type: 'multi', options: ['Whale', 'Shark', 'Bat', 'Frog'], answer: ['Whale', 'Bat'] },
+          { question: 'Tick the primes', type: 'Tick all', options: ['2', '4', '7', '9'], answer: ['2', '7'] },
+          { question: 'Only one, but tick all', type: 'checkbox', options: ['p', 'q', 'r', 's'], answer: 'q' }, // one right answer: still a list
+          { question: 'All of them', kind: 'multiple', options: ['e', 'f', 'g', 'k'], answer: ['e', 'f', 'g', 'k'] }, // every option right is fine here
+          { question: 'Oldest to newest', type: 'order', options: ['Pyramids', 'Colosseum', 'Eiffel Tower'] },
+          { question: 'Smallest first', type: 'ranking', options: ['Large', 'Small', 'Medium'], answer: ['Small', 'Medium', 'Large'] }, // the right order given: options put in it
+          { question: 'Order given as "order"', type: 'sort', options: ['b', 'c', 'a'], order: ['a', 'b', 'c'] },
+          { question: 'Order given but unknown item', type: 'order', options: ['b', 'c', 'a'], answer: ['a', 'b', 'q'] }, // left as written
+          { question: 'Too few to order', type: 'order', options: ['b', 'a'] },
+          { question: 'Unknown type is ordinary', type: 'essay', options: ['m', 'n', 'o', 'u'], answer: 'o' },
+          { question: 'A list without a type stays "any of them counts"', options: ['v', 'w', 'x', 'y'], answer: ['v', 'w'] },
+        ],
+      },
+    ],
+  };
+  const { set, problems, duplicates } = parseReply(JSON.stringify(reply), { kind: 'quick' });
+  const qs = set.sections[0].questions;
+  assert.deepEqual(qs.map((q) => [q.type, q.correct]), [
+    ['multi', [0, 2]],
+    ['multi', [0, 2]],
+    ['multi', [1]],
+    ['multi', [0, 1, 2, 3]],
+    ['order', undefined],
+    ['order', undefined],
+    ['order', undefined],
+    ['order', undefined],
+    ['order', undefined],
+    [undefined, 2],
+    [undefined, [0, 1]],
+  ]);
+  assert.deepEqual(qs[5].options, ['Small', 'Medium', 'Large']);
+  assert.deepEqual(qs[6].options, ['a', 'b', 'c']);
+  assert.deepEqual(qs[7].options, ['b', 'c', 'a']);
+  assert.deepEqual(problems, [{ code: 'order-options', c: 0, i: 8 }]);
+  assert.deepEqual(duplicates, []); // the items of an order question aren't answers that can repeat
 });
 
 test('Quick quiz replies: kind, duplicates, and what is not a Quick quiz', () => {

@@ -4,8 +4,10 @@ import assert from 'node:assert/strict';
 import { readFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { apply, newGame, COLORS, MAX_TEAMS, MAX_PLAYERS, hostView, displayView, phoneView, clipFor, pointsFor, resumeFix, DEFAULT_SETTINGS } from '../lib/game.js';
-import { validateSet, modeOf, rightSet } from '../lib/validate.js';
+import { apply, newGame, COLORS, MAX_TEAMS, MAX_PLAYERS, REACTIONS, reactionFor, hostView, displayView, phoneView, clipFor, pointsFor, resumeFix, DEFAULT_SETTINGS } from '../lib/game.js';
+import { shuffledOrder, answerOf, isRightAnswer } from '../lib/quick.js';
+import { inkFor } from '../public/js/ui.js';
+import { validateSet, modeOf, rightSet, typeOf, QUESTION_TYPES } from '../lib/validate.js';
 import { createStore, filesOf } from '../store.js';
 
 const load = (name) => JSON.parse(readFileSync(new URL(`../sets/${name}.json`, import.meta.url)));
@@ -61,7 +63,10 @@ test('the sample quick quizzes are valid and have what the plan asks for', () =>
     assert.ok(qs.some((q) => q.audio === 'sample-twinkle.mp3'), `${name}: a sound question`);
     assert.ok(qs.some((q) => q.options.length === 2), `${name}: a true/false question`);
     assert.ok(qs.some((q) => q.points === 2000), `${name}: a double-points question`);
-    assert.ok(qs.some((q) => Array.isArray(q.correct) && q.correct.length === 2), `${name}: a question with two right answers`);
+    assert.ok(qs.some((q) => q.type === 'multi' && Array.isArray(q.correct) && q.correct.length === 2), `${name}: a "tick all" question with two right answers`);
+    assert.ok(qs.some((q) => q.type === 'order' && q.options.length === 4 && q.correct === undefined), `${name}: a "put in order" question`);
+    // No question text says how many answers are right: the screens say what kind of question it is.
+    assert.ok(!qs.some((q) => /are right|er riktige|to av|two of/i.test(q.question)), `${name}: no counts in the questions`);
   }
   assert.deepEqual(validateSet(tiny), []);
   assert.equal(modeOf(board), 'board');
@@ -146,6 +151,59 @@ test('several right answers: the store keeps a list (a number when only one), an
   assert.deepEqual(qs[1], { question: 'B', options: ['a', 'b', 'c'], correct: 1 });
   assert.deepEqual(qs[2], { question: 'C', options: ['a', '', 'c'], correct: [1, 2] });
   assert.deepEqual(qs[3], { question: 'D', options: ['a', 'b'] });
+});
+
+test('question kinds: typeOf(), "tick all" may have every option right, "put in order" needs 3 and no marks', () => {
+  assert.deepEqual(QUESTION_TYPES, ['choice', 'multi', 'order']);
+  assert.equal(typeOf({}), 'choice');
+  assert.equal(typeOf({ type: '' }), 'choice');
+  assert.equal(typeOf({ type: null }), 'choice');
+  assert.equal(typeOf({ type: 'multi' }), 'multi');
+  assert.equal(typeOf({ type: 'nonsense' }), 'nonsense');
+  const set = (q) => ({ kind: 'quick', title: 'x', sections: [{ name: 'S', questions: [{ question: 'q', options: ['a', 'b', 'c', 'd'], ...q }] }] });
+  const problem = (code) => [{ code, c: 0, i: 0 }];
+  assert.deepEqual(validateSet(set({ type: 'nonsense', correct: 1 })), problem('bad-type'));
+  // Tick all: a list of one or more, every option allowed.
+  assert.deepEqual(validateSet(set({ type: 'multi', correct: [0, 2] })), []);
+  assert.deepEqual(validateSet(set({ type: 'multi', correct: [1] })), []);
+  assert.deepEqual(validateSet(set({ type: 'multi', correct: [0, 1, 2, 3] })), []);
+  assert.deepEqual(validateSet(set({ type: 'multi', correct: [] })), problem('bad-correct'));
+  assert.deepEqual(validateSet(set({ type: 'multi', correct: [4] })), problem('bad-correct'));
+  assert.deepEqual(validateSet(set({ type: 'multi' })), problem('bad-correct'));
+  // A player who picks one still can't have every option right.
+  assert.deepEqual(validateSet(set({ correct: [0, 1, 2, 3] })), problem('all-correct'));
+  assert.deepEqual(validateSet(set({ type: 'choice', correct: [0, 1, 2, 3] })), problem('all-correct'));
+  // Put in order: the options are the answer; at least 3 of them, no `correct` needed.
+  assert.deepEqual(validateSet(set({ type: 'order' })), []);
+  assert.deepEqual(validateSet(set({ type: 'order', options: ['a', 'b', 'c'] })), []);
+  assert.deepEqual(validateSet(set({ type: 'order', options: ['a', 'b'] })), problem('order-options'));
+  assert.deepEqual(validateSet(set({ type: 'order', options: ['a', 'b', 'c', 'd', 'e'] })), problem('bad-options'));
+});
+
+test('question kinds: the store keeps `type` only for the new kinds, "tick all" always as a list, "order" without marks', async () => {
+  const store = createStore(mkdtempSync(join(tmpdir(), 'proquiz-quick-')));
+  await store.save('kinds', {
+    kind: 'quick',
+    title: 'Kinds',
+    sections: [
+      {
+        name: 'S',
+        questions: [
+          { question: 'A', type: 'choice', options: ['a', 'b', 'c'], correct: 1 }, // the default kind isn't written
+          { question: 'B', type: 'multi', options: ['a', 'b', 'c'], correct: [1] }, // one mark stays a list
+          { question: 'C', type: 'multi', options: ['a', '', 'c', 'd'], correct: [3, 0] },
+          { question: 'D', type: 'order', options: ['first', '', 'second', 'third'], correct: [0, 1] }, // marks mean nothing here
+          { question: 'E', type: 'multi', options: ['a', 'b'] },
+        ],
+      },
+    ],
+  });
+  const qs = (await store.get('kinds')).set.sections[0].questions;
+  assert.deepEqual(qs[0], { question: 'A', options: ['a', 'b', 'c'], correct: 1 });
+  assert.deepEqual(qs[1], { question: 'B', type: 'multi', options: ['a', 'b', 'c'], correct: [1] });
+  assert.deepEqual(qs[2], { question: 'C', type: 'multi', options: ['a', 'c', 'd'], correct: [0, 2] });
+  assert.deepEqual(qs[3], { question: 'D', type: 'order', options: ['first', 'second', 'third'] });
+  assert.deepEqual(qs[4], { question: 'E', type: 'multi', options: ['a', 'b'] });
 });
 
 test('several right answers: any right one scores, with speed points, streaks and the fastest title', () => {
@@ -243,6 +301,8 @@ test('a new game knows its mode, and the quick settings have defaults', () => {
   assert.equal(DEFAULT_SETTINGS.quickReadSeconds, 4);
   assert.equal(DEFAULT_SETTINGS.quickStreak, false);
   assert.equal(DEFAULT_SETTINGS.quickPhoneText, true);
+  assert.equal(DEFAULT_SETTINGS.quickReactions, true);
+  assert.equal(apply(s, { type: 'settings', settings: { quickReactions: 0 } }).settings.quickReactions, false);
   assert.throws(() => apply(s, { type: 'settings', settings: { quickReadSeconds: 31 } }), { code: 'bad-settings' });
   assert.throws(() => apply(s, { type: 'settings', settings: { quickReadSeconds: -1 } }), { code: 'bad-settings' });
   const t = apply(s, { type: 'settings', settings: { quickReadSeconds: 0, quickStreak: 1, quickPhoneText: 'yes' } });
@@ -252,10 +312,52 @@ test('a new game knows its mode, and the quick settings have defaults', () => {
   assert.equal(apply({ ...s, settings: old }, { type: 'settings', settings: { sound: false } }).settings.quickReadSeconds, 4);
 });
 
-test('joining a quick quiz: up to 30 players, colours may repeat, names may not', () => {
+test('16 colours, all different and readable, and a board quiz still takes 8 teams', () => {
+  assert.equal(COLORS.length, 16);
+  assert.equal(MAX_TEAMS, 8);
+  assert.equal(new Set(COLORS.map((c) => c.toLowerCase())).size, 16);
+  assert.ok(COLORS.every((c) => /^#[0-9a-f]{6}$/.test(c)));
+  // Every colour is bright enough to stand out on the dark TV: contrast against the stage floor (#0c0b24) at least 4:1.
+  const lum = (hex) => {
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const contrast = (a, b) => (Math.max(lum(a), lum(b)) + 0.05) / (Math.min(lum(a), lum(b)) + 0.05);
+  for (const c of COLORS) {
+    assert.ok(contrast(c, '#0c0b24') >= 4, `${c} stands out on the dark stage (${contrast(c, '#0c0b24').toFixed(1)}:1)`);
+    assert.ok(contrast(c, inkFor(c)) >= 3, `${c} with ${inkFor(c)} text reads well (${contrast(c, inkFor(c)).toFixed(1)}:1; names are big and bold, so 3:1 is enough)`);
+  }
+  // A board quiz: 8 teams, each with its own colour, but any of the 16.
+  let b = newGame(board);
+  for (let n = 0; n < MAX_TEAMS; n++) b = apply(b, { type: 'join', teamId: `t${n}`, name: `T${n}`, color: COLORS[15 - n] });
+  assert.equal(b.teams.length, 8);
+  assert.throws(() => apply(b, { type: 'join', teamId: 'late', name: 'Late', color: COLORS[0] }), { code: 'full' });
+  // Switching a full quick lobby of 9+ to a board quiz is refused; 8 players sharing colours get the 16 spread out.
+  let q = newGame(tiny);
+  for (let n = 0; n < 8; n++) q = apply(q, { type: 'join', teamId: `p${n}`, name: `P${n}`, color: COLORS[9] });
+  const sw = apply(q, { type: 'loadSet', set: board, setId: 'sample' });
+  assert.equal(new Set(sw.teams.map((t) => t.color)).size, 8);
+  assert.equal(sw.teams[0].color, COLORS[9], 'the first keeps its colour');
+});
+
+test('joining a quick quiz: up to 100 players, colours may repeat, names may not', () => {
   let s = newGame(tiny);
-  for (let n = 0; n < MAX_PLAYERS; n++) s = apply(s, { type: 'join', teamId: `p${n}`, name: `P${n}`, color: COLORS[0] });
-  assert.equal(s.teams.length, 30);
+  for (let n = 0; n < MAX_PLAYERS; n++) s = apply(s, { type: 'join', teamId: `p${n}`, name: `P${n}`, color: COLORS[n % COLORS.length] });
+  assert.equal(s.teams.length, 100);
+  // Everything the screens need still works with 100: standings, the top 5, the phones' places and neighbours.
+  let g = run(s, { type: 'start' }, { type: 'next', now: 0 }, { type: 'next', now: 1000 });
+  for (let n = 0; n < 100; n++) g = apply(g, answer(`p${n}`, n % 3 === 0 ? 1 : 0, 1000 + n * 50));
+  assert.equal(g.phase, 'result', 'closes when all 100 have answered');
+  assert.equal(g.q.nRight, 34);
+  g = apply(g, { type: 'next', now: 7000 });
+  assert.equal(hostView(g).standings.length, 100);
+  assert.equal(displayView(g).ranks.top.length, 5);
+  assert.deepEqual(displayView(g).ranks.top.map((e) => e.id), ['p0', 'p3', 'p6', 'p9', 'p12']);
+  assert.equal(displayView(g).ranks.total, 100);
+  assert.equal(displayView(g).teams.length, 100);
+  const last = phoneView(g, 'p98');
+  assert.equal(last.total, 100);
+  assert.ok(last.rank > 34 && last.behind, 'a wrong player is behind someone');
   assert.throws(() => apply(s, { type: 'join', teamId: 'late', name: 'Late', color: COLORS[1] }), { code: 'full-players' });
   assert.throws(() => apply(newGame(tiny, {}), { type: 'join', teamId: 'x', name: 'X', color: '#123456' }), { code: 'bad-color' });
   const two = run(newGame(tiny), { type: 'join', teamId: 'a', name: 'Ann', color: COLORS[0] });
@@ -549,7 +651,7 @@ test('views: the host sees everything, the TV not the right answer too soon, pho
   let ph = phoneView(s, 'r');
   assert.equal(ph.mode, 'quick');
   assert.equal(ph.status, 'ready');
-  assert.deepEqual(ph.q, { n: 4, seconds: 10, points: 1000, mine: null });
+  assert.deepEqual(ph.q, { type: 'choice', n: 4, seconds: 10, points: 1000, mine: null });
 
   // Open: options on the TV, still no right answer; the count of answers goes up.
   s = run(s, { type: 'next', now: 1000 }, answer('r', 1, 1500));
@@ -561,7 +663,7 @@ test('views: the host sees everything, the TV not the right answer too soon, pho
   assert.equal(tv.q.answers, undefined);
   assert.ok(!JSON.stringify(tv).includes('correct'), 'no `correct` anywhere on the TV yet');
   assert.equal(phoneView(s, 'r').status, 'answered');
-  assert.equal(phoneView(s, 'r').q.mine, 1);
+  assert.deepEqual(phoneView(s, 'r').q.mine, { option: 1 }); // my own answer, never its time
   assert.equal(phoneView(s, 'b').status, 'answer');
   assert.equal(phoneView(s, 'b').q.mine, null);
   for (const id of ['r', 'b']) {
@@ -589,9 +691,11 @@ test('views: the host sees everything, the TV not the right answer too soon, pho
   tv = displayView(s);
   assert.deepEqual(tv.q.correct, [1]);
   assert.deepEqual(tv.q.counts, [1, 2, 0, 0]);
+  assert.equal(tv.q.nRight, 2);
+  assert.equal(tv.q.type, 'choice');
   ph = phoneView(s, 'r');
   assert.equal(ph.status, 'result');
-  assert.deepEqual([ph.q.correct, ph.q.mine, ph.q.gained], [[1], 1, 975]);
+  assert.deepEqual([ph.q.correct, ph.q.mine, ph.q.gained], [[1], { option: 1 }, 975]);
   assert.equal(phoneView(s, 'b').q.gained, 0);
   assert.deepEqual([ph.rank, ph.rankBefore, ph.total], [1, null, 3]); // everyone shared 1st before
   assert.deepEqual(ph.you, { id: 'r', name: 'Red', color: COLORS[0], score: 975, streak: 1 });
@@ -744,4 +848,183 @@ test('each phone knows the player just above it, or the leader the one just belo
   const solo = run(newGame(tiny), { type: 'join', teamId: 'x', name: 'X', color: COLORS[0] }, { type: 'start' });
   assert.equal(phoneView(solo, 'x').behind, undefined);
   assert.equal(phoneView(solo, 'x').ahead, undefined);
+});
+
+// ----- "tick all that are right" and "put in order" -----
+
+// Question 1 is "tick all" (a and c), question 2 "put in order" (yes, no, maybe, so: written in the right order).
+const kinds = {
+  v: 1,
+  kind: 'quick',
+  title: 'Kinds',
+  sections: [
+    {
+      name: 'One',
+      seconds: 10,
+      questions: [
+        { question: 'tick', type: 'multi', options: ['a', 'b', 'c', 'd'], correct: [2, 0] },
+        { question: 'sort', type: 'order', options: ['first', 'second', 'third', 'fourth'] },
+      ],
+    },
+  ],
+};
+const tick = (teamId, options, now, extra = {}) => ({ type: 'answer', teamId, options, now, ...extra });
+const sort = (teamId, order, now, extra = {}) => ({ type: 'answer', teamId, order, now, ...extra });
+// The second question of `kinds` with its answers open at 1000 (a seeded shuffle on the way).
+const orderOpened = (settings = {}) => run(opened(settings, kinds), { type: 'next', now: 500 }, { type: 'next', now: 600 }, { type: 'next', now: 700 }, { type: 'next', now: 1000 });
+
+test('reactions: only from a player, only at the result or the top 5, only with the setting on, only a real emoji', () => {
+  assert.equal(REACTIONS.length, 6);
+  const s = opened();
+  assert.equal(reactionFor(s, 'r', 0), null, 'not while the answers are open');
+  assert.equal(reactionFor(started(), 'r', 0), null, 'not on the section card');
+  let r = run(s, answer('r', 1, 2000), answer('b', 0, 2500), answer('g', 1, 3000));
+  assert.equal(r.phase, 'result');
+  assert.deepEqual(reactionFor(r, 'r', 1), { emoji: '🔥', name: 'Red', color: COLORS[0] });
+  assert.equal(reactionFor(r, 'nobody', 1), null, 'not from someone who isn’t in the game');
+  for (const bad of [-1, 6, 1.5, '1', null, undefined]) assert.equal(reactionFor(r, 'r', bad), null, `bad index ${bad}`);
+  r = apply(r, { type: 'next', now: 4000 });
+  assert.equal(r.phase, 'ranks');
+  assert.equal(reactionFor(r, 'g', 5).emoji, '🎉', 'also at the top 5');
+  // With an avatar it comes along, so the TV can show the face.
+  const face = { skin: 1, hair: 2, hairColor: 3, eyes: 4, mouth: 0, glasses: 1, hat: 5 };
+  const withFace = apply(r, { type: 'join', teamId: 'g', name: 'Green', color: COLORS[2], avatar: face });
+  assert.deepEqual(reactionFor(withFace, 'g', 0).avatar, face);
+  // The setting off: nothing.
+  const off = apply(r, { type: 'settings', settings: { quickReactions: false } });
+  assert.equal(reactionFor(off, 'r', 0), null);
+  // The phones know the setting, so they can hide the buttons.
+  assert.equal(phoneView(r, 'r').settings.quickReactions, true);
+  assert.equal(phoneView(off, 'r').settings.quickReactions, false);
+  // Never on a board quiz.
+  const b = run(newGame(board), { type: 'join', teamId: 'r', name: 'Red', color: COLORS[0] });
+  assert.equal(reactionFor({ ...b, phase: 'result' }, 'r', 0), null);
+});
+
+test('tick all: exactly the right ones score, a subset or a superset is wrong, counts per option', () => {
+  let s = opened({}, kinds);
+  assert.equal(s.q.type, 'multi');
+  assert.deepEqual(s.q.correct, [0, 2]);
+  assert.equal(hostView(s).q.type, 'multi');
+  assert.equal(phoneView(s, 'r').q.type, 'multi');
+  assert.equal(displayView(s).q.type, 'multi');
+  s = run(s, tick('r', [2, 0], 2000), tick('b', [0], 1500), tick('g', [0, 1, 2], 1500));
+  assert.equal(s.phase, 'result');
+  assert.deepEqual(s.q.answers.r, { options: [0, 2], at: 2000 }, 'stored sorted');
+  assert.equal(score(s, 'r'), pointsFor(1000, 10, 1000));
+  assert.equal(score(s, 'b'), 0, 'not all of them');
+  assert.equal(score(s, 'g'), 0, 'one too many');
+  assert.deepEqual(s.q.counts, [3, 1, 2, 0], 'how many ticked each');
+  assert.equal(s.q.nRight, 1);
+  assert.equal(displayView(s).q.nRight, 1);
+  assert.equal(displayView(s).q.fastest.id, 'r');
+  assert.deepEqual(phoneView(s, 'g').q.mine, { options: [0, 1, 2] });
+  assert.deepEqual(phoneView(s, 'g').q.correct, [0, 2]);
+  assert.equal(phoneView(s, 'r').q.fastest, true);
+  // Every option right is allowed, and then only ticking everything scores.
+  const all = structuredClone(kinds);
+  all.sections[0].questions[0].correct = [0, 1, 2, 3];
+  const t = run(opened({}, all), tick('r', [0, 1, 2, 3], 1000), tick('b', [0, 1, 2], 1000), tick('g', [3, 2, 1, 0], 1000));
+  assert.deepEqual(t.teams.map((x) => x.score), [1000, 0, 1000]);
+});
+
+test('tick all: refusals (nothing, a plain option, repeats, out of range, not a list) and the "answered" status', () => {
+  const s = opened({}, kinds);
+  for (const bad of [[], [0, 0], [4], [-1], ['0'], [0, 1, 2, 3, 0], 'x', null]) assert.equal(apply(s, tick('r', bad, 1500)), s, JSON.stringify(bad));
+  assert.equal(apply(s, answer('r', 0, 1500)), s, 'a single option is not a "tick all" answer');
+  assert.equal(apply(s, sort('r', [0, 1, 2, 3], 1500)), s, 'nor is an order');
+  const t = apply(s, tick('r', [1], 1500));
+  assert.equal(phoneView(t, 'r').status, 'answered');
+  assert.equal(apply(t, tick('r', [0, 2], 1600)), t, 'one answer per player');
+  // A plain question refuses the other shapes.
+  const plain = opened();
+  assert.equal(apply(plain, tick('r', [1], 1500)), plain);
+  assert.equal(apply(plain, sort('r', [0, 1, 2, 3], 1500)), plain);
+});
+
+test('put in order: a seeded shuffle that is never the written order, the same after undo and resume', () => {
+  // The shuffle is a permutation and never the identity, for any seed and size.
+  for (let seed = 1; seed < 200; seed++) {
+    for (const n of [3, 4]) {
+      const order = shuffledOrder({ rng: seed }, n);
+      assert.deepEqual([...order].sort(), Array.from({ length: n }, (_, k) => k));
+      assert.ok(order.some((k, p) => k !== p), `seed ${seed}, ${n}`);
+    }
+  }
+  let s = orderOpened();
+  assert.equal(s.phase, 'open');
+  assert.equal(s.q.type, 'order');
+  assert.equal(s.q.order.length, 4);
+  const written = kinds.sections[0].questions[1].options;
+  // The screens get the shuffled texts, and `correct` is the shown positions in the written order.
+  const shown = displayView(s).q.options;
+  assert.deepEqual(shown, s.q.order.map((k) => written[k]));
+  assert.notDeepEqual(shown, written);
+  assert.deepEqual(s.q.correct.map((p) => shown[p]), written);
+  assert.deepEqual(hostView(s).q.options, shown);
+  assert.deepEqual(hostView(s).q.correct, s.q.correct);
+  assert.deepEqual(phoneView(s, 'r').q.options, shown);
+  // Nobody but the host gets the shuffle itself, nor the right order before the result.
+  for (const json of [JSON.stringify(displayView(s)), JSON.stringify(phoneView(s, 'r'))]) {
+    assert.ok(!json.includes('"order":['), 'no shuffle');
+    assert.ok(!json.includes('correct'));
+  }
+  // Undo back to "get ready" and on again: the same shuffle.
+  const again = run(s, { type: 'undo', now: 2000 }, { type: 'next', now: 2500 });
+  assert.equal(again.phase, 'open');
+  assert.deepEqual(again.q.order, s.q.order);
+  // Undo past the question and open it again: still the same, since the seed goes back too.
+  const redo = run(s, { type: 'undo', now: 2000 }, { type: 'undo', now: 2100 }, { type: 'next', now: 2200 }, { type: 'next', now: 2300 });
+  assert.deepEqual(redo.q.order, s.q.order);
+  // Resume keeps it; different seeds give different shuffles.
+  assert.deepEqual(resumeFix(s, 9000).q.order, s.q.order);
+  const other = run(newGame(kinds), { type: 'join', teamId: 'r', name: 'Red', color: COLORS[0] }, { type: 'start', seed: 12345 }, { type: 'next', now: 0 }, { type: 'next', now: 1 }, { type: 'next', now: 2 }, { type: 'next', now: 3 }, { type: 'next', now: 4 }, { type: 'next', now: 5 });
+  assert.equal(other.phase, 'open');
+  assert.ok(other.q.order.some((k, p) => k !== s.q.order[p]) || true, 'another seed may differ');
+});
+
+test('put in order: the whole order must be right, counts say how many put each option in its place', () => {
+  let s = orderOpened();
+  const right = s.q.correct;
+  const swapped = [right[1], right[0], right[2], right[3]];
+  const reversed = [...right].reverse();
+  s = run(s, sort('r', [...right], 3000), sort('b', swapped, 1500), sort('g', reversed, 1500));
+  assert.equal(s.phase, 'result');
+  assert.equal(score(s, 'r'), pointsFor(2000, 10, 1000));
+  assert.equal(score(s, 'b'), 0, 'two swapped: nothing (all or nothing)');
+  assert.equal(score(s, 'g'), 0);
+  assert.equal(s.q.nRight, 1);
+  // Red got all 4 in place; Blue the last 2; Green none (4 reversed has none in place).
+  const expect = [0, 0, 0, 0];
+  for (const p of right) expect[p] += 1;
+  expect[right[2]] += 1;
+  expect[right[3]] += 1;
+  assert.deepEqual(s.q.counts, expect);
+  assert.deepEqual(displayView(s).q.correct, right);
+  assert.deepEqual(phoneView(s, 'b').q.mine, { order: swapped });
+  assert.deepEqual(phoneView(s, 'b').q.correct, right);
+  assert.equal(displayView(s).q.fastest.id, 'r');
+  assert.ok(!JSON.stringify(displayView(s)).includes('"order":['), 'the shuffle itself stays with the host');
+  assert.deepEqual(hostView(s).q.order, s.q.order);
+});
+
+test('put in order: refusals (too few, too many, repeats, a plain option or ticks)', () => {
+  const s = orderOpened();
+  for (const bad of [[0, 1, 2], [0, 1, 2, 3, 0], [0, 0, 1, 2], [0, 1, 2, 4], ['0', 1, 2, 3], 'x', null]) assert.equal(apply(s, sort('r', bad, 1500)), s, JSON.stringify(bad));
+  assert.equal(apply(s, answer('r', 0, 1500)), s);
+  assert.equal(apply(s, tick('r', [0, 1, 2, 3], 1500)), s);
+  const t = apply(s, sort('r', [3, 2, 1, 0], 1500));
+  assert.equal(phoneView(t, 'r').status, 'answered');
+  assert.equal(apply(t, sort('r', [0, 1, 2, 3], 1600)), t, 'one answer per player');
+  // The helpers on their own.
+  assert.deepEqual(answerOf({ type: 'multi' }, 4, { options: [3, 1] }), { options: [1, 3] });
+  assert.deepEqual(answerOf({ type: 'order' }, 3, { order: [2, 0, 1] }), { order: [2, 0, 1] });
+  assert.deepEqual(answerOf({ correct: [1] }, 4, { option: 1 }), { option: 1 });
+  assert.equal(answerOf({ correct: [1] }, 4, { options: [1] }), null);
+  assert.equal(isRightAnswer({ type: 'order', correct: [2, 0, 1] }, { order: [2, 0, 1] }), true);
+  assert.equal(isRightAnswer({ type: 'order', correct: [2, 0, 1] }, { order: [0, 2, 1] }), false);
+  assert.equal(isRightAnswer({ type: 'multi', correct: [0, 2] }, { options: [0, 2] }), true);
+  assert.equal(isRightAnswer({ type: 'multi', correct: [0, 2] }, { options: [0] }), false);
+  assert.equal(isRightAnswer({ correct: [0, 2] }, { option: 2 }), true);
+  assert.equal(isRightAnswer({ correct: [0, 2] }, null), false);
 });

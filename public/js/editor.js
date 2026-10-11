@@ -1,5 +1,5 @@
 // The question editor (laptop only). Quizzes save themselves a moment after each change.
-import { validateSet, usedFiles, cleanCredits, modeOf, MAX_CATEGORIES, MAX_QUESTIONS, MAX_SECTIONS, MAX_SECTION_QUESTIONS, MAX_OPTION, MIN_SECONDS, MAX_SECONDS, DEFAULT_SECONDS, rightSet } from '/lib/validate.js';
+import { validateSet, usedFiles, cleanCredits, modeOf, MAX_CATEGORIES, MAX_QUESTIONS, MAX_SECTIONS, MAX_SECTION_QUESTIONS, MAX_OPTION, MIN_SECONDS, MAX_SECONDS, DEFAULT_SECONDS, rightSet, typeOf, QUESTION_TYPES } from '/lib/validate.js';
 import { buildRequest, parseReply, splitTopics, AiQuizError, DIFFICULTIES, FILL_DIFFICULTIES, MIN_SIZE, QUICK_SECTIONS, QUICK_PER_SECTION, gapsOf, guessLanguage, buildFillRequest, parseFill } from '/lib/aiquiz.js';
 import { SHAPES, OPTION_COLORS } from '/lib/quick.js';
 import { t, pts, setLang, getLang, translatePage, licenseName } from './i18n.js';
@@ -484,14 +484,19 @@ function orderButtons(list, n, removeLabel, remove) {
   );
 }
 
-// One question's line in its section: number, text, the right answer with its shape, the time and the points.
+// One question's line in its section: number, text, the right answer with its shape (a "put in order" question
+// shows its answers numbered, in the right order), the kind, the time and the points.
 function questionRow(sec, c, q, i) {
-  const rights = rightSet(q).filter((n) => q.options?.[n]?.trim());
+  const type = typeOf(q);
+  const chip = (n, num = null) => h('span', { class: 'ed-qright', style: optionStyle(OPTION_COLORS[n]) }, num ? h('b', { class: 'ed-qnum-small' }, `${num}.`) : null, shapeSvg(SHAPES[n]), h('span', {}, q.options[n]));
+  const filled = (q.options ?? []).map((o, n) => n).filter((n) => q.options[n]?.trim());
+  const rights = type === 'order' ? filled : rightSet(q).filter((n) => filled.includes(n));
   const blank = isBlank(q);
   const meta = [
+    type === 'multi' ? h('span', { class: 'ed-qbadge kind' }, t('edMultiBadge')) : type === 'order' ? h('span', { class: 'ed-qbadge kind' }, t('edOrderBadge')) : null,
     ...(rights.length
-      ? rights.map((n) => h('span', { class: 'ed-qright', style: optionStyle(OPTION_COLORS[n]) }, shapeSvg(SHAPES[n]), h('span', {}, q.options[n])))
-      : blank
+      ? rights.map((n, k) => chip(n, type === 'order' ? k + 1 : null))
+      : blank || type === 'order'
         ? [null]
         : [h('span', { class: 'ed-qright none' }, t('edNoRight'))]),
     h('span', { class: 'ed-qbadge secs', 'data-own': q.seconds != null }, t('quickSecs', { s: q.seconds ?? sec.seconds ?? DEFAULT_SECONDS })),
@@ -950,32 +955,75 @@ function openQuestion(c, i, r = 1) {
   if (!builtIn) (isFinal ? form.querySelector('input') : question).focus();
 }
 
-// The Quick quiz part of the question dialog: the question, 2 to 4 answers in their colours and shapes with one
-// or more marked right (any of them counts), the time and the points. Empty answers are left out (so 2 filled in = two choices), except the
-// ones marked right, so the problem list can say it's empty. Answers after an empty one move up (with a note)
-// once the host leaves the answers, so the dialog shows the colours and shapes the game will use; until then a
-// note says it will happen (moving them while the host is still clicking there would be confusing).
+// The Quick quiz part of the question dialog: the kind of question (pick one, tick all that are right, put in
+// order), the question, 2 to 4 answers in their colours and shapes with one or more marked right (any of them
+// counts for "pick one"; exactly these for "tick all"; a "put in order" question has no marks, its answers are
+// written in the right order), the time and the points. Empty answers are left out (so 2 filled in = two
+// choices), except the ones marked right, so the problem list can say it's empty. Answers after an empty one
+// move up (with a note) once the host leaves the answers, so the dialog shows the colours and shapes the game
+// will use; until then a note says it will happen (moving them while the host is still clicking there would be
+// confusing).
 function quickFields(c, i, q, question, field, upd) {
   const sec = set.sections[c];
   const slots = SHAPES.map((_, n) => String(q.options?.[n] ?? ''));
+  let type = QUESTION_TYPES.includes(typeOf(q)) ? typeOf(q) : 'choice';
   let right = rightSet(q).filter((n) => n < slots.length); // the slots marked right (one or more; any of them counts)
   const sync = () => {
     const keep = kept();
     q.options = keep.map((n) => slots[n]);
-    const marks = right.map((n) => keep.indexOf(n));
+    if (type === 'choice') delete q.type;
+    else q.type = type;
+    const marks = type === 'order' ? [] : right.map((n) => keep.indexOf(n));
     if (!marks.length) delete q.correct;
-    else q.correct = marks.length === 1 ? marks[0] : marks; // one right answer is saved as a number, as before
+    else q.correct = marks.length === 1 && type !== 'multi' ? marks[0] : marks; // one right answer is saved as a number, as before; "tick all" always a list
     changed();
   };
   const showMarks = () =>
     rows.forEach((row, n) => {
       row.querySelector('input[type=checkbox]').checked = right.includes(n);
-      row.classList.toggle('right', right.includes(n));
+      row.classList.toggle('right', type !== 'order' && right.includes(n));
     });
+  // The kind decides what the answer rows show: Right ticks, or the places 1. 2. 3. 4. of an order.
+  const hints = { choice: 'edOptionsHint', multi: 'edOptionsHintMulti', order: 'edOptionsHintOrder' };
+  const hint = h('small', {}, t(hints[type]));
+  const showKind = () => {
+    hint.textContent = t(hints[type]);
+    rows.forEach((row) => {
+      row.querySelector('.ed-opt-right').hidden = type === 'order';
+      row.querySelector('.ed-opt-n').hidden = type !== 'order';
+    });
+    opts.classList.toggle('ordered', type === 'order');
+    showMarks();
+  };
+  const kindPills = h(
+    'div',
+    { class: 'pills ed-kind-pills', role: 'radiogroup' },
+    QUESTION_TYPES.map((k) =>
+      h(
+        'label',
+        {},
+        h('input', {
+          type: 'radio',
+          name: 'type',
+          value: k,
+          checked: k === type,
+          disabled: builtIn,
+          onchange: () => {
+            type = k;
+            showKind();
+            sync();
+            gapNote();
+          },
+        }),
+        h('span', {}, t(k === 'order' ? 'edStyleOrder' : k === 'multi' ? 'edStyleMulti' : 'edStyleChoice')),
+      ),
+    ),
+  );
   const rows = SHAPES.map((shape, n) =>
     h(
       'div',
-      { class: `ed-opt${right.includes(n) ? ' right' : ''}`, style: optionStyle(OPTION_COLORS[n]) },
+      { class: `ed-opt${type !== 'order' && right.includes(n) ? ' right' : ''}`, style: optionStyle(OPTION_COLORS[n]) },
+      h('b', { class: 'ed-opt-n', hidden: type !== 'order' }, `${n + 1}.`),
       h('span', { class: 'ed-opt-shape' }, shapeSvg(shape)),
       h('input', {
         type: 'text',
@@ -993,7 +1041,7 @@ function quickFields(c, i, q, question, field, upd) {
       }),
       h(
         'label',
-        { class: 'ed-opt-right' },
+        { class: 'ed-opt-right', hidden: type === 'order' },
         h('input', {
           type: 'checkbox',
           name: 'correct',
@@ -1013,7 +1061,7 @@ function quickFields(c, i, q, question, field, upd) {
   );
   // Close a gap (answers 1, 2 and 4 filled): 4 becomes 3, as in the game. The right marks move with their answers.
   const movedNote = h('small', { class: 'ed-opts-moved', role: 'status', hidden: true });
-  const kept = () => slots.map((_, n) => n).filter((n) => slots[n].trim() !== '' || right.includes(n));
+  const kept = () => slots.map((_, n) => n).filter((n) => slots[n].trim() !== '' || (type !== 'order' && right.includes(n)));
   const gapNote = () => {
     const keep = kept();
     const first = keep.find((n, k) => n !== k);
@@ -1034,21 +1082,23 @@ function quickFields(c, i, q, question, field, upd) {
     sync();
   };
   const fallback = sec.seconds ?? DEFAULT_SECONDS;
+  const opts = h(
+    'div',
+    {
+      class: `field ed-opts${type === 'order' ? ' ordered' : ''}`,
+      // Leaving the answers (not just moving between them): close any gap.
+      onfocusout: (e) => !e.currentTarget.contains(e.relatedTarget) && moveUp(),
+    },
+    h('span', {}, t('edOptions')),
+    hint,
+    rows,
+    movedNote,
+  );
   return [
     h('h2', {}, `${sec.name?.trim() || t('edSection', { n: c + 1 })}: ${t('edQuestionN', { n: i + 1 })}`),
+    h('div', { class: 'field' }, h('span', {}, t('edStyle')), kindPills), // a div: a label around the pills' own labels would misfire
     field(t('edQuestion'), question),
-    h(
-      'div',
-      {
-        class: 'field ed-opts',
-        // Leaving the answers (not just moving between them): close any gap.
-        onfocusout: (e) => !e.currentTarget.contains(e.relatedTarget) && moveUp(),
-      },
-      h('span', {}, t('edOptions')),
-      h('small', {}, t('edOptionsHint')),
-      rows,
-      movedNote,
-    ),
+    opts,
     h(
       'div',
       { class: 'ed-quick-row' },

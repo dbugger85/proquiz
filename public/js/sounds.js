@@ -280,8 +280,9 @@ function whoosh({ at = 0, dur = 0.45, gain = 0.3, from = 300, to = 4000, wet = 0
 }
 
 // Each team's buzz is a different note of a major pentatonic scale, so any two teams sound good together
-// and everyone learns their own tone. Index = the team's colour number (0–7).
-const TEAM_NOTES = [72, 76, 79, 81, 84, 86, 88, 91]; // C5 E5 G5 A5 C6 D6 E6 G6
+// and everyone learns their own tone. Index = the team's colour number (0–15): the first 8 as since 1.7, the
+// 8 newer colours get the pentatonic notes around them.
+const TEAM_NOTES = [72, 76, 79, 81, 84, 86, 88, 91, 74, 69, 93, 67, 64, 96, 62, 60]; // C5 E5 G5 A5 C6 D6 E6 G6, D5 A4 A6 G4 E4 C7 D4 C4
 
 const MAJOR = (root) => [root, root + 4, root + 7];
 

@@ -486,10 +486,19 @@ select option {
 .team-list {
   list-style: none;
   margin: 0 0 1.5rem;
-  padding: 0;
+  padding: 0 2px 2px 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr); /* a long name shortens (…) instead of widening the list */
   gap: 0.5rem;
+  /* A Quick quiz can have 100 players: the list scrolls instead of pushing the Start button off the page. */
+  max-height: min(62vh, 680px);
+  overflow-y: auto;
+}
+.many-note {
+  margin: 0 0 0.9rem;
+  max-width: 44ch;
+  font-size: 0.9rem;
+  color: #ffd60a;
 }
 .team-list li {
   display: flex;
@@ -1174,7 +1183,7 @@ fieldset.pill-field legend {
   padding: 1.8vh 2.6vw;
   border-radius: var(--pill);
 }
-/* A Quick quiz can have up to 30 players: with many, the QR code and the plates get smaller so all fit. */
+/* A Quick quiz can have up to 100 players: with many, the QR code and the plates get smaller so they fit. */
 .tv-lobby.crowd {
   padding: 7vh 5vw 4vh;
   gap: 2.5vh 5vw;
@@ -1203,6 +1212,36 @@ fieldset.pill-field legend {
 }
 .tv-lobby.packed .tv-teams li {
   font-size: 2.2vh;
+}
+/* Over 40 players (up to 100): the newest 47 plates, small, plus "+ n more". */
+.tv-lobby.horde {
+  padding: 5vh 4vw 3vh;
+  gap: 2vh 4vw;
+}
+.tv-lobby.horde .qr {
+  width: min(30vh, 26vw);
+}
+.tv-lobby.horde .call {
+  font-size: 6.5vh;
+}
+.tv-lobby.horde .call-url {
+  margin-top: 2vh;
+}
+.tv-lobby.horde .tv-teams {
+  gap: 0.9vh 0.7vw;
+  align-content: start;
+}
+.tv-lobby.horde .tv-teams li {
+  font-size: 1.9vh;
+  padding: 0.9vh 1.6vw;
+}
+.tv-lobby.horde .tv-teams li.has-face {
+  padding: 0.45vh 1.4vw 0.45vh 0.45vh;
+}
+.tv-teams li.more {
+  background: var(--glass-hi);
+  border: 1px solid var(--edge);
+  color: var(--muted);
 }
 .tv-teams li.new {
   animation: plate-in 500ms cubic-bezier(0.2, 1.4, 0.4, 1);
@@ -1511,13 +1550,18 @@ fieldset.pill-field legend {
   padding: 0;
   margin: 0;
 }
+/* 16 colours in a 4 × 4 grid: circles of 48–64px, so every one is easy to tap and the grid stays tidy on a 360px phone. */
 .swatches {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 0.9rem;
+  gap: 0.75rem;
 }
 .swatch {
   position: relative;
+  width: 100%;
+  max-width: 64px;
+  min-width: 48px;
+  justify-self: center;
   aspect-ratio: 1;
   border-radius: 50%;
   background: var(--team);
@@ -3268,6 +3312,14 @@ fieldset.pill-field legend {
   color: #ffd60a;
   border-color: rgb(255 214 10 / 0.45);
 }
+.ed-qbadge.kind {
+  color: var(--ink);
+}
+.ed-qnum-small {
+  flex: none;
+  font-family: var(--display);
+  font-size: 0.8rem;
+}
 .ed-add-question {
   justify-self: start;
 }
@@ -3325,6 +3377,26 @@ fieldset.pill-field legend {
 }
 .ed-opt.right .ed-opt-right {
   color: var(--good);
+}
+/* Put in order: the place in front of each answer instead of a Right tick (the tick's label is a flex box, so
+   `hidden` alone wouldn't hide it). */
+.ed-opt-right[hidden] {
+  display: none;
+}
+.ed-opt-n {
+  flex: none;
+  min-width: 1.5rem;
+  text-align: right;
+  font-family: var(--display);
+  font-size: 1.05rem;
+  color: var(--muted);
+}
+.ed-opts.ordered .ed-opt {
+  grid-template-columns: auto 48px minmax(0, 1fr); /* the place, the shape, the answer (no Right tick) */
+  padding-right: 0.9rem;
+}
+.ed-kind-pills label {
+  flex: 1 1 auto;
 }
 .ed-quick-row {
   display: grid;
@@ -3997,6 +4069,13 @@ body.display.embedded {
   overflow-wrap: anywhere;
   text-wrap: balance;
 }
+/* A long word ("Colosseum") would otherwise be broken in two on a narrow phone. */
+.choice-text.long {
+  font-size: 1.05rem;
+}
+.choice-text.longer {
+  font-size: 0.9rem;
+}
 .choice:active,
 .choice.chosen {
   transform: scale(0.96);
@@ -4006,6 +4085,59 @@ body.display.embedded {
 }
 .choice.faded {
   opacity: 0.22;
+}
+/* Tick all / put in order: a tap ticks a shape (or gives it its number), and Submit sends them all. */
+.choices.picking .choice {
+  position: relative;
+}
+.choice.ticked {
+  box-shadow: 0 0 0 4px #fff, 0 10px 30px rgb(0 0 0 / 0.3);
+}
+.pick-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  min-width: 2.1rem;
+  height: 2.1rem;
+  padding: 0 0.5rem;
+  display: grid;
+  place-items: center;
+  border-radius: var(--pill);
+  background: #fff;
+  color: #10131f;
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 1.15rem;
+  line-height: 1;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.3);
+  transform: scale(0);
+  transition: transform 160ms cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+.choice.ticked .pick-badge {
+  transform: scale(1);
+}
+.answer-bar {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.answer-bar .small {
+  margin: 0;
+}
+.answer-bar-btns {
+  display: flex;
+  gap: 0.6rem;
+}
+.answer-bar-btns .btn {
+  flex: 1;
+  min-height: 56px;
+}
+.answer-bar-btns .btn-quiet {
+  flex: 0 0 auto;
+}
+.phone-team .stage:has(.answer-bar) .choices {
+  max-height: 54vh;
 }
 .phone-question {
   margin: 0;
@@ -4134,11 +4266,69 @@ body.display.embedded {
   gap: 0.5rem;
   font-weight: 700;
 }
+/* Emoji reactions after a question (setting quickReactions): a row of round buttons under the result, 48px each
+   (six fit a 360px phone), the tapped one bounces. */
+.reactions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+}
+.reaction-btn {
+  width: 3rem;
+  height: 3rem;
+  min-width: 48px;
+  min-height: 48px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid rgb(255 255 255 / 0.3);
+  background: rgb(0 0 0 / 0.18);
+  color: inherit;
+  font-size: 1.6rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.reaction-btn:active {
+  transform: scale(0.92);
+}
+.reaction-btn.sent {
+  animation: reaction-sent 500ms cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+@keyframes reaction-sent {
+  30% {
+    transform: scale(1.4);
+  }
+}
 .right-chips {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
   gap: 0.5rem;
+}
+/* An order: the chips under each other, numbered. */
+.right-chips.as-list {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.6rem;
+}
+.right-chips.as-list .opt-chip {
+  justify-content: flex-start;
+  text-align: left;
+}
+.chip-n {
+  flex: none;
+  min-width: 1.6rem;
+  height: 1.6rem;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #fff;
+  color: #10131f;
+  font-size: 0.95rem;
+  line-height: 1;
 }
 .opt-chip {
   display: inline-flex;
@@ -4236,6 +4426,34 @@ body.display.embedded {
 .quick-q.fresh .quick-head {
   animation: drop-in 420ms cubic-bezier(0.2, 0.9, 0.3, 1);
 }
+/* "Tick all that are right" / "Put in the right order": a pill under the question. */
+.quick-style {
+  width: fit-content;
+  margin: 1.6vh auto 0;
+  display: flex;
+  align-items: center;
+  gap: 1vw;
+  padding: 0.7vh 2vw 0.7vh 1vw;
+  border-radius: var(--pill);
+  background: rgb(255 255 255 / 0.12);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.18);
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 2.6vh;
+  color: var(--ink);
+}
+.quick-style .style-icon {
+  padding: 0.3vh 1vw;
+  border-radius: var(--pill);
+  background: #fff;
+  color: #10131f;
+  font-size: 2vh;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+}
+.tv-q.quick-ready .quick-style {
+  font-size: 3vh;
+}
 @keyframes drop-in {
   from {
     transform: translateY(-4vh);
@@ -4253,6 +4471,7 @@ body.display.embedded {
 }
 .quick-q.settled .quick-mid {
   grid-template-columns: 1fr;
+  grid-template-rows: minmax(0, 1fr); /* so the bars and the order list fit the band instead of pushing into the verdict */
 }
 .quick-media {
   height: 100%;
@@ -4418,6 +4637,79 @@ body.display.embedded {
   font-weight: 800;
   animation: plate-in 450ms cubic-bezier(0.2, 1.5, 0.4, 1) 300ms backwards;
 }
+/* Put in order: each tile gets its right place as a number (the tiles stay in the order they were shown). */
+.opt-tick.opt-rank {
+  color: #10131f;
+  font-family: var(--display);
+  font-size: 4vh;
+  animation-delay: calc(var(--i) * 120ms + 300ms);
+}
+.quick-opt.placed {
+  box-shadow: inset 0 -0.9vh 0 rgb(0 0 0 / 0.2), 0 0 0 0.4vh rgb(255 255 255 / 0.7);
+}
+/* After a "put in order" question: the options in the right order, in the middle where the bars would be. */
+.quick-order-result {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  width: min(72vw, 130vh);
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1vh;
+}
+.quick-order-result li {
+  flex: 1 1 0; /* the rows share the band, never taller than a tile */
+  min-height: 0;
+  max-height: 8vh;
+  display: flex;
+  align-items: center;
+  gap: 1.6vw;
+  padding: 0 2vw 0 1.2vw;
+  border-radius: 2.2vh;
+  background: var(--opt);
+  color: var(--opt-ink);
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 3.4vh;
+  line-height: 1.12;
+  box-shadow: inset 0 -0.7vh 0 rgb(0 0 0 / 0.2), inset 0 0.2vh 0 rgb(255 255 255 / 0.35), 0 1.2vh 3vh rgb(0 0 0 / 0.3);
+  animation: order-in 500ms cubic-bezier(0.2, 0.9, 0.3, 1) backwards;
+  animation-delay: calc(var(--i) * 160ms + 100ms);
+}
+@keyframes order-in {
+  from {
+    transform: translateX(-4vw);
+    opacity: 0;
+  }
+}
+.quick-order-result .order-n {
+  flex: none;
+  width: 5.4vh;
+  height: 5.4vh;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #fff;
+  color: #10131f;
+  font-weight: 800;
+  font-size: 3.4vh;
+}
+.quick-order-result .opt-shape {
+  width: 5.6vh;
+  height: 5.6vh;
+}
+.quick-order-result .order-count {
+  flex: none;
+  margin-left: auto;
+  font-family: var(--text);
+  font-weight: 600;
+  font-size: 2.3vh;
+  opacity: 0.85;
+  white-space: nowrap;
+}
 
 /* After the answers: a bar per option. */
 .quick-bars {
@@ -4495,6 +4787,84 @@ body.display.embedded {
   animation: plate-in 450ms cubic-bezier(0.2, 1.4, 0.4, 1);
 }
 
+/* Players' reactions (Quick quiz, a `reaction` message): "🔥 Alex" floats up from the bottom edge and fades out
+   over 3 s, above everything and never in the way. With "reduce motion" it only fades, in place. */
+.tv-reactions {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 20;
+}
+.reaction {
+  position: absolute;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.8vh;
+  transform: translate(-50%, 16vh);
+  animation: reaction-up 3s cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}
+.reaction-emoji {
+  font-size: 9vh;
+  line-height: 1;
+  filter: drop-shadow(0 1vh 2vh rgb(0 0 0 / 0.45));
+}
+.reaction-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.8vh;
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 2.6vh;
+  line-height: 1;
+  padding: 0.9vh 2vh;
+  border-radius: var(--pill);
+  box-shadow: 0 1vh 3vh rgb(0 0 0 / 0.35);
+}
+.reaction-name .avatar {
+  font-size: 1.3em;
+}
+@keyframes reaction-up {
+  0% {
+    transform: translate(-50%, 16vh);
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  72% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(calc(-50% + var(--drift, 0vw)), -70vh);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .reaction {
+    bottom: 12vh;
+    transform: translateX(-50%);
+    animation: reaction-fade 3s ease-out forwards;
+  }
+  @keyframes reaction-fade {
+    0% {
+      opacity: 0;
+    }
+    15% {
+      opacity: 1;
+    }
+    70% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+}
+
 /* The top 5 after each question: rows slide in from the bottom place up, with arrows for who moved. */
 .quick-ranks {
   flex: 1;
@@ -4518,9 +4888,11 @@ body.display.embedded {
   display: grid;
   gap: 1.6vh;
 }
+/* The arrows sit in a column on the left, and an empty column of the same width on the right keeps the plates
+   exactly centred under the title. */
 .top-list li {
   display: grid;
-  grid-template-columns: 9vh 1fr;
+  grid-template-columns: 9vh 1fr 9vh;
   align-items: center;
   gap: 1.4vw;
 }
@@ -4879,6 +5251,22 @@ body[data-rankanim='move'] .top-list li {
   flex: none;
   font-size: 0.85rem;
   color: var(--muted);
+}
+/* Put in order: the right place in front of each option (shown shuffled, as on the TV). */
+.opt-place {
+  flex: none;
+  min-width: 1.6rem;
+  font-family: var(--display);
+  font-size: 1.2rem;
+  text-align: right;
+}
+.host-order-note {
+  margin: -0.75rem 0 1.25rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+.host-q .pts-badge.kind {
+  color: var(--ink);
 }
 .gain {
   font-size: 0.7em;
@@ -5817,6 +6205,7 @@ body.glass .freeze-team.on {
 
 /* Quick quiz: the answer tiles and buttons look like coloured glass, the podium like frosted steps. */
 body.glass .quick-opt,
+body.glass .quick-order-result li,
 body.glass .choice,
 body.glass .locked-shape,
 body.glass .shape-row span,
@@ -5841,7 +6230,8 @@ body.glass .quick-opt.wrong .opt-shape {
 body.glass .choice {
   box-shadow: inset 0 2px 0 rgb(255 255 255 / 0.6), inset 0 0 0 1px rgb(255 255 255 / 0.15), inset 0 -7px 0 rgb(0 0 0 / 0.16), 0 6px 16px rgb(0 0 0 / 0.22);
 }
-body.glass .choice.chosen {
+body.glass .choice.chosen,
+body.glass .choice.ticked {
   box-shadow: inset 0 2px 0 rgb(255 255 255 / 0.6), 0 0 0 4px #fff, 0 10px 30px rgb(0 0 0 / 0.3);
 }
 body.glass .choices,

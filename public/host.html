@@ -58,6 +58,8 @@
 
       <div>
         <h2><span id="teams-title" data-t="teams">Teams</span> <span id="team-count"></span></h2>
+        <!-- A Quick quiz with more than 30 players: not tried in a real game yet -->
+        <p id="many-note" class="many-note" data-t="manyPlayersNote" hidden></p>
         <ul id="teams" class="team-list"></ul>
         <p id="no-teams" class="empty" data-t="noTeamsYet"></p>
         <div class="start-row">
@@ -99,6 +101,7 @@
           </div>
           <label class="check"><input type="checkbox" name="quickStreak"> <span data-t="quickStreak"></span></label>
           <label class="check with-hint"><input type="checkbox" name="quickPhoneText"> <span><span data-t="quickPhoneText"></span><br><small data-t="quickPhoneTextHint"></small></span></label>
+          <label class="check with-hint"><input type="checkbox" name="quickReactions"> <span><span data-t="quickReactions"></span><br><small data-t="quickReactionsHint"></small></span></label>
         </details>
 
         <details class="settings-group" id="group-crazy">

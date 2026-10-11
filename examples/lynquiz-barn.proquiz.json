@@ -59,7 +59,8 @@
       "correct": 0
      },
      {
-      "question": "Hvilke av disse dyrene har fjær? (To er riktige.)",
+      "question": "Hvilke av disse dyrene har fjær?",
+      "type": "multi",
       "options": [
        "Høne",
        "Katt",
@@ -196,7 +197,8 @@
       "correct": 1
      },
      {
-      "question": "Hvilke av disse er partall? (To er riktige.)",
+      "question": "Hvilke av disse er partall?",
+      "type": "multi",
       "options": [
        "3",
        "4",

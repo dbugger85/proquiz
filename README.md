@@ -6,7 +6,7 @@ A party quiz for the people in the room. A laptop runs the game, a TV shows it, 
 |---|---|
 | ![ProQuiz: the TV shows the question with the team that buzzed first, and each team's phone says who was first](docs/screenshots/hero.jpg) | ![A Quick quiz question on the TV: "Which is the largest ocean on Earth?" with four coloured answer tiles, a countdown and how many have answered](docs/screenshots/quick-tv-question.jpg) |
 | **Jeopardy style, for teams.** A board of categories and points. Each team's phone is a buzzer, and the fastest team answers out loud. | **Kahoot style, for everyone.** Multiple choice in sections. Every phone is a player, and everyone answers every question by tapping a coloured shape. |
-| Up to 8 teams | Up to 30 players |
+| Up to 8 teams | Up to 100 players (more than 30 is untested) |
 
 ### Board quiz
 
@@ -21,7 +21,7 @@ A party quiz for the people in the room. A laptop runs the game, a TV shows it, 
 ### Quick quiz
 
 - Questions in **sections**, like rounds in a pub quiz, each starting with a title card on the TV.
-- 2 to 4 answers per question (or true or false).
+- 2 to 4 answers per question (or true or false). Three kinds of question: **pick one**, **tick all that are right** and **put in order**.
 - The faster a right answer, the more points (1000 down to 500). A question can count double, or for no points. An optional streak bonus rewards right answers in a row.
 - After every question the TV shows how many picked each answer and who was fastest, then an animated **top 5**. A **podium** at the end.
 - The question and answers can show on the phones too, so nobody has to look at the TV.
@@ -106,7 +106,11 @@ Download the zip for your computer from the [latest release](https://github.com/
 ### Making a quick quiz
 
 - A quick quiz is split into **sections**. Each section has a name and a time per question (20 seconds if you leave it empty).
-- Click a question to write it. Type 2 to 4 answers and tick **Right** next to the right one. If more than one answer is right ("Which of these is a mammal?"), tick each of them: players still pick one, and any right one counts. Not every answer can be right. For a true-or-false question, leave answers 3 and 4 empty.
+- Click a question to write it. Choose the **Kind of question** at the top:
+  - **Pick one:** type 2 to 4 answers and tick **Right** next to the right one. You can tick several if any of them counts: players still pick one. Not every answer can be right. For a true-or-false question, leave answers 3 and 4 empty.
+  - **Tick all that are right:** tick every right answer. Players tick the ones they think are right and press **Submit answers**; only exactly the right ones score. Every answer may be right.
+  - **Put in order:** write at least 3 answers in the right order, the first at the top, and say which way in the question ("oldest to newest"). The game shuffles them; players tap them in order and submit. Only the whole order scores.
+  - Don't say in the question how many answers are right: the TV and the phones tell the players what kind of question it is.
 - Each question can have its own time, **Normal**, **Double** or **No points**, a picture and a sound clip.
 - Use ▲ and ▼ to change the order of questions and sections, and × to remove one. **Add a question** and **Add a section** are under them.
 
@@ -143,7 +147,7 @@ These steps are the same for both kinds of quiz.
      - Smart TV browsers differ, and ProQuiz hasn't been tested on them. If the sound or the board doesn't work there, use a cable or an iPad instead.
    - **Only one screen** (just the laptop, or the laptop mirrored to the TV)? Skip "Open TV screen". Once the game starts, the laptop shows the TV view itself, with the controls underneath: click the tiles on the board, and the answers stay hidden until you reveal them. Press **H** to peek at the host view (with the answer and score changes), and **H** again to go back. **F** is full screen.
 4. **Choose the quiz** and the language at the top of the lobby's settings. A Quick quiz says **Quick quiz** after its name in the list.
-5. **Players join:** they scan the QR code on the TV, type a name, build an avatar (or mascot) and pick a colour. In a board quiz, each phone is a team, and teams can press **Try your buzzer** to hear their tone.
+5. **Players join:** they scan the QR code on the TV, type a name, build an avatar (or mascot) and pick one of 16 colours. In a board quiz, each phone is a team (every team its own colour), and teams can press **Try your buzzer** to hear their tone. The TV shows the newest player first, so whoever just joined sees their name at once.
 6. **Settings:** the lobby's settings come in folding sections, and a closed section shows a short summary of what's set. Some sections are only for one kind of quiz (see [Playing a board quiz](#playing-a-board-quiz) and [Playing a quick quiz](#playing-a-quick-quiz)). These are in both:
    - **Sound:** effects, music and the volume. **Your own music**, at the end of this section, lets you choose a music file for each moment (lobby, between questions, thinking, final, after the game).
    - **Look and branding:** the **Glass look** (on by default): frosted, see-through panels with a soft glow slowly moving behind them, on the TV, the phones and the laptop. Untick it if the TV or an older laptop stutters, and every screen switches to the plain look at once. Underneath, your own [branding](#your-own-logo-and-colours).
@@ -208,17 +212,18 @@ When a team picks one, the TV spins a reel and lands on the special. Press **Spa
 
 ### Settings
 
-- Each phone is one player, up to 30. Players type their own name, and colours may repeat.
+- Each phone is one player, up to 100. Players type their own name, and colours may repeat. **More than 30 players hasn't been tried in a real game yet** (the lobby says so): it should work, but it depends on your Wi-Fi router more than on ProQuiz. With more than about 48 players the TV lobby shows the newest ones and counts the rest.
 - Crazy mode, the rules, round 2 and the final are hidden, because they belong to the board quiz.
-- The **Quick quiz** section: how long the question shows before the answers appear (4 seconds; 0 waits for you to press Space), a **streak bonus** (+100 for each right answer in a row, up to +500; off by default), and **Show question and answers on the phones** (on by default, so nobody has to look at the TV; turn it off if you want everyone watching the TV).
+- The **Quick quiz** section: how long the question shows before the answers appear (4 seconds; 0 waits for you to press Space), a **streak bonus** (+100 for each right answer in a row, up to +500; off by default), **Show question and answers on the phones** (on by default, so nobody has to look at the TV; turn it off if you want everyone watching the TV), and **Players can send reactions** (on by default, see below).
 
 ### Playing
 
 1. Each section starts with a title card on the TV, with the standings once anyone has points. Press **Space**.
-2. The question shows on the TV. A moment later the answers appear on the TV, and as big coloured buttons on the phones.
-3. A right answer is worth 1000 points at once, and less the longer you wait, down to 500 at the last moment (twice that for a double-points question). A wrong answer costs nothing. When every player has answered, the question closes by itself.
-4. The TV shows how many picked each answer, the right one (or ones), and who was fastest. Each phone says right or wrong, the player's place, and how many points they are behind the next player.
+2. The question shows on the TV. A moment later the answers appear on the TV, and as big coloured buttons on the phones. For a **tick all that are right** question the TV says so, and the phones get a **Submit answers** button: tick, then submit. For a **put in order** question the answers come shuffled; players tap them in order (each gets its number; a tap on a numbered one takes its number and the later ones away, **Clear** starts over) and submit.
+3. A right answer is worth 1000 points at once, and less the longer you wait, down to 500 at the last moment (twice that for a double-points question). For tick-all and put-in-order questions the whole answer must be right, and the time counts from the Submit press. A wrong answer costs nothing. When every player has answered, the question closes by itself.
+4. The TV shows how many picked each answer, the right one (or ones; for put in order, the right order), and who was fastest. Each phone says right or wrong, the player's place, and how many points they are behind the next player.
 5. **Space** shows the top 5, with arrows for who moved up or down. **Space** again goes to the next question, the next section, or at the end the podium.
+6. **Reactions:** while the result and the top 5 show, every phone has six emoji (😂 🔥 😱 👏 😭 🎉). A tap sends it to the TV, where it floats up with the player's name. One a second per player, and at most twelve on the screen at once, so a big crowd can't flood it. Untick **Players can send reactions** in the lobby to turn it off.
 
 | Key | What it does |
 |---|---|

@@ -8,10 +8,10 @@
       "seconds": 20,
       "questions": [
         { "question": "Which planet is closest to the Sun?", "options": ["Mercury", "Venus", "Earth", "Mars"], "correct": 0 },
-        { "question": "Which of these is a mammal? (Two are right.)", "options": ["Dolphin", "Shark", "Bat", "Penguin"], "correct": [0, 2] },
+        { "question": "Which of these are mammals?", "type": "multi", "options": ["Dolphin", "Shark", "Bat", "Penguin"], "correct": [0, 2] },
         { "question": "True or false: bats are blind.", "options": ["True", "False"], "correct": 1, "seconds": 10 },
         { "question": "Which is the largest ocean on Earth?", "options": ["Atlantic", "Indian", "Pacific", "Arctic"], "correct": 2 },
-        { "question": "What is the chemical symbol for gold?", "options": ["Ag", "Au", "Gd", "Go"], "correct": 1 }
+        { "question": "Put these in order, oldest to newest.", "type": "order", "options": ["Pyramids of Giza", "Colosseum", "Eiffel Tower", "Sydney Opera House"] }
       ]
     },
     {

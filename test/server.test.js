@@ -438,7 +438,7 @@ test('a Quick quiz end to end: answers with press times, scores, the top 5 on th
   const tvResult = await tv.wait((m) => m.type === 'state' && m.view.phase === 'result');
   assert.deepEqual(tvResult.view.q.correct, [0]); // the right options, as a list (several may be right)
   const annResult = await ann.wait((m) => m.type === 'state' && m.view.status === 'result');
-  assert.deepEqual([annResult.view.q.mine, annResult.view.q.correct, annResult.view.q.gained], [0, [0], score(ann.teamId)]);
+  assert.deepEqual([annResult.view.q.mine, annResult.view.q.correct, annResult.view.q.gained], [{ option: 0 }, [0], score(ann.teamId)]);
   assert.equal(annResult.view.q.question, undefined, 'no texts on the phones when the host turned them off');
 
   // The top 5 on the TV, and each phone its place.
@@ -465,6 +465,108 @@ test('a Quick quiz end to end: answers with press times, scores, the top 5 on th
   assert.deepEqual(back.view.q.answers, {});
   assert.equal(back.view.teams.find((t) => t.id === ann.teamId).score, score(ann.teamId));
   for (const c of [host, tv, ...players]) c.close();
+  await own.close();
+});
+
+test('a Quick quiz with 100 phones, and reactions: allowed only at the result or top 5, once a second, with the setting on', async () => {
+  const own = await startServer({ port: 3481, quiet: true, dataDir: mkdtempSync(join(tmpdir(), 'proquiz-crowd-')) });
+  const ownUrl = `ws://127.0.0.1:${own.info.port}/ws`;
+  async function one(role, teamId) {
+    const ws = new WebSocket(ownUrl);
+    const msgs = [];
+    ws.onmessage = (e) => {
+      const m = JSON.parse(e.data);
+      if (m.type === 'clock') return ws.send(JSON.stringify({ type: 'clock', id: m.id, t: performance.now() }));
+      msgs.push(m);
+    };
+    await new Promise((r) => (ws.onopen = r));
+    const c = {
+      msgs,
+      send: (m) => ws.send(JSON.stringify(m)),
+      async wait(fn, ms = 5000) {
+        for (const end = Date.now() + ms; Date.now() < end; await new Promise((r) => setTimeout(r, 10))) {
+          const found = msgs.findLast(fn);
+          if (found) return found;
+        }
+        throw new Error('timed out waiting');
+      },
+      count: (fn) => msgs.filter(fn).length,
+      close: () => ws.close(),
+    };
+    c.send({ type: 'hello', role, teamId });
+    await c.wait((m) => m.type === 'welcome');
+    return c;
+  }
+  const host = await one('host');
+  const tv = await one('display');
+  host.send({ type: 'cmd', action: { type: 'settings', settings: { quickReadSeconds: 0 } } });
+  host.send({ type: 'chooseSet', id: 'quick-sample' });
+  await host.wait((m) => m.type === 'state' && m.view.mode === 'quick' && m.view.settings.quickReadSeconds === 0);
+
+  // 100 phones join (every colour in use); the 101st is told the game is full.
+  const phones = [];
+  for (let n = 0; n < 100; n++) {
+    const p = await one('phone');
+    p.send({ type: 'join', name: `Player ${n + 1}`, color: COLORS[n % COLORS.length] });
+    phones.push(p);
+  }
+  for (const p of phones) p.teamId = (await p.wait((m) => m.type === 'joined')).teamId;
+  const full = await host.wait((m) => m.type === 'state' && m.view.teams.length === 100);
+  assert.equal(full.connected.length, 100);
+  assert.equal(new Set(full.view.teams.map((t) => t.color)).size, 16);
+  const late = await one('phone');
+  late.send({ type: 'join', name: 'Late', color: COLORS[0] });
+  assert.equal((await late.wait((m) => m.type === 'error')).code, 'full-players');
+  late.close();
+
+  // In the lobby a reaction does nothing (not even for a player).
+  phones[0].send({ type: 'react', emoji: 0 });
+  host.send({ type: 'cmd', action: { type: 'start' } });
+  await tv.wait((m) => m.type === 'state' && m.view.phase === 'section');
+  host.send({ type: 'cmd', action: { type: 'next' } });
+  await tv.wait((m) => m.type === 'state' && m.view.phase === 'ready');
+  host.send({ type: 'cmd', action: { type: 'next' } });
+  await tv.wait((m) => m.type === 'state' && m.view.phase === 'open');
+  phones[1].send({ type: 'react', emoji: 1 }); // not while the answers are open
+  // Everyone answers: the question closes by itself, and the TV sees the right counts.
+  for (const [n, p] of phones.entries()) p.send({ type: 'answer', option: n % 2, at: performance.now() });
+  const result = await tv.wait((m) => m.type === 'state' && m.view.phase === 'result', 8000);
+  assert.deepEqual(result.view.q.counts, [50, 50, 0, 0]);
+  assert.equal(result.view.q.nRight, 50);
+  assert.equal(result.view.teams.length, 100);
+  assert.equal(tv.count((m) => m.type === 'reaction'), 0, 'nothing got through before the result');
+
+  // At the result: a reaction reaches the TV with the player's name and colour; a second one within a second is
+  // dropped; a bad index, an unknown phone and a phone that isn't a player are ignored.
+  phones[2].send({ type: 'react', emoji: 3 });
+  const r = await tv.wait((m) => m.type === 'reaction');
+  assert.deepEqual(r, { type: 'reaction', emoji: '👏', name: 'Player 3', color: COLORS[2] });
+  phones[2].send({ type: 'react', emoji: 4 }); // too soon
+  phones[3].send({ type: 'react', emoji: 6 }); // no such emoji
+  phones[3].send({ type: 'react', emoji: '2' });
+  const stranger = await one('phone');
+  stranger.send({ type: 'react', emoji: 0 });
+  await new Promise((res) => setTimeout(res, 150));
+  assert.equal(tv.count((m) => m.type === 'reaction'), 1);
+  assert.equal(host.count((m) => m.type === 'reaction'), 0, 'the host page gets nothing while a TV is open');
+  await new Promise((res) => setTimeout(res, 1000));
+  phones[2].send({ type: 'react', emoji: 4 }); // a second later it's fine
+  await tv.wait((m) => m.type === 'reaction' && m.emoji === '😭');
+  // At the top 5 too; with the setting off, nothing.
+  host.send({ type: 'cmd', action: { type: 'next' } });
+  await tv.wait((m) => m.type === 'state' && m.view.phase === 'ranks');
+  assert.equal((await tv.wait((m) => m.type === 'state' && m.view.phase === 'ranks')).view.ranks.top.length, 5);
+  phones[4].send({ type: 'react', emoji: 5 });
+  await tv.wait((m) => m.type === 'reaction' && m.name === 'Player 5');
+  host.send({ type: 'cmd', action: { type: 'settings', settings: { quickReactions: false } } });
+  await tv.wait((m) => m.type === 'state' && m.view.settings.quickReactions === false);
+  phones[5].send({ type: 'react', emoji: 0 });
+  await new Promise((res) => setTimeout(res, 150));
+  assert.equal(tv.count((m) => m.type === 'reaction'), 3);
+  // Nothing about reactions is in the game or its save.
+  assert.equal(JSON.stringify(own.hub.getState()).includes('reaction'), false);
+  stranger.close();
+  for (const c of [host, tv, ...phones]) c.close();
   await own.close();
 });
 

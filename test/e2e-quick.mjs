@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
 import { startServer } from '../server.js';
-import { COLORS } from '../lib/game.js';
+import { COLORS, REACTIONS } from '../lib/game.js';
 import { randomAvatar, AVATAR_PARTS } from '../lib/avatar.js';
 
 const shots = fileURLToPath(new URL('./screenshots', import.meta.url));
@@ -135,6 +135,10 @@ try {
   await tv.waitForFunction(() => document.querySelectorAll('#teams li').length === 6);
   assert.equal(await tv.locator('#teams li .avatar').count(), 5);
   assert.equal(await host.locator('#teams li .avatar').count(), 5);
+  // The TV shows the newest player first (so whoever just joined sees their name at once); the host keeps the join order.
+  assert.deepEqual(await tv.$$eval('#teams li', (els) => els.map((li) => li.textContent)), ['Bo', 'Bea', 'Sofie', 'Jonas', 'Mira', 'Alex']);
+  assert.deepEqual(await host.$$eval('#teams li .name', (els) => els.map((el) => el.textContent)), ['Alex', 'Mira', 'Jonas', 'Sofie', 'Bea', 'Bo']);
+  assert.equal(await host.locator('#many-note').isHidden(), true);
   await tv.waitForTimeout(500);
   await shot(tv, 'quick-tv-lobby');
   await host.evaluate(() => document.querySelector('#teams').scrollIntoView({ block: 'center' }));
@@ -147,11 +151,34 @@ try {
   extra.forEach((id, i) => srv.hub.dispatch({ type: 'join', teamId: id, name: names[i], color: COLORS[i % COLORS.length], avatar: randomAvatar(rnd) }));
   await tv.waitForFunction(() => document.querySelectorAll('#teams li').length === 30);
   await tv.waitForTimeout(700);
-  const lobbyFits = await tv.evaluate(() => document.documentElement.scrollHeight <= innerHeight && document.documentElement.scrollWidth <= innerWidth);
+  const fits = (page) => page.evaluate(() => document.documentElement.scrollHeight <= innerHeight && document.documentElement.scrollWidth <= innerWidth);
   await shot(tv, 'quick-tv-lobby-30');
-  assert.ok(lobbyFits, 'thirty players fit on the TV lobby');
-  for (const id of extra) srv.hub.dispatch({ type: 'removeTeam', teamId: id });
+  assert.ok(await fits(tv), 'thirty players fit on the TV lobby');
+  assert.equal(await tv.textContent('#teams li:first-child'), 'Selma', 'the newest player first');
+  // 100 players (the most allowed): the TV shows the newest ones and counts the rest, all on one screen; the host's
+  // list scrolls, and a note says more than 30 hasn't been tried in a real game yet.
+  const more = Array.from({ length: 70 }, (_, i) => `bot-y${i}`);
+  const first = ['Aksel', 'Amalie', 'Anders', 'Anna', 'Aurora', 'Benjamin', 'Birk', 'Edvard', 'Eline', 'Elias', 'Emilie', 'Erik', 'Eva', 'Even', 'Hanna', 'Hedda', 'Herman', 'Iben', 'Isak', 'Jakob', 'Jenny', 'Julie', 'Kasper', 'Leon', 'Linnea', 'Liv', 'Ludvig', 'Mathias', 'Mia', 'Mikkel', 'Noah', 'Olav', 'Olivia', 'Oliver', 'Oscar', 'Sara', 'Sigrid', 'Sofia', 'Sverre', 'Theodor', 'Tiril', 'Ulrik', 'Victoria', 'Viktor', 'Ylva', 'Åse', 'Øyvind', 'Ask', 'Brage', 'Dina', 'Eirik', 'Elise', 'Felix', 'Gina', 'Håkon', 'Ingvild', 'Jonathan', 'Kaja', 'Lars', 'Lea', 'Marius', 'Mathilde', 'Nikolai', 'Oda', 'Petter', 'Ronja', 'Sigurd', 'Synne', 'Trym', 'Vetle'];
+  more.forEach((id, i) => srv.hub.dispatch({ type: 'join', teamId: id, name: first[i], color: COLORS[(i + 5) % COLORS.length], avatar: i % 4 === 3 ? undefined : randomAvatar(rnd) }));
+  assert.equal(state().teams.length, 100);
+  assert.throws(() => srv.hub.dispatch({ type: 'join', teamId: 'bot-101', name: 'One too many', color: COLORS[0] }), { code: 'full-players' });
+  await tv.waitForFunction(() => /\+ 53 more/.test(document.querySelector('#teams').textContent));
+  await host.waitForFunction(() => document.querySelectorAll('#teams li').length === 100);
+  await tv.waitForTimeout(700);
+  await shot(tv, 'quick-tv-lobby-100');
+  assert.ok(await fits(tv), 'a hundred players fit on the TV lobby');
+  assert.equal(await tv.locator('#teams li').count(), 48); // the newest 47, plus "+ 53 more"
+  assert.equal(await tv.textContent('#teams li:first-child'), 'Vetle');
+  assert.equal(await host.textContent('#team-count'), '100/100');
+  assert.equal(await host.locator('#many-note').isVisible(), true);
+  assert.match(await host.textContent('#many-note'), /More than 30 players hasn’t been tried/);
+  const hostList = await host.$eval('#teams', (el) => ({ scrolls: el.scrollHeight > el.clientHeight, startOnScreen: document.querySelector('#start').getBoundingClientRect().top < innerHeight * 2 }));
+  assert.ok(hostList.scrolls, 'the host lobby list scrolls');
+  await host.evaluate(() => document.querySelector('#many-note').scrollIntoView({ block: 'start' }));
+  await shot(host, 'quick-host-lobby-100');
+  for (const id of [...extra, ...more]) srv.hub.dispatch({ type: 'removeTeam', teamId: id });
   await tv.waitForFunction(() => document.querySelectorAll('#teams li').length === 6);
+  await host.waitForFunction(() => document.querySelector('#many-note').hidden);
   await shot(alex, 'quick-phone-lobby');
 
   // ----- Section title card -----
@@ -202,6 +229,44 @@ try {
   await shot(alex, 'quick-phone-result-right');
   await shot(mira, 'quick-phone-result-wrong');
   await shot(host, 'quick-host-result');
+  // ----- Reactions: the phones show six emoji under the result; a tap floats up on the TV with the name -----
+  assert.equal(await alex.locator('.reaction-btn').count(), REACTIONS.length);
+  const smallReactions = await alex.$$eval('.reaction-btn', (els) => els.map((el) => el.getBoundingClientRect()).filter((r) => r.width < 48 || r.height < 48).length);
+  assert.equal(smallReactions, 0, 'every reaction button is at least 48px');
+  const covered = await alex.evaluate(() => {
+    const row = document.querySelector('.reactions').getBoundingClientRect();
+    return [...document.querySelectorAll('.verdict-badge, .big, .result, .gap-line')].some((el) => el.getBoundingClientRect().bottom > row.top + 1) || row.bottom > innerHeight;
+  });
+  assert.equal(covered, false, 'the reactions sit under the result, on screen');
+  await alex.click('.reaction-btn:nth-child(2)'); // 🔥
+  await tv.waitForSelector('#reactions .reaction');
+  assert.equal(await tv.textContent('#reactions .reaction'), '🔥Alex');
+  assert.equal(await tv.locator('#reactions .reaction .avatar').count(), 1);
+  await alex.click('.reaction-btn:nth-child(3)'); // within a second: dropped (also by the server)
+  // The players joined through the server react over plain WebSockets, like phones would.
+  const sockets = [];
+  for (const [id, emoji] of [['bot-bea', 0], ['bot-bo', 5]]) {
+    const ws = new WebSocket(`ws://127.0.0.1:${srv.info.port}/ws`);
+    await new Promise((r) => (ws.onopen = r));
+    ws.send(JSON.stringify({ type: 'hello', role: 'phone', teamId: id }));
+    await new Promise((r) => (ws.onmessage = r));
+    ws.send(JSON.stringify({ type: 'react', emoji }));
+    sockets.push(ws);
+  }
+  await mira.click('.reaction-btn:nth-child(5)');
+  await jonas.click('.reaction-btn:nth-child(4)');
+  await tv.waitForFunction(() => document.querySelectorAll('#reactions .reaction').length === 5, null, { timeout: 3000 });
+  assert.equal(await tv.locator('#reactions .reaction').count(), 5, 'the second tap within a second was dropped');
+  await tv.waitForTimeout(600);
+  await shot(alex, 'quick-phone-reactions');
+  await shot(tv, 'quick-tv-reactions');
+  for (const ws of sockets) ws.close();
+  await tv.waitForFunction(() => document.querySelectorAll('#reactions .reaction').length === 0, null, { timeout: 6000 }); // gone after ~3 s
+  // With the setting off the phones hide the buttons.
+  srv.hub.dispatch({ type: 'settings', settings: { quickReactions: false } });
+  await alex.waitForFunction(() => !document.querySelector('.reaction-btn'));
+  srv.hub.dispatch({ type: 'settings', settings: { quickReactions: true } });
+  await alex.waitForSelector('.reaction-btn');
   // The result with the glass look on and off.
   await shot(tv, 'quick-glass-on-tv-result');
   srv.hub.dispatch({ type: 'settings', settings: { glass: false } });
@@ -216,6 +281,15 @@ try {
   await tv.waitForSelector('.top-list');
   await tv.waitForSelector('body[data-music=calmUp]', { state: 'attached', timeout: 6000 });
   await topFive(tv, 'quick-tv-top5');
+  // The plates are centred under the title, with the arrows in a column outside on the left.
+  const centred = await tv.evaluate(() => {
+    const title = document.querySelector('.quick-ranks h1').getBoundingClientRect();
+    const plate = document.querySelector('.top-list li .rank-plate').getBoundingClientRect();
+    const arrow = document.querySelector('.top-list li .move').getBoundingClientRect();
+    return { off: Math.abs((plate.left + plate.right) / 2 - (title.left + title.right) / 2), arrowOutside: arrow.right <= plate.left };
+  });
+  assert.ok(centred.off < 2, `the top 5 plates are centred under the title (off by ${centred.off.toFixed(1)}px)`);
+  assert.ok(centred.arrowOutside, 'the arrows sit outside the plates');
   // The faces moved along with their rows: each row still shows its own player's avatar (or none, for Bo).
   const faces = await tv.$$eval('.top-list li', (els) => els.map((li) => [li.dataset.id, Boolean(li.querySelector('.rank-face .avatar svg')), li.querySelector('.rank-n').textContent]));
   for (const [id, hasFace] of faces) assert.equal(hasFace, Boolean(state().teams.find((tm) => tm.id === id).avatar), `${id}'s face in the top 5`);
@@ -226,31 +300,59 @@ try {
   await alex.waitForFunction((n) => document.querySelector('#score').textContent === `${n} points`, String(alexScore).replace(/\B(?=(\d{3})+$)/g, '\u00a0'), { timeout: 3000 });
   await shot(alex, 'quick-phone-ranks');
 
-  // ----- Question 2 has two right answers (Dolphin and Bat): either counts. The host stops the clock. -----
+  // ----- Question 2: "tick all that are right" (Dolphin and Bat). The phones tick and submit; the host stops the clock. -----
   await host.keyboard.press(' ');
   await phase(host, 'ready');
   assert.equal(await host.locator('.host-opt.right').count(), 2); // the host sees both marked
+  assert.match(await host.textContent('.host-q .where'), /Tick all that are right/);
+  await tv.waitForSelector('.quick-ready .quick-style');
+  assert.match(await tv.textContent('.quick-style'), /Tick all that are right/);
+  assert.doesNotMatch(await tv.textContent('.tv-q'), /Two|two are/i, 'the TV never says how many are right');
   await host.keyboard.press(' ');
   await phase(host, 'open');
+  await alex.waitForSelector('#submit-answers');
+  assert.equal(await alex.isDisabled('#submit-answers'), true, 'nothing ticked yet');
+  assert.match(await alex.textContent('.answer-bar'), /Tap every right answer, then submit/);
   await alex.click('.choice:nth-child(1)'); // Dolphin
-  await mira.click('.choice:nth-child(3)'); // Bat
-  await jonas.click('.choice:nth-child(2)'); // Shark: wrong
-  srv.hub.dispatch({ type: 'answer', teamId: 'bot-bo', option: 0 }); // Bo climbs into the top 5
-  await jonas.waitForSelector('.locked-shape');
+  await alex.click('.choice:nth-child(3)'); // Bat
+  assert.equal(await alex.locator('.choice.ticked').count(), 2);
+  assert.equal(await alex.isDisabled('#submit-answers'), false);
+  await alex.click('.choice:nth-child(3)'); // a tap on a ticked one unticks it…
+  assert.equal(await alex.locator('.choice.ticked').count(), 1);
+  await alex.click('.choice:nth-child(3)'); // …and again ticks it
+  assert.deepEqual(await alex.$$eval('.pick-badge', (els) => els.map((el) => el.textContent)), ['✓', '', '✓', '']);
+  await shot(alex, 'quick-phone-tick');
+  await alex.click('#submit-answers');
+  await alex.waitForFunction(() => document.body.innerText.includes('Answer locked in'));
+  assert.equal(await alex.locator('.right-chips .opt-chip').count(), 2);
+  await shot(alex, 'quick-phone-tick-answered');
+  await mira.click('.choice:nth-child(1)');
+  await mira.click('.choice:nth-child(3)');
+  await mira.click('#submit-answers'); // right
+  await jonas.click('.choice:nth-child(1)');
+  await jonas.click('#submit-answers'); // only Dolphin: not all of them
+  srv.hub.dispatch({ type: 'answer', teamId: 'bot-bo', options: [0, 2] }); // Bo climbs into the top 5
+  await jonas.waitForFunction(() => document.body.innerText.includes('Answer locked in'));
   await host.keyboard.press(' '); // stop the clock
   await phase(host, 'result');
   await tv.waitForSelector('.quick-bars');
-  assert.match(await tv.textContent('.quick-verdict'), /3 of 6 got it right/);
+  assert.match(await tv.textContent('.quick-verdict'), /3 of 6 ticked exactly the right ones/);
   assert.equal(await tv.locator('.qbar.right').count(), 2);
   assert.equal(await tv.locator('.quick-opt.right').count(), 2);
+  assert.match(await host.textContent('.host-status'), /3 of 6 ticked exactly the right ones/);
+  assert.match(await host.textContent('.host-opts'), /4 ticked/); // Dolphin
+  await alex.waitForSelector('.verdict-badge');
+  assert.match(await alex.textContent('#team'), /Right!/);
   assert.match(await mira.textContent('#team'), /Right!/);
+  assert.match(await jonas.textContent('#team'), /Wrong/);
   assert.match(await jonas.textContent('#team'), /Right answers:/);
   assert.equal(await jonas.locator('.right-was .opt-chip').count(), 2);
   assert.ok(state().teams.find((tm) => tm.name === 'Mira').score > 0);
+  assert.equal(state().q.gained[state().teams.find((tm) => tm.name === 'Jonas').id], 0, 'a subset scores nothing');
   await tv.waitForTimeout(1200); // the bars grow
-  await shot(tv, 'quick-tv-result-two-right');
-  await shot(jonas, 'quick-phone-result-two-right');
-  await shot(host, 'quick-host-result-two-right');
+  await shot(tv, 'quick-tv-result-tick');
+  await shot(jonas, 'quick-phone-result-tick-wrong');
+  await shot(host, 'quick-host-result-tick');
   // The top 5 again, with the plain look: Bo climbs in and someone drops out.
   srv.hub.dispatch({ type: 'settings', settings: { glass: false } });
   await tv.waitForSelector('body:not(.glass)');
@@ -283,6 +385,93 @@ try {
   await tv.waitForTimeout(1200);
   await shot(tv, 'quick-tv-result-timeout');
   await shot(sofie, 'quick-phone-too-slow');
+
+  // ----- Question 5: "put in order" (oldest to newest). Question 4 is skipped to get there. -----
+  await host.keyboard.press(' ');
+  await phase(host, 'ranks');
+  await host.keyboard.press(' ');
+  await host.waitForFunction(() => document.body.dataset.phase === 'ready' && /Question 4 of 5/.test(document.body.innerText));
+  await host.keyboard.press('Escape'); // skip it
+  await host.waitForFunction(() => document.body.dataset.phase === 'ready' && /Question 5 of 5/.test(document.body.innerText));
+  assert.match(await host.textContent('.host-q .where'), /Put in the right order/);
+  assert.match(await host.textContent('.host-order-note'), /Shown shuffled like this/);
+  assert.deepEqual((await host.$$eval('.host-opt .opt-place', (els) => els.map((el) => el.textContent))).sort(), ['1.', '2.', '3.', '4.']);
+  await shot(host, 'quick-host-order');
+  await tv.waitForSelector('.quick-ready .quick-style.order');
+  // A narrow phone joins now, to see the long answers at 360px.
+  const nils = await open('/', { width: 360, height: 740 }, 'Nils');
+  await nils.waitForSelector('#join:not([hidden])');
+  await nils.fill('#name', 'Nils');
+  await nils.click('#swatches label:nth-child(2)');
+  await nils.click('#join-btn');
+  await nils.waitForSelector('#team:not([hidden])');
+  await host.keyboard.press(' ');
+  await phase(host, 'open');
+  const written = ['Pyramids of Giza', 'Colosseum', 'Eiffel Tower', 'Sydney Opera House'];
+  const rightOrder = state().q.correct; // the shown positions in the right order
+  const shownTexts = await tv.$$eval('.quick-opt .opt-text', (els) => els.map((el) => el.textContent));
+  assert.deepEqual(rightOrder.map((p) => shownTexts[p]), written);
+  assert.notDeepEqual(shownTexts, written, 'shuffled on the TV');
+  assert.deepEqual(await alex.$$eval('.choice-text', (els) => els.map((el) => el.textContent)), shownTexts, 'the phones show the same order');
+  await shot(tv, 'quick-tv-open-order');
+  await alex.waitForSelector('#clear-picks');
+  assert.equal(await alex.isDisabled('#submit-answers'), true);
+  assert.match(await alex.textContent('.answer-bar'), /Tap the answers in order, the first one first/);
+  // Alex taps two, clears, then taps all four in the right order.
+  await alex.click(`.choice:nth-child(${rightOrder[1] + 1})`);
+  await alex.click(`.choice:nth-child(${rightOrder[0] + 1})`);
+  const badges = await alex.$$eval('.pick-badge', (els) => els.map((el) => el.textContent));
+  assert.deepEqual([badges[rightOrder[1]], badges[rightOrder[0]]], ['1', '2']);
+  assert.equal(await alex.isDisabled('#submit-answers'), true, 'not all four yet');
+  await alex.click('#clear-picks');
+  assert.equal(await alex.locator('.choice.ticked').count(), 0);
+  for (const p of rightOrder) await alex.click(`.choice:nth-child(${p + 1})`);
+  assert.equal(await alex.isDisabled('#submit-answers'), false);
+  await shot(alex, 'quick-phone-order');
+  // Tapping a numbered one takes its number and every later one away.
+  await alex.click(`.choice:nth-child(${rightOrder[2] + 1})`);
+  assert.equal(await alex.locator('.choice.ticked').count(), 2);
+  for (const p of rightOrder.slice(2)) await alex.click(`.choice:nth-child(${p + 1})`);
+  await alex.click('#submit-answers');
+  await alex.waitForFunction(() => document.body.innerText.includes('Answer locked in'));
+  assert.equal(await alex.locator('.right-chips.as-list .opt-chip').count(), 4);
+  await shot(alex, 'quick-phone-order-answered');
+  // The narrow phone: everything fits, and Submit is on screen with all four numbered.
+  for (const p of rightOrder) await nils.click(`.choice:nth-child(${p + 1})`);
+  const narrow = await nils.evaluate(() => {
+    const r = document.querySelector('#submit-answers').getBoundingClientRect();
+    return { fitsWide: document.documentElement.scrollWidth <= innerWidth, submitOnScreen: r.bottom <= innerHeight && r.height >= 48, cut: [...document.querySelectorAll('.choice-text')].some((el) => el.scrollWidth > el.clientWidth + 1) };
+  });
+  await shot(nils, 'quick-phone-order-narrow');
+  assert.deepEqual(narrow, { fitsWide: true, submitOnScreen: true, cut: false }, 'the order question on a 360px phone');
+  await nils.click('#submit-answers');
+  // Mira swaps the last two: wrong. Bea gets it right, Bo has it backwards; Jonas and Sofie don't answer.
+  for (const p of [rightOrder[0], rightOrder[1], rightOrder[3], rightOrder[2]]) await mira.click(`.choice:nth-child(${p + 1})`);
+  await mira.click('#submit-answers');
+  srv.hub.dispatch({ type: 'answer', teamId: 'bot-bea', order: [...rightOrder] });
+  srv.hub.dispatch({ type: 'answer', teamId: 'bot-bo', order: [...rightOrder].reverse() });
+  await mira.waitForFunction(() => document.body.innerText.includes('Answer locked in'));
+  await host.keyboard.press(' '); // stop the clock
+  await phase(host, 'result');
+  await tv.waitForSelector('.quick-order-result');
+  assert.equal(await tv.locator('.quick-order-result li').count(), 4);
+  assert.deepEqual(await tv.$$eval('.quick-order-result .opt-text', (els) => els.map((el) => el.textContent)), written);
+  assert.match(await tv.textContent('.quick-verdict'), /3 of 7 got the whole order right/);
+  assert.equal(await tv.locator('.quick-opt .opt-rank').count(), 4);
+  assert.equal(await tv.textContent('.quick-verdict .fastest .plate'), 'Alex');
+  assert.match(await host.textContent('.host-status'), /3 of 7 got the whole order right/);
+  await alex.waitForSelector('.verdict-badge');
+  assert.match(await alex.textContent('#team'), /Right!/);
+  assert.match(await mira.textContent('#team'), /Wrong/);
+  assert.match(await mira.textContent('#team'), /The right order:/);
+  assert.deepEqual(await mira.$$eval('.right-was .opt-chip', (els) => els.map((el) => el.textContent.replace(/^\d/, '').trim())), written);
+  await tv.waitForTimeout(1500); // the rows slide in
+  await shot(tv, 'quick-tv-result-order');
+  await shot(alex, 'quick-phone-result-order-right');
+  await shot(mira, 'quick-phone-result-order-wrong');
+  await shot(host, 'quick-host-result-order');
+  await nils.context().close();
+  srv.hub.dispatch({ type: 'removeTeam', teamId: state().teams.find((tm) => tm.name === 'Nils').id });
 
   // ----- The next section's card: the standings, each with its face and place badge -----
   for (let n = 0; n < 20 && state().phase !== 'section'; n++) srv.hub.dispatch({ type: ['ready', 'open'].includes(state().phase) ? 'skip' : 'next' });
@@ -390,6 +579,31 @@ try {
   await ed.check('#q-form input[name=correct][value="0"]');
   await ed.waitForFunction(() => /not every answer can be right/.test(document.querySelector('#ed-problems').textContent));
   await ed.uncheck('#q-form input[name=correct][value="0"]');
+  // The kind of question: "Tick all that are right" keeps the marks (and there every answer may be right);
+  // "Put in order" has no marks, just the places; back to "Pick one" brings the marks back.
+  assert.equal(await ed.isChecked('.ed-kind-pills input[value=choice]'), true);
+  await ed.click('.ed-kind-pills label:has(> input[value=multi])');
+  assert.match(await ed.textContent('.ed-opts'), /Players must tick exactly these/);
+  await ed.check('#q-form input[name=correct][value="0"]');
+  await ed.waitForTimeout(200);
+  assert.doesNotMatch(await ed.textContent('#ed-problems'), /not every answer can be right/);
+  await ed.uncheck('#q-form input[name=correct][value="0"]');
+  await ed.waitForTimeout(900);
+  await ed.waitForFunction(() => document.querySelector('#ed-status').textContent === 'Saved');
+  let kinds = await (await fetch(`${base}/api/sets/${saved.id}`)).json();
+  assert.deepEqual(kinds.set.sections[0].questions[0], { question: 'Which of these is a colour?', type: 'multi', options: ['Table', 'Green', 'Red'], correct: [1, 2] });
+  await shot(ed, 'quick-editor-tick');
+  await ed.click('.ed-kind-pills label:has(> input[value=order])');
+  assert.equal(await ed.locator('.ed-opt-right:visible').count(), 0);
+  assert.deepEqual(await ed.$$eval('.ed-opt-n', (els) => els.filter((el) => !el.hidden).map((el) => el.textContent)), ['1.', '2.', '3.', '4.']);
+  assert.match(await ed.textContent('.ed-opts'), /Write the answers in the right order/);
+  await ed.waitForTimeout(900);
+  await ed.waitForFunction(() => document.querySelector('#ed-status').textContent === 'Saved');
+  kinds = await (await fetch(`${base}/api/sets/${saved.id}`)).json();
+  assert.deepEqual(kinds.set.sections[0].questions[0], { question: 'Which of these is a colour?', type: 'order', options: ['Table', 'Green', 'Red'] });
+  await shot(ed, 'quick-editor-order');
+  await ed.click('.ed-kind-pills label:has(> input[value=choice])');
+  assert.equal(await ed.locator('.ed-opt.right').count(), 2);
   await ed.click('#q-form button[value=done]');
   await ed.waitForSelector('#q-dialog:not([open])', { state: 'hidden' });
   await ed.waitForFunction(() => document.querySelectorAll('.ed-qrow[data-c="0"][data-i="0"] .ed-qright').length === 2);
