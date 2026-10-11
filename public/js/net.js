@@ -6,9 +6,11 @@ export function connect({ role, teamId = () => null, onMessage, onStatus = () =>
   let delay = 500;
   let retry = null;
   let clockOffset = 0; // server time − our time, for countdowns
+  let stopped = false; // the server said goodbye (the host quit ProQuiz): no more reconnecting
 
   function open() {
     clearTimeout(retry);
+    if (stopped) return;
     ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
     ws.onopen = () => {
       delay = 500;
@@ -20,9 +22,12 @@ export function connect({ role, teamId = () => null, onMessage, onStatus = () =>
       // Fair buzzing: the server measures our clock. Answer at once with a stopwatch that never jumps.
       if (msg.type === 'clock') return ws.send(JSON.stringify({ type: 'clock', id: msg.id, t: performance.now() }));
       if (msg.serverNow) clockOffset = msg.serverNow - Date.now();
+      // ProQuiz was quit on the host laptop: the page shows that and never tries to connect again.
+      if (msg.type === 'bye') stopped = true;
       onMessage(msg);
     };
     ws.onclose = () => {
+      if (stopped) return;
       onStatus(false);
       retry = setTimeout(open, delay);
       delay = Math.min(delay * 2, 5000);

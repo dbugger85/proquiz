@@ -16,7 +16,8 @@ import { startServer } from '../server.js';
 const shots = fileURLToPath(new URL('./screenshots', import.meta.url));
 mkdirSync(shots, { recursive: true });
 
-const srv = await startServer({ port: 3456, quiet: true, dataDir: mkdtempSync(join(tmpdir(), 'proquiz-e2e-')) });
+const dataDir = mkdtempSync(join(tmpdir(), 'proquiz-e2e-'));
+const srv = await startServer({ port: 3456, quiet: true, dataDir });
 const base = `http://127.0.0.1:${srv.info.port}`;
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM || '/usr/bin/chromium' });
 const errors = [];
@@ -931,6 +932,47 @@ try {
   await host.waitForSelector('#help:not([hidden])');
   assert.match(await host.textContent('#help'), /Tastatur/);
   await shot(host, 'no-host-2-help');
+  await host.keyboard.press('Escape');
+  await host.waitForSelector('#help[hidden]', { state: 'attached' });
+
+  // ----- Quit ProQuiz: during a game it lives behind Main menu → the lobby, at the bottom of the settings -----
+  assert.equal(await host.isHidden('#quit-btn'), true, 'no quit button during a game');
+  await host.click('#menu-btn');
+  await answerModal(host);
+  await host.waitForSelector('body[data-phase=lobby]');
+  await pickPill(host, 'lang', 'en');
+  await tv.waitForFunction(() => document.body.textContent.includes('Scan to join'));
+  await scrollArea(host, 'end');
+  await host.click('#quit-btn');
+  await host.waitForSelector(MODAL);
+  assert.match(await host.textContent(MODAL), /Quit ProQuiz\?/);
+  assert.match(await host.textContent(MODAL), /The game is saved, and you can continue it next time/);
+  await host.waitForTimeout(400); // the dialog fades in
+  await shot(host, 'host-quit');
+  // Cancel: nothing happens, the server runs on.
+  await answerModal(host, false);
+  await host.waitForTimeout(300);
+  assert.equal(srv.hub.getState().phase, 'lobby');
+  assert.equal(await host.isHidden('#stopped'), true);
+  // OK: the game is saved, the host page says ProQuiz has stopped, the TV and the phones that the game has ended,
+  // and nobody tries to connect again (a reconnect attempt would log a WebSocket error, caught by `errors`).
+  await host.click('#quit-btn');
+  await answerModal(host);
+  await host.waitForSelector('#stopped:not([hidden])');
+  assert.match(await host.textContent('#stopped'), /ProQuiz has stopped\./);
+  assert.match(await host.textContent('#stopped'), /start ProQuiz again/);
+  await shot(host, 'host-stopped');
+  for (const pg of [tv, ...phones]) {
+    await pg.waitForSelector('#stopped:not([hidden])');
+    assert.match((await pg.textContent('#stopped')).replace(/\s+/g, ' '), /The game has ended\. The host closed ProQuiz\./);
+  }
+  await shot(tv, 'tv-stopped');
+  await shot(red, 'phone-stopped');
+  await waitFor(() => !srv.server.listening, 3000); // the port is let go
+  const autosaved = JSON.parse(readFileSync(join(dataDir, 'autosave.json'), 'utf8'));
+  assert.ok(autosaved.state.teams.length >= 3, 'the game with its teams is saved for next time');
+  await host.waitForTimeout(1500); // long enough for the old 500 ms reconnect to have shown up as an error
+  assert.equal(await red.isHidden('#offline'), true, 'no "Reconnecting…" on the phones');
 
   assert.deepEqual(errors, []);
   console.log('e2e: all good. Screenshots in test/screenshots/');

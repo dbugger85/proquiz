@@ -5,8 +5,8 @@ import { t, pts, setLang, translatePage, fastestTitle, secondsText, licenseName 
 import { $, h, fill, qrSvg, shortUrl, urlNodes, countdown, runCountdowns, teamStyle, setGlass, shapeSvg, optionStyle, timerTotal, setBrand, brandLogo, longWord } from './ui.js';
 import { unlockAudio, audioReady, playEvent, playSound, startTicks, sounds, setSoundVolume } from './sounds.js';
 import { animateRanks, cancelRanks, countTo, shownCount, setTickSound, reducedMotion } from './rankanim.js';
-import { syncClip, preloadClips } from './clip.js';
-import { syncMusic } from './music.js';
+import { syncClip, preloadClips, stopClip } from './clip.js';
+import { syncMusic, stopMusic } from './music.js';
 import { ICONS, ruleFor, badgeFor } from './specials.js';
 import { avatarEl } from './avatar.js';
 
@@ -32,6 +32,7 @@ const net = connect({
     if (msg.type === 'welcome') info = msg.info;
     if (msg.type === 'sound') playSound(view, msg, COLORS);
     if (msg.type === 'reaction') showReaction(msg);
+    if (msg.type === 'bye') return stopped(); // the host quit ProQuiz
     if (msg.type === 'state') {
       view = msg.view;
       connected = new Set(msg.connected);
@@ -50,6 +51,16 @@ const net = connect({
 runCountdowns(net.now);
 startTicks(() => view, net.now);
 setTickSound((p) => view?.settings.sound && sounds.countTick(p)); // points counting up
+
+// The host quit ProQuiz: one plain message, no sound or music, and net.js never connects again.
+function stopped() {
+  stopMusic();
+  stopClip();
+  view = null; // so the music and tick timers stay quiet
+  $('#sound-unlock').hidden = true;
+  $('#stopped').hidden = false;
+  translatePage();
+}
 
 // The TV plays the sounds. Browsers need one click or key press first.
 function showUnlock() {

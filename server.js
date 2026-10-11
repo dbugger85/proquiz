@@ -299,7 +299,7 @@ const PIN_TRIES_PER_MINUTE = 10;
 // Holds the one game and everyone connected to it. `tunnel` (lib/tunnel.js) is the internet tunnel, if any,
 // `updates` (lib/update.js) the "a new version is out" check, asked when a host page connects, and `selfUpdate`
 // (lib/selfupdate.js) the "Update now" of the compiled program. `hostInfo` goes in the host's welcome only.
-export function createHub({ set, info, hostInfo = {}, saved = null, save = () => {}, store = null, tunnel = null, brand = null, updates = null, selfUpdate = null }) {
+export function createHub({ set, info, hostInfo = {}, saved = null, save = () => {}, store = null, tunnel = null, brand = null, updates = null, selfUpdate = null, onQuit = () => {} }) {
   // A new game keeps the settings and the quiz from last time. A saved game with teams can be resumed from the lobby.
   const lastSet = saved?.state?.set && validateSet(saved.state.set).length === 0 ? saved.state : null;
   let state = newGame(lastSet ? lastSet.set : set, pickSettings(saved?.state?.settings), lastSet ? lastSet.setId : SAMPLE_ID);
@@ -478,6 +478,18 @@ export function createHub({ set, info, hostInfo = {}, saved = null, save = () =>
   // Main menu) or the lobby as it is goes to the autosave, so the new program offers or shows the same.
   function saveForExit() {
     save(resumable ? resumable.state : state);
+  }
+
+  // The host pressed Quit ProQuiz (only ever from a host connection, so only from this laptop, never over the
+  // tunnel): save the game to be continued next time, tell every screen goodbye (so they stop trying to connect
+  // again), and let startServer() close the listeners, stop the tunnel and end the program.
+  let quitting = false;
+  function quit() {
+    if (quitting) return;
+    quitting = true;
+    saveForExit();
+    for (const c of clients) send(c.ws, { type: 'bye' });
+    onQuit();
   }
 
   // Something that isn't part of the game (a sound, a player's reaction): goes to the TV screens (the one inside
@@ -702,6 +714,7 @@ export function createHub({ set, info, hostInfo = {}, saved = null, save = () =>
     if (c.role === 'host' && msg.type === 'updateNow') return updateNow();
     if (c.role === 'host' && msg.type === 'resume') return resume();
     if (c.role === 'host' && msg.type === 'mainMenu') return mainMenu();
+    if (c.role === 'host' && msg.type === 'quit') return quit();
     if (c.role === 'host' && msg.type === 'discardSave') {
       resumable = null;
       return broadcast();
@@ -801,8 +814,10 @@ function testUpdateOverrides() {
 // `tunnelOptions` is for tests (e.g. a pretend DNS check for a pretend cloudflared), and `pictureOptions` too
 // (a pretend `fetchImpl` instead of Openverse and Wikimedia Commons, see pictures.js), as is `updateOptions`
 // (a pretend `fetchImpl` and clock instead of GitHub's releases, see lib/update.js) and `selfUpdateOptions`
-// (a pretend compiled program, release and restart for "Update now", see lib/selfupdate.js).
-export async function startServer({ port = START_PORT, quiet = false, dataDir = DATA_DIR, tunnelOptions = {}, pictureOptions = {}, updateOptions = {}, selfUpdateOptions = {} } = {}) {
+// (a pretend compiled program, release and restart for "Update now", see lib/selfupdate.js). `onQuit` runs once the
+// host's Quit ProQuiz has saved and closed everything: the main program passes `process.exit(0)`; tests pass nothing,
+// so the server just closes.
+export async function startServer({ port = START_PORT, quiet = false, dataDir = DATA_DIR, tunnelOptions = {}, pictureOptions = {}, updateOptions = {}, selfUpdateOptions = {}, onQuit = () => {} } = {}) {
   const version = await readVersion();
   const sets = createStore(dataDir, { version }); // exports say which ProQuiz wrote them
   const brand = createBrand(dataDir);
@@ -884,7 +899,10 @@ export async function startServer({ port = START_PORT, quiet = false, dataDir = 
   const tunnel = createTunnel({ dataDir, open: openRemote, close: closeRemote, onChange: () => hub?.broadcast(), ...tunnelOptions });
   // The host's welcome also says when this program was just started by "Update now" (the banner says so).
   const hostInfo = updatedFrom ? { updatedFrom } : {};
-  hub = createHub({ set, info, hostInfo, saved, save: store.save, store: sets, tunnel, brand, updates, selfUpdate });
+  // Quit ProQuiz (the host's button): the hub has saved and said goodbye; close the listeners (the tunnel too) and,
+  // in the real program, end the process. Under an update's waiter (see lib/selfupdate.js) exit code 0 ends both.
+  const quit = () => close().then(() => setTimeout(() => onQuit(0), 300));
+  hub = createHub({ set, info, hostInfo, saved, save: store.save, store: sets, tunnel, brand, updates, selfUpdate, onQuit: quit });
   wss.on('connection', (ws, req) => hub.connect(ws, req));
   if (!quiet) {
     console.log(`\n  ProQuiz${version ? ` ${version}` : ''} is running!${updatedFrom ? ` (updated from ${updatedFrom})` : ''}\n`);
@@ -895,9 +913,11 @@ export async function startServer({ port = START_PORT, quiet = false, dataDir = 
     console.log(`  Game is saved in:    ${store.file}`);
     console.log('\n  Keep this window open while you play. Close it (or press Ctrl+C) to stop.\n');
   }
+  // Closing twice (a test's cleanup after Quit ProQuiz) waits for the same close.
+  let closing = null;
   close = () =>
-    new Promise(async (resolve) => {
-      await new Promise((r) => setTimeout(r, 300)); // let a pending autosave start
+    (closing ??= new Promise(async (resolve) => {
+      await new Promise((r) => setTimeout(r, 300)); // let a pending autosave start (and a goodbye reach the screens)
       await store.flush();
       await tunnel.stop();
       await closeRemote();
@@ -906,7 +926,7 @@ export async function startServer({ port = START_PORT, quiet = false, dataDir = 
       wss.close();
       server.close(resolve);
       server.closeAllConnections?.();
-    });
+    }));
   // openRemote is for tests: the tunnel's listener without the tunnel.
   return { server, info, hub, close, openRemote, tunnel, selfUpdate, store: sets };
 }
@@ -932,7 +952,8 @@ if (import.meta.main) {
     // Leftovers of an earlier "Update now", but not when this start *is* the update's restart: the old program
     // (ProQuiz.old) must stay until we know the new one runs, so it can be put back if not.
     if (isCompiled() && !process.env.PROQUIZ_UPDATED_FROM && !process.env.PROQUIZ_UPDATE_ERROR) await cleanupOld(process.execPath);
-    const { info } = await startServer();
+    // The host's Quit ProQuiz button ends the program (code 0, so an update's waiter ends too).
+    const { info } = await startServer({ onQuit: (code = 0) => process.exit(code) });
     // Started by "Update now" on the same port as before: the host page that asked for it connects again by itself,
     // so no second browser tab.
     const sameTab = process.env.PROQUIZ_UPDATED_FROM && info.port === Number(process.env.PORT);

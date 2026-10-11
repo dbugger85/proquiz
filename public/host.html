@@ -241,10 +241,17 @@
         </details>
         <!-- Which ProQuiz this is (from the server's welcome) -->
         <p id="about-line" class="about-line" hidden></p>
+        <!-- Stops the program on this laptop (after ProQuiz's own question). Down here so it isn't hit by accident. -->
+        <p class="quit-row"><button id="quit-btn" class="btn btn-small btn-quiet" type="button" data-t="quitBtn"></button></p>
       </form>
     </section>
 
     <section id="game" hidden></section>
+  </div>
+  <!-- After Quit ProQuiz: the server said goodbye, and this page never connects again -->
+  <div id="stopped" class="stopped" hidden>
+    <h1 data-t="stoppedTitle"></h1>
+    <p data-t="stoppedText"></p>
   </div>
   <div id="help" class="help" hidden></div>
   <button id="sound-unlock" class="sound-unlock" type="button" data-t="tapForSound" hidden></button>

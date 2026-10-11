@@ -61,6 +61,11 @@ const net = connect({
       view = msg.view;
       needPin = Boolean(msg.needPin);
       brand = msg.brand ?? null;
+    } else if (msg.type === 'bye') {
+      // The host quit ProQuiz: one plain message, and net.js never connects again.
+      $('#stopped').hidden = false;
+      translatePage();
+      return;
     }
     render();
   },

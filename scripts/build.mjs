@@ -37,6 +37,8 @@ const START_HERE = {
    (ProQuiz isn't signed by Microsoft, which costs money. It is safe.)
 4. When Windows asks about network access, click "Allow". Phones can't connect without it.
 5. A black window opens and your web browser shows the host screen. Keep the black window open while you play.
+6. To stop ProQuiz when you are done, click "Quit ProQuiz" at the bottom of the host screen's settings
+   (closing the black window works too). The game is saved, so you can continue it next time.
 
 Your quizzes and the autosave are kept in the ProQuiz folder in your user folder.
 
@@ -57,6 +59,8 @@ Players who aren't in the room can join over the internet: in the lobby, open "H
    If there is no "Open" button: System Settings > Privacy & Security > "Open Anyway".)
 2. A Terminal window opens and your web browser shows the host screen. Keep the Terminal window open while you play.
 3. If macOS asks whether ProQuiz may accept incoming network connections, click "Allow".
+4. To stop ProQuiz when you are done, click "Quit ProQuiz" at the bottom of the host screen's settings
+   (closing the Terminal window works too). The game is saved, so you can continue it next time.
 
 Use "mac-apple-silicon" for Macs from late 2020 onwards (M1, M2, …) and "mac-intel" for older Macs.
 Your quizzes and the autosave are kept in the ProQuiz folder in your home folder.
@@ -76,6 +80,8 @@ Then the QR code is the internet one. The laptop needs internet.
 
 1. Run ./ProQuiz in a terminal (or double-click it, if your file manager runs programs).
 2. Your web browser opens the host screen. Keep the terminal open while you play.
+3. To stop ProQuiz when you are done, click "Quit ProQuiz" at the bottom of the host screen's settings
+   (closing the terminal or Ctrl+C works too). The game is saved, so you can continue it next time.
 
 Your quizzes and the autosave are kept in ~/ProQuiz.
 

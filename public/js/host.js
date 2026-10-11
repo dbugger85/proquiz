@@ -62,11 +62,23 @@ const net = connect({
       playSound(view, msg, COLORS);
     } else if (msg.type === 'error') {
       showError(t(`err-${msg.code}`));
+    } else if (msg.type === 'bye') {
+      stopped(); // Quit ProQuiz: the server has saved and is closing
     }
   },
 });
 runCountdowns(net.now);
 startTicks(() => (displays === 0 ? view : null), net.now);
+
+// After Quit ProQuiz: one plain message over everything, no sound or music, no keys, and net.js never connects again.
+function stopped() {
+  stopMusic();
+  stopClip();
+  view = null; // the music and tick timers stay quiet, and handleKey() does nothing
+  $('#sound-unlock').hidden = true;
+  $('#stopped').hidden = false;
+  translatePage();
+}
 
 function showUnlock() {
   $('#sound-unlock').hidden = !(view?.settings.sound || view?.settings.music) || displays > 0 || audioReady();
@@ -653,6 +665,10 @@ $('#test-sound').addEventListener('click', () => net.send({ type: 'testSound' })
 $('#resume-yes').addEventListener('click', () => net.send({ type: 'resume' }));
 $('#resume-no').addEventListener('click', () => net.send({ type: 'discardSave' }));
 // Leave the game for the main menu. It is kept, and the lobby offers to continue it.
+// Quit ProQuiz (under the lobby's settings): stops the program on this laptop. The game is saved first.
+$('#quit-btn').addEventListener('click', async () => {
+  if (await ask({ title: t('dlgQuitTitle'), text: t('confirmQuit'), ok: t('dlgQuitOk'), danger: true })) net.send({ type: 'quit' });
+});
 $('#menu-btn').addEventListener('click', async () => {
   if (await ask({ title: t('dlgMainMenuTitle'), text: t('confirmMainMenu'), ok: t('dlgMainMenuOk') })) net.send({ type: 'mainMenu' });
 });

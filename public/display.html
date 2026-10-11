@@ -34,6 +34,11 @@
   <!-- Players' emoji reactions (Quick quiz) float up over everything -->
   <div id="reactions" class="tv-reactions" aria-hidden="true"></div>
   <div id="sound-unlock" class="sound-unlock" data-t="tapForSound" hidden></div>
+  <!-- The host quit ProQuiz: the server said goodbye, and this page never connects again -->
+  <div id="stopped" class="stopped" hidden>
+    <h1 data-t="endedTitle"></h1>
+    <p data-t="endedText"></p>
+  </div>
 
   <script type="module" src="/js/display.js"></script>
 </body>

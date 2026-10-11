@@ -54,6 +54,11 @@
   </main>
 
   <div id="offline" class="offline-banner" data-t="reconnecting" hidden>Reconnecting…</div>
+  <!-- The host quit ProQuiz: the server said goodbye, and this page never connects again -->
+  <div id="stopped" class="stopped" hidden>
+    <h1 data-t="endedTitle"></h1>
+    <p data-t="endedText"></p>
+  </div>
 
   <script type="module" src="/js/phone.js"></script>
 </body>

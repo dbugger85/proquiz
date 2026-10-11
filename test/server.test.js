@@ -605,3 +605,62 @@ test('another website open in the laptop browser can not use the editor API or b
   ws.close();
   assert.equal(reply.type, 'error');
 });
+
+test('Quit ProQuiz: only the host can; the game is saved, every screen gets bye, the listeners close and onQuit runs', async () => {
+  const quitDir = mkdtempSync(join(tmpdir(), 'proquiz-quit-'));
+  const quits = [];
+  const q = await startServer({ port: 3471, quiet: true, dataDir: quitDir, onQuit: (code) => quits.push(code) });
+  const remotePort = await q.openRemote(); // the tunnel's listener, without a tunnel
+  const was = url;
+  url = `ws://127.0.0.1:${q.info.port}/ws`;
+  try {
+    const host = await client('host');
+    const tv = await client('display');
+    const red = await phone('Quit Red', COLORS[0]);
+    await host.wait((m) => m.type === 'state' && m.view.teams.length === 1);
+    host.send({ type: 'cmd', action: { type: 'adjust', teamId: red.teamId, delta: 400 } });
+    await host.wait((m) => m.type === 'state' && m.view.teams[0]?.score === 400);
+
+    // A phone, the TV and anyone over the tunnel's listener can't quit: nothing happens.
+    url = `ws://127.0.0.1:${remotePort}/ws`;
+    const far = await client('phone');
+    const farHost = await client('host'); // refused as a host (host-only-on-laptop), so not a host at all
+    assert.equal(farHost.msgs.find((m) => m.type === 'error')?.code, 'host-only-on-laptop');
+    url = `ws://127.0.0.1:${q.info.port}/ws`;
+    for (const c of [red, tv, far, farHost]) c.send({ type: 'quit' });
+    await new Promise((r) => setTimeout(r, 500));
+    assert.deepEqual(quits, []);
+    assert.equal(q.hub.getState().teams[0].score, 400);
+    assert.equal([host, tv, red, far].some((c) => c.msgs.some((m) => m.type === 'bye')), false);
+    const still = await client('display'); // the server is still listening
+    still.close();
+
+    // The host quits: saved, goodbye to everyone, the ports let go, and the program is told to end with code 0.
+    const closes = Promise.all([host, tv, red, far].map((c) => new Promise((r) => (c.ws.onclose = r))));
+    host.send({ type: 'quit' });
+    for (const c of [host, tv, red, far]) await c.wait((m) => m.type === 'bye');
+    await closes;
+    const file = join(quitDir, 'autosave.json');
+    assert.ok(existsSync(file));
+    assert.equal(JSON.parse(readFileSync(file, 'utf8')).state.teams[0].score, 400);
+    await new Promise((r) => setTimeout(r, 400));
+    assert.deepEqual(quits, [0]);
+    for (const port of [q.info.port, remotePort]) {
+      await assert.rejects(
+        new Promise((resolve, reject) => {
+          const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+          ws.onopen = () => resolve(ws.close());
+          ws.onerror = () => reject(new Error('closed'));
+        }),
+        /closed/,
+        `port ${port} no longer answers`,
+      );
+    }
+    // A second quit changes nothing, and closing again (a test's cleanup) is fine.
+    await q.close();
+    assert.deepEqual(quits, [0]);
+  } finally {
+    url = was;
+    await q.close();
+  }
+});

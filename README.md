@@ -81,6 +81,8 @@ A party quiz for the people in the room. A laptop runs the game, a TV shows it, 
 
 Download the zip for your computer from the [latest release](https://github.com/dbugger85/proquiz/releases/latest) and unzip it. There's nothing to install. Each zip has a "START HERE" note.
 
+**Stopping:** closing your browser doesn't stop ProQuiz. Click **Quit ProQuiz** at the bottom of the host screen's settings (during a game: **Main menu** first); the game is saved, the phones and the TV say the host closed ProQuiz, and the program ends. Closing the black (or Terminal) window stops it too.
+
 **New versions:** ProQuiz tells you in the lobby when one is out. Click **Update now** and it downloads the new version, checks it and restarts itself; the host page connects again by itself and your quizzes and settings stay where they are. The window ProQuiz runs in (the black window on Windows, the Terminal window on a Mac) stays, and closing it still stops ProQuiz. The old program is kept next to the new one as `ProQuiz.old` until the next start, and if anything goes wrong ProQuiz says so and keeps running as before; **Download** then opens the release page so you can do it by hand. You can turn the version check off under **Look and branding**.
 
 | Computer | Download |
@@ -146,7 +148,7 @@ Download the file, then click **Import** in the editor:
 These steps are the same for both kinds of quiz.
 
 1. **Wi-Fi:** connect the laptop and all the phones to the **same Wi-Fi**.
-2. **Start** ProQuiz. Keep its black (or Terminal) window open while you play.
+2. **Start** ProQuiz. Keep its black (or Terminal) window open while you play. When you are done, click **Quit ProQuiz** at the bottom of the host screen's settings (closing the black window works too): the game is saved, so you can continue it next time.
 3. **TV:** the TV screen is a web page, so you can show it in two ways.
    - **With a cable:** connect the laptop to the TV as a **second screen** (extend, not mirror). On the host screen click **Open TV screen**, drag that window onto the TV, and press **F** for full screen. Click the TV screen once so it's allowed to play sound.
    - **On another device on the same Wi-Fi** (an iPad, another computer, or a smart TV with a web browser): open the TV address in its browser. ProQuiz prints that address when it starts, and the host lobby shows it under the QR code (something like `192.168.1.23:3000/display`). Tap the screen once to turn on the sound. As soon as it connects, the laptop shows the host view with the answers, instead of the TV view.
