@@ -76,5 +76,22 @@ A Jeopardy-style quiz for teams in one room. The host laptop runs the game, a TV
 
 - Quit ProQuiz (asked for by the user on 2026-10-11: closing the browser didn't stop the program): a quiet **Quit ProQuiz** button at the very bottom of the lobby's settings, under the version line (during a game: **Main menu** first, so it can't be hit by accident). ProQuiz asks first ("Quit ProQuiz? The game is saved, and you can continue it next time. Players' phones and the TV screen lose the connection."), then saves the game, says goodbye to every screen and ends the program. The host page says "ProQuiz has stopped. You can close this tab. To play again, start ProQuiz again."; the TV and the phones say "The game has ended. The host closed ProQuiz." and stop trying to reconnect. Only from the laptop, never over the internet tunnel. The START HERE notes and the README name the button as the way to stop (closing the window still works too).
 
+## Status and open items (2026-10-11)
+
+**Latest release: v2.3.1** (Quit button). Releases this weekend: 2.0.0, 2.0.1, 2.0.2, 2.1.0 (picture search), 2.2.0 (tick-all / put-in-order questions, reactions, 100 players, 16 colours), 2.2.1 (icon, new-version notice, review fixes), 2.3.0 (Update now, louder defaults, archive, quiz description and cover, versioned export), 2.3.1 (Quit ProQuiz).
+
+**How to release:** bump with `npm version X.Y.Z --no-git-tag-version`, commit, push, `npm run build`, then `gh release create vX.Y.Z dist/* --title "ProQuiz X.Y.Z" --notes-file <notes> --latest`. Upload **everything in dist/**, including `SHA256SUMS.txt`, or Update now refuses the release. Start the notes with one friendly summary sentence: the lobby's update banner shows the first paragraph.
+
+**Waiting for the owner:**
+- The Windows test of **Update now**: install 2.3.0 by hand (from the v2.3.0 release page, not "latest"), press Update now, check that the black window stays, the page says "ProQuiz was updated to 2.3.1", `ProQuiz.old.exe` appears, and Quit ProQuiz stops it. Also note any SmartScreen or firewall prompt.
+- Whether the new icon looks right on `ProQuiz.exe` in Windows.
+- The loudness of the new 80 % defaults, by ear.
+
+**Never tried on real hardware:** the Mac builds (and Update now on a Mac), internet play on Windows and Mac, more than 30 real phones on a real router (marked experimental in the lobby), reactions on a smart TV browser, the buzz notes of the 8 new colours, and the new Norwegian texts read by a native speaker.
+
+**Decided against for now:** hosting ProQuiz as a website (the owner said "Let's not go online for now", 2026-10-11; if it comes back, start with rooms with join codes, quizzes kept in the host's browser, and no accounts). A Mac `.app` with its own icon and a Linux desktop shortcut were left out because they can't be tested here.
+
+**Review screenshots:** 300 numbered screenshots of every screen are in `~/Work/proquiz-review/index.html` (outside the repo). They were made by scripts in a session scratchpad that is gone after the session, so make new ones the same way if needed: a Playwright script per area that starts `startServer()` on its own port with a temporary data folder, joins pretend players and numbers each shot.
+
 ## Later
 Showing the board quiz's questions on the phones for players elsewhere, a time limit for picking, sound files instead of synthesized sounds, filling the empty spots of a quick quiz with AI.
