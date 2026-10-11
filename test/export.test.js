@@ -18,8 +18,8 @@ const credit = (title) => ({ title, author: 'Ada', license: 'CC BY 4.0', license
 const small = (title, extra = {}) => ({ v: 1, title, categories: [{ name: 'A', questions: [{ value: 100, question: 'q', answer: 'a' }] }], ...extra });
 const filesIn = (store, names) => Object.fromEntries(names.map((n) => [n, readFileSync(join(store.filesDir, n))]));
 
-// A board quiz with everything: round 2, final, specials, pictures (question and answer), a clip with a start time,
-// a slowly appearing picture, credits, a description and a cover.
+// A board quiz with everything: round 2, final, specials, pictures (question and answer), a trimmed clip (start and length),
+// a slowly appearing picture (as a blur), credits, a description and a cover.
 async function fullBoard(store) {
   const pic = (n, ext = 'png') => store.addFile(`p${n}.${ext}`, bytes(n));
   const [cover, q1, a1, r2, fin, finA] = await Promise.all([pic(1, 'jpg'), pic(2), pic(3), pic(4, 'webp'), pic(5), pic(6)]);
@@ -33,8 +33,8 @@ async function fullBoard(store) {
       {
         name: 'A',
         questions: [
-          { value: 100, question: 'q1', answer: 'a1', image: q1.name, answerImage: a1.name, unveil: 10 },
-          { value: 200, question: 'q2', answer: 'a2', audio: clip.name, audioStart: 2.5, special: 'triple' },
+          { value: 100, question: 'q1', answer: 'a1', image: q1.name, answerImage: a1.name, unveil: 10, unveilStyle: 'blur' },
+          { value: 200, question: 'q2', answer: 'a2', audio: clip.name, audioStart: 2.5, audioLength: 12, special: 'triple' },
         ],
       },
       { name: 'B', questions: [{ value: 100, question: 'q3', answer: 'a3', special: 'bomb' }] },
@@ -47,7 +47,7 @@ async function fullBoard(store) {
   return { set, names: [cover.name, q1.name, a1.name, r2.name, fin.name, finA.name, clip.name] };
 }
 
-// A Quick quiz with all three kinds of question, pictures, a clip, a cover and a description.
+// A Quick quiz with all three kinds of question, pictures (two of them appearing slowly, one as a blur), a clip, a cover and a description.
 async function fullQuick(store) {
   const [cover, p1, p2] = await Promise.all([store.addFile('c.png', bytes(11)), store.addFile('p1.gif', bytes(12)), store.addFile('p2.png', bytes(13))]);
   const clip = await store.addFile('clip.ogg', bytes(14, 1500));
@@ -62,9 +62,9 @@ async function fullQuick(store) {
         name: 'S',
         seconds: 15,
         questions: [
-          { question: 'pick', options: ['a', 'b', 'c'], correct: 1, image: p1.name },
-          { question: 'tick', type: 'multi', options: ['a', 'b', 'c', 'd'], correct: [0, 2], points: 2000, audio: clip.name, audioStart: 1 },
-          { question: 'order', type: 'order', options: ['1', '2', '3'], image: p2.name, seconds: 30 },
+          { question: 'pick', options: ['a', 'b', 'c'], correct: 1, image: p1.name, unveil: 12, unveilStyle: 'blur' },
+          { question: 'tick', type: 'multi', options: ['a', 'b', 'c', 'd'], correct: [0, 2], points: 2000, audio: clip.name, audioStart: 1, audioLength: 0.5 },
+          { question: 'order', type: 'order', options: ['1', '2', '3'], image: p2.name, seconds: 30, unveil: 8 },
         ],
       },
     ],
@@ -91,6 +91,7 @@ test('a board quiz with everything survives export and import, its files byte fo
   assert.match(pkg.exported, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d/);
   assert.deepEqual(Object.keys(pkg.files).sort(), [...names].sort());
   assert.deepEqual(pkg.set, saved);
+  assert.equal(saved.categories[0].questions[0].unveilStyle, 'blur');
 
   const to = createStore(dir());
   const { ids } = await to.importPackage(JSON.parse(JSON.stringify(pkg)));
@@ -108,6 +109,7 @@ test('a Quick quiz with every kind of question survives export and import the sa
   const saved = (await from.get(id)).set;
   assert.deepEqual(Object.keys(saved).slice(0, 5), ['v', 'kind', 'title', 'description', 'cover']);
   assert.deepEqual(saved.sections[0].questions.map((q) => q.type), [undefined, 'multi', 'order']);
+  assert.deepEqual(saved.sections[0].questions.map((q) => [q.unveil, q.unveilStyle]), [[12, 'blur'], [undefined, undefined], [8, undefined]]);
   const pkg = await from.exportPackage(id);
   assert.deepEqual(Object.keys(pkg.files).sort(), [...names].sort());
   const to = createStore(dir());
@@ -316,4 +318,39 @@ test('an old save still at the old music default (35) moves to 80, once; other v
   } finally {
     await srv.close();
   }
+});
+
+test('a quiz with extra languages exports and imports with its translations; one without stays byte for byte as before', async () => {
+  const from = createStore(dir(), { version: '2.4.0' });
+  const { set } = await fullBoard(from);
+  Object.assign(set, { lang: 'en', languages: ['no', 'th'], translations: { no: { title: 'Alt', description: 'Linje én.' } } });
+  set.categories[0].translations = { no: { name: 'A-no' } };
+  set.categories[0].questions[0].translations = { no: { question: 'q1-no', answer: 'a1-no' }, th: { question: 'q1-th' } };
+  set.round2.categories[0].translations = { th: { name: 'R2-th' } };
+  set.final.translations = { no: { category: 'F-no', question: 'fq-no', answer: 'fa-no' } };
+  const id = await from.create(set);
+  const pkg = await from.exportPackage(id);
+  assert.equal(pkg.proquiz, FORMAT_VERSION, 'optional fields keep the version');
+  const to = createStore(dir(), { version: '2.4.0' });
+  const { ids } = await to.importPackage(JSON.parse(JSON.stringify(pkg)));
+  const back = (await to.get(ids[0])).set;
+  assert.deepEqual(back, (await from.get(id)).set);
+  assert.deepEqual(back.languages, ['no', 'th']);
+  assert.deepEqual(back.categories[0].questions[0].translations, { no: { question: 'q1-no', answer: 'a1-no' }, th: { question: 'q1-th' } });
+  assert.deepEqual(back.final.translations.no, { category: 'F-no', question: 'fq-no', answer: 'fa-no' });
+  // A Quick quiz too, with the options by index.
+  const { set: quick } = await fullQuick(from);
+  Object.assign(quick, { lang: 'en', languages: ['no'] });
+  quick.sections[0].translations = { no: { name: 'S-no' } };
+  quick.sections[0].questions[0].translations = { no: { question: 'pick-no', options: ['a-no', '', 'c-no'] } };
+  const qid = await from.create(quick);
+  const { ids: qids } = await to.importPackage(JSON.parse(JSON.stringify(await from.exportPackage(qid))));
+  const qback = (await to.get(qids[0])).set;
+  assert.deepEqual(qback.sections[0].questions[0].translations, { no: { question: 'pick-no', options: ['a-no', '', 'c-no'] } });
+  // The same quiz without any languages: the saved file has none of the new fields and is exactly what it was before.
+  const plain = (await fullBoard(from)).set;
+  const plainId = await from.create(plain);
+  const file = JSON.parse(readFileSync(join(from.filesDir, '..', 'sets', `${plainId}.json`), 'utf8'));
+  assert.deepEqual(Object.keys(file), ['v', 'title', 'description', 'cover', 'categories', 'round2', 'final', 'credits']);
+  assert.doesNotMatch(JSON.stringify(file), /"lang"|"languages"|"translations"/);
 });

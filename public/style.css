@@ -50,8 +50,11 @@
   --bad: #ff4d6d;
   --focus: #9ee8ff;
 
-  --display: 'Unbounded', system-ui, sans-serif;
-  --text: 'Atkinson', system-ui, sans-serif;
+  /* The bundled fonts have Latin, Greek and Cyrillic letters only. For a quiz in another language (Thai, Arabic,
+     Hindi, Chinese, …) the browser takes the missing letters from the system fonts named here (or any it has for
+     that script), so text never shows as boxes. */
+  --display: 'Unbounded', system-ui, 'Segoe UI', 'Noto Sans', 'Noto Sans Thai', 'Leelawadee UI', 'Thonburi', 'Noto Sans Arabic', 'Noto Naskh Arabic', 'Noto Sans Devanagari', 'Noto Sans Ethiopic', 'Noto Sans CJK SC', 'Noto Sans CJK JP', 'Noto Sans CJK KR', 'Noto Sans KR', 'Noto Sans SC', 'Noto Sans JP', 'Hiragino Sans', 'Microsoft YaHei', 'Malgun Gothic', 'Yu Gothic', 'Nirmala UI', 'Tahoma', sans-serif;
+  --text: 'Atkinson', system-ui, 'Segoe UI', 'Noto Sans', 'Noto Sans Thai', 'Leelawadee UI', 'Thonburi', 'Noto Sans Arabic', 'Noto Naskh Arabic', 'Noto Sans Devanagari', 'Noto Sans Ethiopic', 'Noto Sans CJK SC', 'Noto Sans CJK JP', 'Noto Sans CJK KR', 'Noto Sans KR', 'Noto Sans SC', 'Noto Sans JP', 'Hiragino Sans', 'Microsoft YaHei', 'Malgun Gothic', 'Yu Gothic', 'Nirmala UI', 'Tahoma', sans-serif;
 
   --r-s: 10px; /* small controls */
   --r-m: 16px; /* plates, tiles */
@@ -776,6 +779,12 @@ details.settings-group:not([open]) {
 .picker-row select {
   flex: 1 1 15rem;
   min-width: 0;
+}
+/* New quiz and Edit stay together: on a narrow panel both move under the picker as one row. */
+.picker-actions {
+  display: inline-flex;
+  gap: 0.5rem;
+  flex: none;
 }
 .btn-small {
   min-height: 48px;
@@ -2510,8 +2519,10 @@ fieldset.pill-field legend {
 .ed-main {
   min-height: 0;
   overflow-y: auto;
+  scrollbar-gutter: stable; /* room for the scroll bar is always kept, so nothing moves when it comes or goes */
 }
 .ed-side {
+  overflow-x: hidden; /* never a sideways scroll bar: the rows below are built so they can't be wider anyway */
   border-right: 1px solid var(--edge);
   background: rgb(var(--deep-0-rgb) / 0.55);
   padding: 1.25rem;
@@ -2529,10 +2540,26 @@ fieldset.pill-field legend {
   color: inherit;
   cursor: default;
 }
+/* New quiz and Import side by side, Make questions with AI across the whole width under them */
 .ed-side-actions {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 0.5rem;
-  flex-wrap: wrap;
+}
+.ed-side-actions .btn {
+  min-width: 0;
+  max-width: 100%;
+  padding-inline: 0.6rem;
+  text-align: center;
+}
+.ed-side-actions #ai-quiz {
+  grid-column: 1 / -1;
+}
+/* Export all quizzes sits at the very bottom of the column, under the list */
+.ed-export-all {
+  align-self: flex-start;
+  max-width: 100%;
+  margin-top: auto;
 }
 .ed-list {
   list-style: none;
@@ -2556,14 +2583,42 @@ fieldset.pill-field legend {
 }
 .ed-archive {
   flex: none;
-  white-space: nowrap;
-  font-size: 0.85rem;
+  display: grid;
+  place-items: center;
+  width: 48px; /* the tap target stays 48px, only the icon is small */
+  height: 48px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
 }
+.ed-archive svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.ed-archive:hover,
+.ed-archive:focus-visible {
+  color: var(--ink);
+  background: rgb(255 255 255 / 0.08);
+}
+/* The quiz button: a grid whose one column can shrink to nothing (minmax(0, 1fr)), so a long title, a long
+   description or a cover picture never makes the list wider than its column (which would push Archive out of
+   sight behind a scroll bar). The cover is a slim banner across the top of the row, so the words keep the
+   whole width under it (a thumbnail beside them left too little room in this narrow column). */
 .ed-item {
   width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 0.7rem;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  row-gap: 0.45rem;
   text-align: left;
   padding: 0.7rem 0.9rem;
   border-radius: var(--r-m);
@@ -2578,34 +2633,43 @@ fieldset.pill-field legend {
   background: var(--glass-hi);
   border-color: var(--edge);
 }
-.ed-item-title {
-  font-weight: 700;
-}
-.ed-item-sub {
-  font-size: 0.85rem;
-  color: var(--muted);
-}
-.ed-item-sub.bad {
-  color: var(--bad);
-}
 .ed-item-text {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.15rem;
   min-width: 0;
 }
-.ed-item-thumb {
-  width: 44px;
-  height: 44px;
-  flex: none;
-  object-fit: cover;
-  border-radius: var(--r-s);
-  background: var(--glass);
+/* The title keeps to two lines (then …), and a long word is broken rather than sticking out. */
+.ed-item-title {
+  font-weight: 700;
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
 }
+.ed-item-sub,
 .ed-item-desc {
   font-size: 0.85rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.ed-item-sub {
+  color: var(--muted);
+}
+.ed-item-sub.bad {
+  color: var(--bad);
+}
+.ed-item-thumb {
+  display: block;
+  width: 100%;
+  height: 52px;
+  object-fit: cover;
+  border-radius: var(--r-s);
+  border: 1px solid var(--edge);
+  background: var(--glass);
 }
 /* Archived quizzes: folded at the bottom of the list */
 .ed-archived {
@@ -2628,9 +2692,12 @@ fieldset.pill-field legend {
 /* Description and cover picture, under the quiz name */
 .ed-about {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(240px, 340px);
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 320px);
   gap: 1rem 1.5rem;
   align-items: start;
+}
+.ed-about .ed-media img {
+  max-height: 90px;
 }
 @media (max-width: 800px) {
   .ed-about {
@@ -2665,11 +2732,41 @@ fieldset.pill-field legend {
 }
 
 .ed-main {
-  padding: 1.5rem 2rem 3rem;
+  padding: 1.25rem 1.75rem 3rem;
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 1.1rem;
   min-width: 0;
+}
+/* "About the quiz": the description, the cover picture and the languages, folded under the name with a one-line
+   status, so the questions start right under the name. */
+.ed-fold {
+  padding: 0 1.25rem;
+  border-radius: var(--r-m);
+  background: var(--glass);
+  border: 1px solid var(--edge);
+}
+.ed-fold > summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.9rem;
+  min-height: 48px;
+  padding: 0.3rem 0;
+  cursor: pointer;
+}
+.ed-fold > summary > b {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+.ed-fold-status {
+  color: var(--muted);
+}
+.ed-fold-body {
+  display: grid;
+  gap: 1rem;
+  padding: 0.25rem 0 1.25rem;
 }
 .ed-main h2 {
   font-size: 1.1rem;
@@ -2805,10 +2902,6 @@ fieldset.pill-field legend {
 .ed-tile.ai-filled {
   border: 1px dashed #7fe1ff;
 }
-.ed-special-hint {
-  display: block;
-  margin: -0.4rem 0 0.8rem;
-}
 .ed-tile.blank span {
   color: var(--muted);
 }
@@ -2852,7 +2945,7 @@ fieldset.pill-field legend {
 }
 
 .ed-dialog {
-  width: min(860px, calc(100vw - 2rem));
+  width: min(1100px, calc(100vw - 2rem)); /* wide on a laptop or TV: the words left, the media right */
   max-height: calc(100vh - 2rem);
   overflow: hidden; /* only the form inside scrolls, or there are two scroll bars */
   padding: 0;
@@ -2868,16 +2961,53 @@ fieldset.pill-field legend {
 }
 .ed-dialog form {
   display: grid;
-  gap: 1rem;
-  padding: 1.5rem 1.75rem;
+  gap: 0.6rem;
+  padding: 0 1.5rem;
 }
 .ed-dialog h2 {
   font-size: 1.3rem;
 }
+/* The title bar of every editor dialog: the title and the × (48px), fixed at the top while the form scrolls. */
+.ed-dialog-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0 -1.5rem;
+  padding: 0.6rem 1rem 0.4rem 1.5rem;
+  background: var(--panel); /* solid: scrolled text must not show through the title; a soft shadow under it instead */
+  box-shadow: 0 10px 14px -10px rgb(0 0 0 / 0.55);
+}
+.ed-dialog-head h2 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+.ed-dialog-close {
+  flex: none;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1.7rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.ed-dialog-close:hover,
+.ed-dialog-close:focus-visible {
+  background: var(--glass-hi);
+  border-color: var(--edge);
+  color: var(--ink);
+}
 .ed-dialog textarea,
 .ed-about textarea {
   width: 100%;
-  min-height: 90px;
+  min-height: 64px;
   padding: 0.7rem 0.9rem;
   border: 1px solid var(--edge);
   border-radius: var(--r-s);
@@ -2890,19 +3020,73 @@ fieldset.pill-field legend {
 .ed-about textarea:focus {
   border-color: var(--light);
 }
+/* The question's box starts short and grows with the text (where the browser can; else its 3 rows). */
+.ed-q-text {
+  field-sizing: content;
+  min-height: 64px;
+  max-height: 40vh;
+}
 .ed-about textarea {
   min-height: 4.5rem;
 }
-.ed-media-grid {
+/* The question dialog: the words (points, question, answer…) on the left, the media on the right; one column in a
+   narrow window. A board question's two pictures share a row and the clip spans both. */
+.ed-q-body {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
+  align-items: start;
+}
+.ed-q-main,
+.ed-q-media {
+  display: grid;
+  gap: 0.6rem;
+  align-content: start;
+  min-width: 0;
+}
+.ed-q-media.board {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+.ed-q-media.board > .ed-media-wide {
+  grid-column: 1 / -1;
+}
+.ed-q-media > :empty {
+  display: none; /* no slowly-appearing block without a picture, no trim bar without a clip: no gap for them either */
+}
+/* Points and the special tile (board), the seconds and the points (Quick) on one row. */
+.ed-q-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: start;
+}
+.ed-q-row input[type='number'] {
+  width: 100%;
+}
+.ed-q-row .field small,
+.ed-q-main .field > small,
+.ed-media small {
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+@media (min-width: 1000px) {
+  .ed-q-body {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  }
+}
+@media (max-width: 560px) {
+  .ed-q-media.board {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ed-q-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 .ed-media {
   display: grid;
-  gap: 0.5rem;
+  gap: 0.45rem;
   align-content: start;
-  padding: 0.9rem;
+  padding: 0.75rem;
   border-radius: var(--r-m);
   background: var(--glass);
   border: 1px solid var(--edge);
@@ -2915,7 +3099,7 @@ fieldset.pill-field legend {
 }
 .ed-media img {
   max-width: 100%;
-  max-height: 140px;
+  max-height: 110px;
   object-fit: contain;
   border-radius: var(--r-s);
   justify-self: start;
@@ -2943,6 +3127,128 @@ fieldset.pill-field legend {
 }
 .ed-media-status.bad {
   color: var(--bad);
+}
+
+/* The clip's trim bar (editor): the whole clip as a track, a handle at each end, the chosen part lit up, and a
+   playhead while "Try it" plays. The handles are 48px wide for fingers; the visible knob is narrower. */
+.ed-trim {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border-radius: var(--r-m);
+  background: var(--glass);
+  border: 1px solid var(--edge);
+}
+.ed-trim-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.ed-trim-times {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+.ed-trim.trimmed .ed-trim-times {
+  color: var(--ink);
+  font-weight: 700;
+}
+.ed-trim-track {
+  position: relative;
+  height: 48px;
+  margin: 0 24px; /* room for the handles at the very ends */
+  border-radius: var(--r-s);
+  background: rgb(0 0 0 / 0.3);
+  box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.4);
+  touch-action: none;
+}
+.ed-trim.loading .ed-trim-track {
+  opacity: 0.5;
+}
+.ed-trim-range {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: linear-gradient(180deg, rgb(var(--light-rgb) / 0.55), rgb(var(--light-rgb) / 0.3));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.25);
+  background-image: repeating-linear-gradient(90deg, rgb(255 255 255 / 0.18) 0 2px, transparent 2px 6px), linear-gradient(180deg, rgb(var(--light-rgb) / 0.6), rgb(var(--light-rgb) / 0.3));
+}
+.ed-trim-playhead {
+  position: absolute;
+  top: -6px;
+  bottom: -6px;
+  width: 3px;
+  margin-left: -1.5px;
+  background: #fff;
+  border-radius: 2px;
+  box-shadow: 0 0 10px rgb(255 255 255 / 0.9);
+  pointer-events: none;
+  z-index: 3;
+}
+.ed-trim-handle {
+  position: absolute;
+  top: -4px;
+  width: 48px;
+  height: 56px;
+  margin-left: -24px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: ew-resize;
+  z-index: 2;
+}
+.ed-trim-handle::before {
+  content: '';
+  position: absolute;
+  inset: 0 18px;
+  border-radius: 6px;
+  background: linear-gradient(180deg, #fff, var(--pale));
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.45), inset 0 1px 0 #fff;
+}
+.ed-trim-handle::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 2px;
+  height: 14px;
+  margin: -7px 0 0 -1px;
+  background: rgb(var(--deep-2-rgb) / 0.6);
+  border-radius: 1px;
+  box-shadow: 4px 0 0 rgb(var(--deep-2-rgb) / 0.6), -4px 0 0 rgb(var(--deep-2-rgb) / 0.6);
+}
+.ed-trim-handle:hover::before {
+  background: #fff;
+}
+.ed-trim-handle:focus-visible {
+  outline: none;
+}
+.ed-trim-handle:focus-visible::before {
+  box-shadow: 0 0 0 3px var(--light), 0 2px 8px rgb(0 0 0 / 0.45);
+}
+.ed-trim-handle:disabled {
+  cursor: default;
+}
+.ed-trim-handle:disabled::before {
+  opacity: 0.6;
+}
+.ed-trim-foot {
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.ed-trim-foot small {
+  color: var(--muted);
+  flex: 1 1 12rem;
+}
+.ed-trim .btn {
+  min-height: 48px;
+}
+.ed-trim.trying .ed-trim-try {
+  background: var(--light);
+  color: var(--primary-ink);
 }
 .ed-dialog-actions {
   justify-content: flex-end;
@@ -2986,9 +3292,6 @@ fieldset.pill-field legend {
   .ed-main {
     padding-inline: 1.25rem;
   }
-  .ed-media-grid {
-    grid-template-columns: 1fr;
-  }
 }
 .ed-dialog form {
   max-height: calc(100vh - 2rem - 2px); /* inside the dialog's border */
@@ -2998,11 +3301,25 @@ fieldset.pill-field legend {
 .ed-dialog-actions {
   position: sticky;
   bottom: 0;
+  z-index: 2;
   display: flex;
   justify-content: flex-end;
-  margin: 0 -1.75rem;
-  padding: 1rem 1.75rem;
+  margin: 0 -1.5rem;
+  padding: 0.6rem 1.5rem;
   background: linear-gradient(180deg, transparent, var(--panel) 30%);
+}
+@media (max-width: 640px) {
+  .ed-dialog form {
+    padding-inline: 1rem;
+  }
+  .ed-dialog-head {
+    margin-inline: -1rem;
+    padding-inline: 1rem 0.5rem;
+  }
+  .ed-dialog-actions {
+    margin-inline: -1rem;
+    padding-inline: 1rem;
+  }
 }
 
 /* Making a quiz with AI */
@@ -3052,9 +3369,6 @@ fieldset.pill-field legend {
 
 /* "Find a free picture" (editor): the source and licence as pills, a grid of thumbnails, and a preview with who
    made the picture and its licence. Opens on top of the question dialog. */
-.pic-dialog {
-  width: min(980px, calc(100vw - 2rem));
-}
 .pic-dialog a,
 .ed-credit a,
 .ed-credits a {
@@ -3345,14 +3659,144 @@ fieldset.pill-field legend {
   color: var(--muted);
   font-size: 0.9rem;
 }
+/* A song clip in the credits list: a note instead of a thumbnail. */
+.ed-credits li .ed-credit-note {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 48px;
+  border-radius: var(--r-s);
+  background: rgb(0 0 0 / 0.3);
+  font-size: 1.6rem;
+  color: var(--muted);
+}
+
+/* "Find a song clip" (editor): Deezer previews as rows with the cover, the title and artist, ▶ to listen and
+   "Use this clip". Opens on top of the question dialog, like the picture search. */
+.song-dialog {
+  width: min(820px, calc(100vw - 2rem));
+}
+.song-controls {
+  grid-template-columns: max-content minmax(0, 1fr);
+}
+.song-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+.song-row {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) 48px auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem 0.5rem 0.5rem;
+  border-radius: var(--r-m);
+  background: var(--glass);
+  border: 1px solid var(--edge);
+}
+.song-row.busy {
+  opacity: 0.7;
+}
+.song-cover {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: var(--r-s);
+  background: rgb(0 0 0 / 0.3);
+}
+.song-cover-none {
+  display: grid;
+  place-items: center;
+  font-size: 1.6rem;
+  color: var(--muted);
+}
+.song-info {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+.song-info > * {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.song-artist {
+  font-size: 0.95rem;
+}
+.song-facts {
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+.song-use-status {
+  font-size: 0.85rem;
+  color: var(--muted);
+  white-space: normal;
+}
+.song-use-status:empty {
+  display: none;
+}
+.song-use-status.bad {
+  color: var(--bad);
+}
+.song-play {
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 1px solid var(--edge);
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.1);
+  color: var(--ink);
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+.song-play:hover {
+  background: rgb(255 255 255 / 0.18);
+}
+.song-play.on {
+  background: var(--light);
+  border-color: transparent;
+  box-shadow: 0 0 14px rgb(var(--light-rgb) / 0.6);
+}
+.song-play:focus-visible {
+  outline: 2px solid var(--light);
+  outline-offset: 2px;
+}
+.song-use {
+  min-height: 48px;
+  white-space: nowrap;
+}
+.song-more {
+  justify-self: start;
+}
 @media (max-width: 640px) {
-  .pic-dialog form {
-    padding-inline: 1rem;
+  .song-controls {
+    grid-template-columns: 1fr;
   }
-  .pic-dialog .ed-dialog-actions {
-    margin-inline: -1rem;
-    padding-inline: 1rem;
+  .song-row {
+    grid-template-columns: 48px minmax(0, 1fr) 48px;
+    grid-template-areas:
+      'cover info play'
+      'use use use';
   }
+  .song-cover {
+    grid-area: cover;
+    width: 48px;
+    height: 48px;
+  }
+  .song-info {
+    grid-area: info;
+  }
+  .song-play {
+    grid-area: play;
+  }
+  .song-use {
+    grid-area: use;
+  }
+}
+@media (max-width: 640px) {
   .pic-controls {
     grid-template-columns: minmax(0, 1fr);
     gap: 0.6rem;
@@ -3527,6 +3971,10 @@ fieldset.pill-field legend {
   border-color: var(--bad);
   box-shadow: inset 0 0 0 1px var(--bad);
 }
+/* Filled in or added by AI just now: a dashed edge until another quiz is opened. */
+.ed-qrow.ai-filled {
+  border: 1px dashed #7fe1ff;
+}
 .ed-qnum {
   font-family: var(--display);
   font-weight: 700;
@@ -3604,14 +4052,14 @@ fieldset.pill-field legend {
   justify-self: start;
 }
 .ed-opts {
-  gap: 0.5rem;
+  gap: 0.35rem;
 }
 .ed-opt {
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr) auto;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 0.6rem;
-  padding: 0.35rem 0.4rem 0.35rem 0.35rem;
+  gap: 0.5rem;
+  padding: 0.2rem 0.3rem 0.2rem 0.2rem;
   border-radius: var(--r-m);
   border: 1px solid var(--edge);
   background: rgb(0 0 0 / 0.16);
@@ -3622,8 +4070,8 @@ fieldset.pill-field legend {
   color: var(--muted);
 }
 .ed-opt-shape {
-  width: 48px;
-  height: 48px;
+  width: 40px;
+  height: 40px;
   display: grid;
   place-items: center;
   border-radius: var(--r-s);
@@ -3672,32 +4120,49 @@ fieldset.pill-field legend {
   color: var(--muted);
 }
 .ed-opts.ordered .ed-opt {
-  grid-template-columns: auto 48px minmax(0, 1fr); /* the place, the shape, the answer (no Right tick) */
+  grid-template-columns: auto 40px minmax(0, 1fr); /* the place, the shape, the answer (no Right tick) */
   padding-right: 0.9rem;
 }
 .ed-kind-pills label {
   flex: 1 1 auto;
 }
-.ed-quick-row {
+/* A slowly appearing picture: the seconds and the Pixels / Blur choice on one row under the picture's card. */
+.ed-unveil-box {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
-  align-items: start;
+  gap: 0.25rem;
 }
-.ed-quick-row input[type='number'] {
+.ed-unveil-box > .check {
+  min-height: 40px;
+}
+.ed-unveil {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  gap: 0.6rem;
+  align-items: end;
+}
+.ed-unveil input[type='number'] {
   width: 100%;
 }
-.ed-media-grid.two {
-  grid-template-columns: 1fr 1fr;
+.ed-unveil .pills span {
+  padding-inline: 0.6rem;
+}
+.ed-unveil-pills span {
+  gap: 0.45rem;
+}
+.ed-unveil-icon {
+  display: inline-flex;
+  line-height: 0;
+}
+.ed-unveil-note {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.82rem;
+  line-height: 1.35;
 }
 .ai-part {
   display: contents;
 }
 @media (max-width: 800px) {
-  .ed-quick-row,
-  .ed-media-grid.two {
-    grid-template-columns: 1fr;
-  }
   .ed-qrow {
     grid-template-columns: 1.8rem minmax(0, 1fr);
   }
@@ -3846,6 +4311,88 @@ fieldset.pill-field legend {
   }
   .pq-modal-actions .btn {
     width: 100%;
+  }
+}
+
+/* ---------- "What kind of quiz?" (chooseKind() in editor.js): two big cards with a small picture each ---------- */
+
+.ed-kind-modal {
+  width: min(640px, calc(100vw - 2rem));
+}
+.ed-kind-modal form {
+  position: relative;
+}
+.ed-kind-modal .ed-dialog-close {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.6rem;
+}
+.ed-kinds {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.8rem;
+}
+.ed-kind {
+  display: grid;
+  gap: 0.35rem;
+  justify-items: center;
+  align-content: start;
+  min-height: 48px;
+  padding: 1rem 0.9rem 1.1rem;
+  border: 1px solid var(--edge);
+  border-radius: var(--r-m);
+  background: var(--glass);
+  color: inherit;
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+  transition: background 120ms, border-color 120ms, transform 120ms;
+}
+.ed-kind:hover {
+  background: var(--glass-hi);
+  border-color: rgb(var(--light-3-rgb) / 0.55);
+}
+.ed-kind:active {
+  transform: scale(0.98);
+}
+.ed-kind-pic {
+  display: block;
+  width: 100%;
+  max-width: 176px;
+  height: auto;
+  margin-bottom: 0.5rem;
+  font-family: var(--display);
+}
+.ed-kind-shape {
+  color: #fff;
+  fill: currentColor;
+}
+.ed-kind b {
+  font-family: var(--display);
+  font-size: 1.05rem;
+  line-height: 1.2;
+}
+.ed-kind span {
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.35;
+}
+/* Phone width: the cards stack, each with its picture on the left and the words on the right. */
+@media (max-width: 520px) {
+  .ed-kinds {
+    grid-template-columns: 1fr;
+  }
+  .ed-kind {
+    grid-template-columns: 7rem 1fr;
+    column-gap: 0.9rem;
+    justify-items: start;
+    align-items: center;
+    text-align: left;
+    padding: 0.8rem 0.9rem;
+  }
+  .ed-kind-pic {
+    grid-row: 1 / 3;
+    margin-bottom: 0;
   }
 }
 
@@ -4144,8 +4691,8 @@ kbd {
   color: var(--k);
 }
 
-/* A slowly appearing picture: hard block edges when scaled up to the TV. */
-canvas.q-img.unveil {
+/* A slowly appearing picture: hard block edges when scaled up to the TV (the blur style is smoothed as usual). */
+canvas.q-img.unveil.pixels {
   image-rendering: pixelated;
 }
 
@@ -4753,6 +5300,18 @@ body.display.embedded {
   grid-template-columns: 1fr;
   grid-template-rows: minmax(0, 1fr); /* so the bars and the order list fit the band instead of pushing into the verdict */
 }
+/* The result of a slowly appearing picture question: the clear picture at last, beside the bars. */
+.quick-q.settled .quick-mid.with-picture {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  gap: 2vw;
+}
+.quick-media.unveiled .q-img {
+  max-height: 100%;
+  animation: plate-in 450ms cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+.quick-mid.with-picture .quick-order-result {
+  width: 100%;
+}
 .quick-media {
   height: 100%;
   min-height: 0;
@@ -5175,17 +5734,22 @@ body.display.embedded {
   list-style: none;
   margin: 0;
   padding: 0;
-  width: min(78vw, 1400px);
+  /* A plain width (no min()), so the list is as wide on an older TV browser too: the plates are about 60vw, the
+     arrow columns outside them. The owner's first real game showed narrow pills with the names cut to one letter
+     on a smart TV (2026-10-11); nothing here may depend on the browser working out the width from the content. */
+  width: 74vw;
+  max-width: 1540px;
   display: grid;
   gap: 1.6vh;
 }
 /* The arrows sit in a column on the left, and an empty column of the same width on the right keeps the plates
-   exactly centred under the title. */
+   exactly centred under the title. minmax(0, 1fr): the plate takes the room between them, never more. */
 .top-list li {
   display: grid;
-  grid-template-columns: 9vh 1fr 9vh;
+  grid-template-columns: 10vh minmax(0, 1fr) 10vh;
   align-items: center;
   gap: 1.4vw;
+  width: 100%;
 }
 .quick-ranks.fresh .top-list li {
   animation: rank-in 380ms cubic-bezier(0.2, 1, 0.3, 1) backwards;
@@ -5236,9 +5800,12 @@ body[data-rankanim='move'] .top-list li {
 }
 .rank-plate {
   display: grid;
-  grid-template-columns: 6.5vh 1fr auto auto;
+  grid-template-columns: 6.5vh minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 1.6vw;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
   padding: 1.6vh 2.6vw 1.6vh 1.6vh;
   border-radius: var(--pill);
   font-family: var(--display);
@@ -5253,6 +5820,7 @@ body[data-rankanim='move'] .top-list li {
 }
 .rank-n {
   width: 6.5vh;
+  height: 6.5vh; /* also for a browser without aspect-ratio */
   aspect-ratio: 1;
   display: grid;
   place-items: center;
@@ -5261,11 +5829,16 @@ body[data-rankanim='move'] .top-list li {
   font-size: 0.75em;
   font-weight: 800;
 }
+/* Names show in full up to about 20 letters: a long one (more than 14 letters, `.long` from the TV page) is set a
+   little smaller, and only a very long one ends in …. */
 .rank-name {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.rank-name.long {
+  font-size: 0.78em;
 }
 .rank-delta {
   font-size: 0.65em;
@@ -5298,7 +5871,8 @@ body[data-rankanim='move'] .top-list li {
 }
 .standings {
   margin-top: 2vh;
-  width: min(84vw, 1500px);
+  width: 84vw;
+  max-width: 1500px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -5327,9 +5901,11 @@ body[data-rankanim='move'] .top-list li {
 }
 .standings-list li {
   display: grid;
-  grid-template-columns: 5vh 1fr auto;
+  grid-template-columns: 5vh minmax(0, 1fr) auto;
   align-items: center;
   gap: 1.4vw;
+  min-width: 0;
+  box-sizing: border-box;
   padding: 1.1vh 2.2vw 1.1vh 1.1vh;
   border-radius: var(--pill);
   font-family: var(--display);
@@ -5340,6 +5916,7 @@ body[data-rankanim='move'] .top-list li {
 }
 .standings-list .rank-n {
   width: 5vh;
+  height: 5vh;
 }
 .quick-section:not(.still) .standings-list li {
   animation: drop-in 500ms cubic-bezier(0.2, 0.9, 0.3, 1) backwards;
@@ -5369,10 +5946,13 @@ body[data-rankanim='move'] .top-list li {
 }
 .podium {
   display: grid;
+  grid-template-columns: repeat(3, 25vw); /* for a browser without min() */
   grid-template-columns: repeat(3, min(25vw, 46vh));
   align-items: end;
   gap: 1.2vw;
   height: 54vh;
+  grid-template-rows: minmax(0, 100%); /* the row is exactly this high: a long name on two lines must not push the steps down past the clip */
+  flex: none;
   clip-path: inset(-60vh -20vw 0 -20vw); /* the steps rise out of the floor */
 }
 .step {
@@ -5384,6 +5964,15 @@ body[data-rankanim='move'] .top-list li {
   gap: 2vh;
   height: 100%;
   min-width: 0;
+}
+/* When the winner's name takes two lines, the step's block gives way (down to its place and points), never the face
+   or the name. */
+.step > * {
+  flex-shrink: 0;
+}
+.step > .step-block {
+  flex-shrink: 1;
+  min-height: 0;
 }
 .step.p1 {
   --medal: #ffd34d;
@@ -5990,10 +6579,10 @@ body.logo-corner .tv-stage {
 /* The top 5 and the standings: the face takes the place circle's spot, the place a small badge on its corner. */
 .rank-plate,
 .standings-list li {
-  grid-template-columns: auto 1fr auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
 }
 .standings-list li {
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
 }
 .rank-face {
   position: relative;
@@ -6226,6 +6815,328 @@ body.logo-corner .tv-stage {
   background: var(--team);
 }
 
+/* ---------- extra languages in a quiz (lib/languages.js): flags, the phone's choice, translation lines ---------- */
+
+/* A flag: a small bundled SVG (public/flags/), never emoji (Windows browsers don't draw flag emoji). */
+.flag {
+  display: inline-block;
+  width: 1.3em;
+  height: auto;
+  aspect-ratio: 3 / 2;
+  vertical-align: -0.2em;
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.18);
+  flex: none;
+}
+.flag.big {
+  width: 1.6em;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+/* A language name with its flag, inline ("Also in: 🇳🇴 Norsk, 🇹🇭 ไทย"). */
+.lang-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  margin-right: 0.6em;
+  white-space: nowrap;
+}
+
+/* The phone's join form: "Read questions in:" pills with flags. */
+.lang-pills span {
+  gap: 0.5rem;
+  padding: 0 0.9rem;
+}
+.lang-pills .flag {
+  width: 1.5em;
+}
+.lang-field small {
+  display: block;
+  margin-top: 0.5rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+/* The flag pill in the phone's header: tap to change the language later. */
+.lang-pill {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 44px;
+  padding: 0.3rem 0.75rem;
+  border: 1px solid rgb(255 255 255 / 0.3);
+  border-radius: var(--pill);
+  background: rgb(0 0 0 / 0.16);
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.lang-pill .flag {
+  width: 1.6em;
+}
+.lang-menu {
+  margin: 0.6rem 0 0;
+  padding: 0.8rem 0.9rem;
+  border-radius: var(--r-m);
+  background: rgb(0 0 0 / 0.18);
+}
+.lang-menu .small {
+  margin: 0 0 0.5rem;
+}
+/* The question (and, once revealed, the answer) in the phone's own language, above the buzzer. */
+.phone-text {
+  display: grid;
+  gap: 0.6rem;
+  justify-items: center;
+}
+.phone-answer {
+  margin: 0;
+  max-width: 32ch;
+  padding: 0.6rem 1rem;
+  border-radius: 18px;
+  background: rgb(0 0 0 / 0.16);
+  border: 1px solid rgb(255 255 255 / 0.35);
+  font-weight: 700;
+  font-size: 1.1rem;
+  line-height: 1.3;
+}
+.phone-answer span {
+  opacity: 0.75;
+  font-weight: 400;
+  font-size: 0.9rem;
+}
+
+/* Host: a small flag after a team that reads the quiz in another language. */
+.flag-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 0.35rem;
+  vertical-align: middle;
+}
+.flag-badge .flag {
+  width: 1.2em;
+}
+/* Host: the translations of the question and the answer, in small grey lines under them. */
+.host-trs {
+  display: grid;
+  gap: 0.25rem;
+  margin: -0.75rem 0 1.25rem;
+  max-width: 42ch;
+}
+.host-trs.under-answer {
+  margin: -1rem 0 1.5rem;
+}
+.host-tr {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin: 0;
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1.35;
+}
+.host-tr .flag {
+  width: 1.2em;
+  vertical-align: -0.15em;
+  align-self: center;
+}
+.host-trs.inline {
+  display: block;
+  margin: 0.15rem 0 0;
+  max-width: none;
+}
+.host-trs.inline .host-tr {
+  font-size: 0.85rem;
+  font-weight: 400;
+}
+/* Host lobby: the quiz's extra languages under its description. */
+.quiz-about-text {
+  min-width: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+.quiz-about .quiz-langs {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+.quiz-languages .lang-tag {
+  margin-right: 0.45em;
+}
+
+/* Editor: the Languages block under the description. */
+.ed-languages {
+  display: grid;
+  gap: 0.35rem;
+}
+.ed-lang-row {
+  align-items: flex-end;
+  gap: 1rem 1.5rem;
+  margin-top: 0.4rem;
+}
+.ed-main-lang {
+  flex: none;
+  min-width: 200px;
+}
+.ed-main-lang select {
+  min-height: 48px;
+  padding: 0 0.8rem;
+  border: 1px solid var(--edge);
+  border-radius: var(--r-s);
+  background: rgb(0 0 0 / 0.25);
+  color: inherit;
+}
+.lang-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  flex: 1 1 320px;
+  min-width: 0;
+}
+.lang-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 48px;
+  padding: 0.35rem 2.4rem 0.35rem 0.8rem;
+  border: 1px solid var(--edge);
+  border-radius: var(--pill);
+  background: var(--glass);
+}
+.lang-chip .flag {
+  width: 1.6em;
+}
+.lang-chip small {
+  color: var(--good);
+  font-size: 0.8rem;
+}
+.lang-chip.missing small {
+  color: #ffd166;
+}
+.lang-chip .lang-translate {
+  margin-left: 0.2rem;
+}
+.lang-chip .lang-remove {
+  right: 2px;
+}
+.ed-add-language {
+  min-height: 48px;
+}
+/* "Add a language": a grid of flag buttons. */
+.ed-lang-modal {
+  width: min(680px, 94vw);
+}
+.ed-lang-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 0.5rem;
+  max-height: 60vh;
+  overflow: auto;
+  padding: 2px;
+}
+.ed-lang-pick {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 48px;
+  padding: 0.5rem 0.8rem;
+  border: 1px solid var(--edge);
+  border-radius: var(--r-s);
+  background: var(--glass);
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+.ed-lang-pick:hover {
+  background: var(--glass-hi);
+}
+.ed-lang-pick .flag {
+  width: 1.8em;
+}
+/* The translations dialog: the main text on the left, the translation on the right. */
+.tr-dialog {
+  width: min(1100px, 96vw);
+}
+.tr-dialog h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.tr-tools {
+  align-items: center;
+  gap: 0.8rem 1.5rem;
+  margin: 0.5rem 0 1rem;
+}
+.tr-tools .check {
+  margin: 0;
+}
+.tr-count {
+  font-weight: 700;
+  color: #ffd166;
+}
+.tr-count.good {
+  color: var(--good);
+}
+.tr-list {
+  display: grid;
+  gap: 0.5rem;
+}
+.tr-where {
+  margin: 1rem 0 0.2rem;
+  font-size: 0.95rem;
+  color: var(--muted);
+  font-weight: 700;
+}
+.tr-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.8rem;
+  align-items: stretch;
+  padding: 0.5rem 0.7rem;
+  border-left: 3px solid transparent;
+  border-radius: var(--r-s);
+  background: rgb(255 255 255 / 0.04);
+}
+.tr-row.missing {
+  border-left-color: #ffd166;
+}
+.tr-main {
+  display: grid;
+  gap: 0.15rem;
+  align-content: center;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.tr-kind {
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.tr-dialog .tr-input textarea {
+  min-height: 48px;
+  height: 100%;
+  resize: none;
+  field-sizing: content;
+}
+@media (max-width: 700px) {
+  .tr-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ---------- the glass look (setting `glass`, on by default) ----------
    Frosted, see-through panels (backdrop-filter) with a bright top edge and a rim light, over a soft glow that
    drifts slowly behind them. The real blur is spent only on the big panels, bars and dialogs and a few phone
@@ -6410,6 +7321,13 @@ body.glass .pick-tile:not(.used) {
 body.glass .ed-dialog-actions {
   background: linear-gradient(180deg, transparent, rgb(var(--deep-1-rgb) / 0.88) 30%);
 }
+body.glass .ed-dialog-head {
+  background: rgb(var(--deep-2-rgb)); /* opaque on purpose: scrolled text must not show through the title */
+}
+body.glass .ed-fold {
+  background-color: var(--lg-tint);
+  border-color: var(--lg-edge);
+}
 body.glass .ed-dialog::backdrop,
 body.glass .pq-modal::backdrop,
 body.glass .help {
@@ -6439,7 +7357,9 @@ body.glass .pills span,
 body.glass .chip,
 body.glass .ed-tile,
 body.glass .ed-media,
+body.glass .ed-trim,
 body.glass .pic-tile,
+body.glass .song-row,
 body.glass .ed-credits,
 body.glass .crazy-kinds,
 body.glass .round2-cats li,
@@ -6602,6 +7522,9 @@ body.glass .ed-sec {
   background: var(--lg-tint);
   border-color: var(--lg-edge);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.25), 0 12px 40px rgb(0 0 0 / 0.25);
+}
+body.glass .ed-qrow.ai-filled {
+  border: 1px dashed #7fe1ff;
 }
 /* Problems stay red on glass too. */
 body.glass .ed-tile.bad,

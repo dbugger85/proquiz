@@ -254,14 +254,15 @@ try {
   const ed = await ctx.newPage();
   watch(ed, 'editor');
   await ed.goto(`${base}/editor`);
-  await ed.click('#new-quiz');
+  await ed.click('#new-quiz'); // "What kind of quiz?"
+  await ed.click('.ed-kind-modal[open] .ed-kind-board');
   await ed.waitForSelector('.ed-name input:not([disabled])');
   await ed.fill('.ed-name input', 'Byer');
   await ed.fill('.ed-col:nth-child(1) .ed-cat input', 'Landmarks');
   await ed.click('.ed-col:nth-child(1) .ed-tile:nth-of-type(1)');
   await ed.waitForSelector('#q-dialog[open]');
   await ed.fill('#q-form textarea', 'Which city has this tower?');
-  await ed.fill('#q-form .field:nth-of-type(3) input', 'Paris');
+  await ed.fill('#q-form input[name=answer]', 'Paris');
   const findButtons = ed.locator('#q-form .ed-pic-search');
   assert.equal(await findButtons.count(), 2, 'a Find button for the question picture and the answer picture (not for the clip)');
 
@@ -374,7 +375,7 @@ try {
   assert.equal(pkg.set.credits[name].author, 'Ann Lee');
   assert.ok(pkg.files[name]);
   await ed.click('.ed-credits summary');
-  assert.match(await ed.textContent('.ed-credits'), /Picture credits \(1\)[\s\S]*Eiffel Tower at dusk[\s\S]*Ann Lee/);
+  assert.match(await ed.textContent('.ed-credits'), /Picture and song credits \(1\)[\s\S]*Eiffel Tower at dusk[\s\S]*Ann Lee/);
   await ed.locator('.ed-credits').scrollIntoViewIfNeeded();
   await shot(ed, 'editor-pic-4b-credits');
 
@@ -514,7 +515,7 @@ try {
   await host.waitForSelector('body[data-phase=lobby]');
   await host.click('#group-look summary');
   assert.ok(await host.isChecked('#settings input[name=showCredits]'), 'on by default');
-  assert.match(await host.textContent('#group-look'), /Picture credits on the TV/);
+  assert.match(await host.textContent('#group-look'), /Picture and song credits on the TV/);
   srv.hub.dispatch({ type: 'start', picker: 'bot-a' });
   srv.hub.dispatch({ type: 'pick', c: 0, i: 0 });
   srv.hub.dispatch({ type: 'arm' });

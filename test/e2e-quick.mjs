@@ -57,6 +57,16 @@ async function topFive(page, name) {
   await shot(page, name);
 }
 const phase = (page, p, timeout = 5000) => page.waitForSelector(`body[data-phase=${p}]`, { state: 'attached', timeout });
+// The editor saves 600 ms after the last change, and #ed-status may already say "Saved" from an earlier save. So instead
+// of sleeping, poll the saved quiz until `check` holds (or time runs out: then the assertion after says what is wrong).
+async function savedSet(id, check, ms = 5000) {
+  const until = Date.now() + ms;
+  for (;;) {
+    const got = (await (await fetch(`${base}/api/sets/${id}`)).json()).set;
+    if (check(got) || Date.now() > until) return got;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+}
 
 try {
   const host = await open('/host', { width: 1366, height: 768 }, 'host');
@@ -69,6 +79,12 @@ try {
   await host.waitForSelector('#set-picker option[value=quick-sample]', { state: 'attached' });
   await host.selectOption('#set-picker', 'quick-sample');
   await host.waitForSelector('body[data-mode=quick]', { state: 'attached' });
+  // The sample's flag question (section 2) appears slowly as a 12 s blur. For this test the "largest ocean" question
+  // (section 1, question 4) also gets a picture that appears slowly, as blocks (10 s).
+  const sample = structuredClone(state().set);
+  assert.deepEqual([sample.sections[1].questions[0].unveil, sample.sections[1].questions[0].unveilStyle], [12, 'blur']);
+  Object.assign(sample.sections[0].questions[3], { image: 'sample-mercury.svg', unveil: 10 });
+  srv.hub.dispatch({ type: 'loadSet', set: sample, setId: 'quick-sample' });
   // Edit opens the editor on the quiz chosen in the lobby.
   assert.match(await host.getAttribute('#edit-set', 'href'), /\/editor#quick-sample$/);
   for (const sel of ['#group-crazy', '#group-rules', '#round2-setting', '#final-setting', '#quiz-specials']) {
@@ -123,6 +139,10 @@ try {
     assert.equal(await p.locator('.swatch.taken').count(), 0); // colours may repeat
     await p.fill('#name', name);
     await p.click(`#swatches label:nth-child(${n + 1})`);
+    // The sample has Norwegian: "Read the questions in:" English or Norsk. Sofie picks Norsk.
+    await p.waitForSelector('#lang-field:not([hidden])');
+    assert.deepEqual(await p.$$eval('#lang-pills input', (els) => els.map((el) => el.value)), ['en', 'no']);
+    if (name === 'Sofie') await p.click('#lang-pills label:has(> input[value=no])');
     await p.click('#join-btn');
     await p.waitForSelector('#team:not([hidden])');
     phones.push(p);
@@ -195,12 +215,32 @@ try {
   await tv.waitForSelector('.quick-ready');
   await tv.waitForTimeout(500);
   await shot(tv, 'quick-tv-ready');
+  // Sofie reads the quiz in Norwegian: her phone shows the question in Norwegian (and her own buttons too).
+  assert.equal(await sofie.textContent('.phone-question'), 'Hvilken planet er nærmest sola?');
+  assert.equal(await alex.textContent('.phone-question'), 'Which planet is closest to the Sun?');
+  assert.match(await sofie.textContent('#stage'), /Gjør deg klar/);
+  await shot(sofie, 'phone-lang-quick-question');
   await phase(host, 'open'); // after the 4 s read time
   await tv.waitForSelector('.quick-opts');
   await tv.waitForTimeout(700);
   await shot(tv, 'quick-tv-open');
   await shot(alex, 'quick-phone-answer');
   await shot(host, 'quick-host-open');
+  // Her options are in Norwegian; the TV's and Alex's in English. The host sees the Norwegian under each option.
+  assert.deepEqual(await sofie.$$eval('.choice-text', (els) => els.map((el) => el.textContent)), ['Merkur', 'Venus', 'Jorda', 'Mars']);
+  assert.deepEqual(await tv.$$eval('.quick-opt .opt-text', (els) => els.map((el) => el.textContent)), ['Mercury', 'Venus', 'Earth', 'Mars']);
+  assert.equal(await host.locator('.host-opts .host-tr').count(), 4);
+  assert.match(await host.textContent('.host-q > .host-trs'), /Hvilken planet er nærmest sola\?/);
+  assert.equal(await host.locator('.quick-side .flag-badge').count(), 1);
+  await shot(sofie, 'phone-lang-quick-options');
+  await shot(host, 'host-lang-quick');
+  // With "Show question and answers on the phones" off, Alex loses the texts and Sofie keeps hers (in Norwegian).
+  srv.hub.dispatch({ type: 'settings', settings: { quickPhoneText: false } });
+  await alex.waitForSelector('.phone-question', { state: 'detached' });
+  assert.equal(await alex.locator('.choice-text').count(), 0);
+  assert.deepEqual(await sofie.$$eval('.choice-text', (els) => els.map((el) => el.textContent)), ['Merkur', 'Venus', 'Jorda', 'Mars']);
+  srv.hub.dispatch({ type: 'settings', settings: { quickPhoneText: true } });
+  await alex.waitForSelector('.phone-question');
   // Mercury (the 1st) is right. Alex is first; Mira and Bo are wrong.
   await alex.click('.choice:nth-child(1)');
   await alex.waitForSelector('.locked-shape');
@@ -238,6 +278,12 @@ try {
     return [...document.querySelectorAll('.verdict-badge, .big, .result, .gap-line')].some((el) => el.getBoundingClientRect().bottom > row.top + 1) || row.bottom > innerHeight;
   });
   assert.equal(covered, false, 'the reactions sit under the result, on screen');
+  // A reaction floats for about 3 s and is then removed, so count them as they arrive (not what is still on screen):
+  // on a slow machine the first one may be gone before the last one shows.
+  await tv.evaluate(() => {
+    window.__reactionsSeen = [];
+    new MutationObserver((muts) => muts.forEach((m) => m.addedNodes.forEach((n) => n.classList?.contains('reaction') && window.__reactionsSeen.push(n.textContent)))).observe(document.querySelector('#reactions'), { childList: true });
+  });
   await alex.click('.reaction-btn:nth-child(2)'); // 🔥
   await tv.waitForSelector('#reactions .reaction');
   assert.equal(await tv.textContent('#reactions .reaction'), '🔥Alex');
@@ -255,8 +301,8 @@ try {
   }
   await mira.click('.reaction-btn:nth-child(5)');
   await jonas.click('.reaction-btn:nth-child(4)');
-  await tv.waitForFunction(() => document.querySelectorAll('#reactions .reaction').length === 5, null, { timeout: 3000 });
-  assert.equal(await tv.locator('#reactions .reaction').count(), 5, 'the second tap within a second was dropped');
+  await tv.waitForFunction(() => window.__reactionsSeen.length >= 5, null, { timeout: 5000 });
+  assert.equal(await tv.evaluate(() => window.__reactionsSeen.length), 5, 'the second tap within a second was dropped');
   await tv.waitForTimeout(600);
   await shot(alex, 'quick-phone-reactions');
   await shot(tv, 'quick-tv-reactions');
@@ -310,6 +356,7 @@ try {
   assert.doesNotMatch(await tv.textContent('.tv-q'), /Two|two are/i, 'the TV never says how many are right');
   await host.keyboard.press(' ');
   await phase(host, 'open');
+  srv.hub.dispatch({ type: 'answer', teamId: 'bot-bo', options: [0, 2] }); // Bo answers right at once and climbs into the top 5 (sent first, so a slow machine can't cost him the points)
   await alex.waitForSelector('#submit-answers');
   assert.equal(await alex.isDisabled('#submit-answers'), true, 'nothing ticked yet');
   assert.match(await alex.textContent('.answer-bar'), /Tap every right answer, then submit/);
@@ -331,7 +378,6 @@ try {
   await mira.click('#submit-answers'); // right
   await jonas.click('.choice:nth-child(1)');
   await jonas.click('#submit-answers'); // only Dolphin: not all of them
-  srv.hub.dispatch({ type: 'answer', teamId: 'bot-bo', options: [0, 2] }); // Bo climbs into the top 5
   await jonas.waitForFunction(() => document.body.innerText.includes('Answer locked in'));
   await host.keyboard.press(' '); // stop the clock
   await phase(host, 'result');
@@ -362,7 +408,7 @@ try {
   await host.keyboard.press(' ');
   await phase(host, 'ranks');
   await still.waitForSelector('.top-list');
-  await still.waitForSelector('body[data-rankanim=done]', { state: 'attached', timeout: 1000 });
+  await still.waitForSelector('body[data-rankanim=done]', { state: 'attached', timeout: 2000 }); // well under the 2.4 s the animation would take
   assert.equal(await still.locator('.top-list.animating, .top-list li.waiting').count(), 0);
   await still.context().close();
   await topFive(tv, 'quick-glass-off-tv-top5');
@@ -381,16 +427,34 @@ try {
   await phase(host, 'result', 14000); // nobody else answers: the 10 s run out
   assert.match(await tv.textContent('.quick-verdict'), /1 of 6 got it right/);
   assert.equal(await tv.textContent('.quick-verdict .fastest .plate'), 'Jonas');
-  await sofie.waitForFunction(() => document.body.innerText.includes('Too slow!'));
+  await sofie.waitForFunction(() => document.body.innerText.includes('For sent!')); // "Too slow!", in Norwegian on Sofie's phone
   await tv.waitForTimeout(1200);
   await shot(tv, 'quick-tv-result-timeout');
   await shot(sofie, 'quick-phone-too-slow');
 
-  // ----- Question 5: "put in order" (oldest to newest). Question 4 is skipped to get there. -----
+  // ----- Question 4: a picture that appears slowly, as blocks. Hidden while the question is read, it starts when the
+  // answers open; the clear picture is never on the TV before the result. Then it is skipped. -----
   await host.keyboard.press(' ');
   await phase(host, 'ranks');
   await host.keyboard.press(' ');
   await host.waitForFunction(() => document.body.dataset.phase === 'ready' && /Question 4 of 5/.test(document.body.innerText));
+  const unveil = (sel) => tv.$eval(sel, (c) => ({ step: Number(c.dataset.step), pct: Number(c.dataset.pct), blur: Number(c.dataset.blur) }));
+  await tv.waitForSelector('.quick-ready canvas.unveil.pixels[data-step="0"]');
+  assert.equal(await tv.locator('img.q-img').count(), 0, 'no clear picture while the question is read');
+  assert.match(await host.textContent('.host-quick .clip-line'), /starts to appear when the answers open/);
+  await tv.waitForTimeout(800);
+  assert.deepEqual((await unveil('canvas.unveil')).pct, 0, 'nothing moves while the question is read');
+  await host.keyboard.press(' '); // the answers: the picture starts
+  await phase(host, 'open');
+  await tv.waitForSelector('.quick-media canvas.unveil.pixels');
+  await host.waitForSelector('[data-unveil-pct]');
+  await tv.waitForFunction(() => Number(document.querySelector('canvas.unveil')?.dataset.step) >= 2);
+  const blocks = await unveil('canvas.unveil');
+  assert.ok(blocks.step >= 2 && blocks.step < 10 && blocks.pct > 0 && blocks.pct < 100, JSON.stringify(blocks));
+  assert.equal(await tv.locator('img.q-img').count(), 0, 'no clear picture while the answers are open');
+  assert.match(await host.textContent('[data-unveil-pct]'), /Picture: \d+% clear/);
+  await shot(tv, 'quick-tv-unveil-pixels');
+  await shot(host, 'quick-host-unveil');
   await host.keyboard.press('Escape'); // skip it
   await host.waitForFunction(() => document.body.dataset.phase === 'ready' && /Question 5 of 5/.test(document.body.innerText));
   assert.match(await host.textContent('.host-q .where'), /Put in the right order/);
@@ -412,7 +476,14 @@ try {
   const shownTexts = await tv.$$eval('.quick-opt .opt-text', (els) => els.map((el) => el.textContent));
   assert.deepEqual(rightOrder.map((p) => shownTexts[p]), written);
   assert.notDeepEqual(shownTexts, written, 'shuffled on the TV');
+  await alex.waitForFunction(() => document.querySelectorAll('.choice-text').length === 4); // the phones may draw a moment after the TV
+  await sofie.waitForFunction(() => document.querySelectorAll('.choice-text').length === 4);
   assert.deepEqual(await alex.$$eval('.choice-text', (els) => els.map((el) => el.textContent)), shownTexts, 'the phones show the same order');
+  // Sofie's chips are the Norwegian options in that same shuffled order.
+  const noOptions = state().set.sections[0].questions[4].translations.no.options;
+  assert.deepEqual(await sofie.$$eval('.choice-text', (els) => els.map((el) => el.textContent)), state().q.order.map((k) => noOptions[k]), 'the translated options follow the shuffle');
+  assert.notDeepEqual(noOptions, state().q.order.map((k) => noOptions[k]));
+  await shot(sofie, 'phone-lang-quick-order');
   await shot(tv, 'quick-tv-open-order');
   await alex.waitForSelector('#clear-picks');
   assert.equal(await alex.isDisabled('#submit-answers'), true);
@@ -480,11 +551,47 @@ try {
   assert.equal(await tv.locator('.standings-list .rank-face .avatar').count(), state().teams.filter((tm) => tm.avatar).length);
   await shot(tv, 'quick-tv-section-standings');
 
-  // ----- Straight to the podium -----
-  for (let n = 0; n < 60 && state().phase !== 'over'; n++) {
+  // ----- Section 2, question 1: the flag appears slowly as a blur, over 12 s, and the result shows it clear -----
+  await host.keyboard.press(' ');
+  await host.waitForFunction(() => document.body.dataset.phase === 'ready' && /Question 1 of 5/.test(document.body.innerText));
+  await tv.waitForSelector('.quick-ready canvas.unveil.blur[data-step]');
+  assert.equal(await tv.locator('img.q-img').count(), 0);
+  const hidden = await unveil('canvas.unveil.blur');
+  assert.ok(hidden.pct === 0 && hidden.blur >= 80, `heavily blurred while the question is read: ${JSON.stringify(hidden)}`);
+  await host.keyboard.press(' ');
+  await phase(host, 'open');
+  await tv.waitForFunction(() => Number(document.querySelector('canvas.unveil.blur')?.dataset.pct) >= 20);
+  const blurred = await unveil('canvas.unveil.blur');
+  assert.ok(blurred.blur > 0 && blurred.blur < hidden.blur && blurred.pct < 100, `sharper, not clear: ${JSON.stringify(blurred)}`);
+  assert.equal(await tv.locator('img.q-img').count(), 0, 'no clear picture while the answers are open');
+  assert.match(await host.textContent('[data-unveil-pct]'), /Picture: \d+% clear/);
+  await shot(tv, 'quick-tv-unveil-blur');
+  // Everyone answers: the result shows the clear picture at last, beside the bars.
+  for (const tm of state().teams) srv.hub.dispatch({ type: 'answer', teamId: tm.id, option: tm.id === 'bot-bo' ? 1 : 2 });
+  await phase(host, 'result');
+  await tv.waitForSelector('.quick-q.settled .quick-media.unveiled img.q-img');
+  await tv.waitForFunction(() => document.querySelector('.quick-media.unveiled img.q-img').complete);
+  assert.equal(await tv.locator('canvas.unveil').count(), 0);
+  await host.waitForFunction(() => /Picture: 100% clear/.test(document.querySelector('[data-unveil-pct]')?.textContent));
+  await tv.waitForTimeout(1200);
+  await shot(tv, 'quick-tv-unveil-result');
+
+  // ----- The last question: its result goes straight to the podium, with no top 5 in between (owner feedback 2026-10-11) -----
+  const atLast = () => state().pos.s === state().set.sections.length - 1 && state().pos.i === state().set.sections.at(-1).questions.length - 1;
+  for (let n = 0; n < 60 && !(state().phase === 'ready' && atLast()); n++) {
     srv.hub.dispatch({ type: ['ready', 'open'].includes(state().phase) ? 'skip' : 'next' });
   }
+  await host.waitForFunction(() => document.body.dataset.phase === 'ready' && /Question 5 of 5/.test(document.body.innerText));
+  srv.hub.dispatch({ type: 'next' }); // the answers
+  await phase(host, 'open');
+  srv.hub.dispatch({ type: 'answer', teamId: 'bot-bea', option: state().q.correct[0] });
+  srv.hub.dispatch({ type: 'next' }); // the host stops the clock
+  await phase(host, 'result');
+  assert.equal(await host.textContent('.controls .btn-primary'), 'Show the podiumSpace', 'after the last question Space goes to the podium, not the top 5');
+  await host.keyboard.press(' ');
   await phase(host, 'over');
+  assert.equal(state().phase, 'over');
+  assert.equal(await tv.locator('.top-list').count(), 0, 'no top 5 after the last question');
   await tv.waitForSelector('.podium');
   await tv.waitForTimeout(4500); // 3rd, 2nd, then 1st rise, their points counting up
   assert.match(await tv.textContent('.podium'), /Alex/);
@@ -496,6 +603,80 @@ try {
   await shot(alex, 'quick-phone-over');
   await shot(host, 'quick-host-over');
 
+  // ----- Long names on the TV (owner feedback 2026-10-11: on a real TV the top 5 plates were narrow pills and names were
+  // cut to one letter). A second game with long Norwegian names, on this 1080p TV and a 720p one, glass on and off:
+  // the top 5 plates are about 60vw wide and centred with the arrows outside, and no name on the top 5, the standings
+  // or the podium is cut short. -----
+  srv.hub.dispatch({ type: 'restart' });
+  await phase(host, 'lobby');
+  const longNames = ['Kristoffer', 'Ingeborg Marie', 'Sondre og Lise', 'Gussi Og Emi🇳🇴🏆', 'Olav og Daniel', 'Live og mamma'];
+  state().teams.forEach((tm, k) => srv.hub.dispatch({ type: 'join', teamId: tm.id, name: longNames[k] ?? tm.name, color: tm.color }));
+  const small = await open('/display', { width: 1280, height: 720 }, 'tv 720p');
+  await small.waitForSelector('#lobby:not([hidden])');
+  srv.hub.dispatch({ type: 'start', seed: 11 });
+  srv.hub.dispatch({ type: 'next' }); // ready
+  srv.hub.dispatch({ type: 'next' }); // open
+  await phase(host, 'open');
+  for (const [k, tm] of state().teams.entries()) {
+    await new Promise((r) => setTimeout(r, 80)); // different speeds, so the places differ
+    srv.hub.dispatch({ type: 'answer', teamId: tm.id, option: k === 1 ? (state().q.correct[0] + 1) % 4 : state().q.correct[0] });
+  }
+  await phase(host, 'result');
+  srv.hub.dispatch({ type: 'next' });
+  await phase(host, 'ranks');
+  const notCut = async (page, sel, what) => {
+    const cut = await page.$$eval(sel, (els) => els.filter((el) => el.scrollWidth > el.clientWidth + 1).map((el) => el.textContent));
+    assert.deepEqual(cut, [], `${what}: names cut short`);
+  };
+  for (const [page, label] of [[tv, '1080p'], [small, '720p']]) {
+    await page.waitForSelector('body[data-rankanim=done]', { state: 'attached', timeout: 8000 });
+    await page.waitForTimeout(400);
+    const top = await page.evaluate(() => {
+      const plate = document.querySelector('.top-list li .rank-plate').getBoundingClientRect();
+      const arrow = document.querySelector('.top-list li .move').getBoundingClientRect();
+      return { plate: plate.width / innerWidth, arrowOutside: arrow.right <= plate.left, off: Math.abs((plate.left + plate.right) / 2 - innerWidth / 2) };
+    });
+    assert.ok(top.plate > 0.5 && top.plate < 0.66, `${label}: the top 5 plates are about 60vw wide (${(top.plate * 100).toFixed(0)}vw)`);
+    assert.ok(top.arrowOutside && top.off < 2, `${label}: the arrows sit outside and the plates are centred (off by ${top.off.toFixed(1)}px)`);
+    assert.deepEqual(await page.$$eval('.top-list .rank-name', (els) => els.map((el) => el.textContent)), state().teams.toSorted((a, b) => b.score - a.score).slice(0, 5).map((tm) => tm.name));
+    await notCut(page, '.top-list .rank-name', `the top 5 at ${label}`);
+  }
+  await shot(tv, 'quick-tv-top5-names');
+  await shot(small, 'quick-tv-top5-names-720');
+  srv.hub.dispatch({ type: 'settings', settings: { glass: false } });
+  for (const [page, label] of [[tv, '1080p'], [small, '720p']]) {
+    await page.waitForSelector('body:not(.glass)');
+    await page.waitForTimeout(300);
+    await notCut(page, '.top-list .rank-name', `the top 5 at ${label} with the plain look`);
+  }
+  await shot(tv, 'quick-glass-off-tv-top5-names');
+  srv.hub.dispatch({ type: 'settings', settings: { glass: true } });
+  await tv.waitForSelector('body.glass');
+  // The next section's standings.
+  for (let n = 0; n < 20 && state().phase !== 'section'; n++) srv.hub.dispatch({ type: ['ready', 'open'].includes(state().phase) ? 'skip' : 'next' });
+  for (const [page, label] of [[tv, '1080p'], [small, '720p']]) {
+    await page.waitForSelector('.standings-list');
+    await page.waitForTimeout(1200);
+    await notCut(page, '.standings-list .rank-name', `the standings at ${label}`);
+  }
+  await shot(tv, 'quick-tv-standings-names');
+  // The podium: a two-line winner's name must not push the steps' points out of sight.
+  for (let n = 0; n < 60 && state().phase !== 'over'; n++) srv.hub.dispatch({ type: ['ready', 'open'].includes(state().phase) ? 'skip' : 'next' });
+  await phase(host, 'over');
+  for (const [page, label] of [[tv, '1080p'], [small, '720p']]) {
+    await page.waitForSelector('.podium');
+    await page.waitForTimeout(4500);
+    await notCut(page, '.step-name, .podium-rest li', `the podium at ${label}`);
+    const inside = await page.evaluate(() => {
+      const floor = document.querySelector('.podium').getBoundingClientRect().bottom;
+      return [...document.querySelectorAll('.step:not(.empty) .step-block b')].every((el) => el.getBoundingClientRect().bottom <= floor + 1);
+    });
+    assert.ok(inside, `${label}: every step's points are above the podium's floor`);
+  }
+  await shot(tv, 'quick-tv-podium-names');
+  await shot(small, 'quick-tv-podium-names-720');
+  await small.context().close();
+
   // ----- The editor: a new Quick quiz -----
   const ed = await host.context().newPage();
   ed.on('pageerror', (e) => errors.push(`editor: ${e.message}`));
@@ -505,7 +686,8 @@ try {
   await ed.waitForSelector('.ed-sec');
   assert.equal(await ed.locator('.ed-sec').count(), 3);
   assert.equal(await ed.locator('.ed-mini').count(), 0); // the sample can't be changed
-  await ed.click('#new-quick');
+  await ed.click('#new-quiz'); // "What kind of quiz?"
+  await ed.click('.ed-kind-modal[open] .ed-kind-quick');
   await ed.waitForSelector('.ed-sec input[name=sectionName]:not([disabled])');
   assert.equal(await ed.locator('.ed-sec').count(), 2);
   assert.match(await ed.textContent('#ed-problems'), /10 questions are still empty/);
@@ -523,6 +705,18 @@ try {
   assert.equal(await ed.getAttribute('#q-form input[name=seconds]', 'placeholder'), '15');
   await ed.waitForTimeout(300);
   await shot(ed, 'quick-editor-question');
+  // The Quick dialog on a laptop and a TV: the answers in a short list on the left, the picture and clip on the right.
+  for (const [w, hgt] of [[1280, 800], [1920, 1080]]) {
+    await ed.setViewportSize({ width: w, height: hgt });
+    const fits = await ed.evaluate(() => {
+      const r = (sel) => document.querySelector(sel).getBoundingClientRect();
+      return { done: r('#q-form button[value=done]').bottom <= innerHeight, cols: r('.ed-q-media').left > r('.ed-q-main').right, scroll: document.querySelector('#q-form').scrollHeight - document.querySelector('#q-form').clientHeight };
+    });
+    assert.ok(fits.done && fits.cols, `${w}: Done in view, media beside the words`);
+    assert.equal(fits.scroll, 0, `${w}: a Quick question without media needs no scrolling`);
+    await shot(ed, `editor-space-quick-${w}`);
+  }
+  await ed.setViewportSize({ width: 1366, height: 900 });
   await ed.click('#q-form button[value=done]');
   await ed.waitForSelector('#q-dialog:not([open])', { state: 'hidden' });
   await ed.waitForFunction(() => /Mercury/.test(document.querySelector('.ed-qrow[data-c="0"][data-i="0"]').textContent)); // redrawn on the dialog's close event
@@ -585,21 +779,16 @@ try {
   await ed.click('.ed-kind-pills label:has(> input[value=multi])');
   assert.match(await ed.textContent('.ed-opts'), /Players must tick exactly these/);
   await ed.check('#q-form input[name=correct][value="0"]');
-  await ed.waitForTimeout(200);
-  assert.doesNotMatch(await ed.textContent('#ed-problems'), /not every answer can be right/);
+  await ed.waitForFunction(() => !/not every answer can be right/.test(document.querySelector('#ed-problems').textContent));
   await ed.uncheck('#q-form input[name=correct][value="0"]');
-  await ed.waitForTimeout(900);
-  await ed.waitForFunction(() => document.querySelector('#ed-status').textContent === 'Saved');
-  let kinds = await (await fetch(`${base}/api/sets/${saved.id}`)).json();
+  let kinds = { set: await savedSet(saved.id, (s) => s.sections[0].questions[0].type === 'multi' && s.sections[0].questions[0].correct?.length === 2) };
   assert.deepEqual(kinds.set.sections[0].questions[0], { question: 'Which of these is a colour?', type: 'multi', options: ['Table', 'Green', 'Red'], correct: [1, 2] });
   await shot(ed, 'quick-editor-tick');
   await ed.click('.ed-kind-pills label:has(> input[value=order])');
   assert.equal(await ed.locator('.ed-opt-right:visible').count(), 0);
   assert.deepEqual(await ed.$$eval('.ed-opt-n', (els) => els.filter((el) => !el.hidden).map((el) => el.textContent)), ['1.', '2.', '3.', '4.']);
   assert.match(await ed.textContent('.ed-opts'), /Write the answers in the right order/);
-  await ed.waitForTimeout(900);
-  await ed.waitForFunction(() => document.querySelector('#ed-status').textContent === 'Saved');
-  kinds = await (await fetch(`${base}/api/sets/${saved.id}`)).json();
+  kinds = { set: await savedSet(saved.id, (s) => s.sections[0].questions[0].type === 'order') };
   assert.deepEqual(kinds.set.sections[0].questions[0], { question: 'Which of these is a colour?', type: 'order', options: ['Table', 'Green', 'Red'] });
   await shot(ed, 'quick-editor-order');
   await ed.click('.ed-kind-pills label:has(> input[value=choice])');
@@ -608,9 +797,7 @@ try {
   await ed.waitForSelector('#q-dialog:not([open])', { state: 'hidden' });
   await ed.waitForFunction(() => document.querySelectorAll('.ed-qrow[data-c="0"][data-i="0"] .ed-qright').length === 2);
   assert.match(await ed.textContent('.ed-qrow[data-c="0"][data-i="0"]'), /Green.*Red/);
-  await ed.waitForTimeout(900); // the editor saves 600 ms after the last change
-  await ed.waitForFunction(() => document.querySelector('#ed-status').textContent === 'Saved');
-  const again = await (await fetch(`${base}/api/sets/${saved.id}`)).json();
+  const again = { set: await savedSet(saved.id, (s) => !s.sections[0].questions[0].type) };
   assert.deepEqual(again.set.sections[0].questions[0], { question: 'Which of these is a colour?', options: ['Table', 'Green', 'Red'], correct: [1, 2] });
   await shot(ed, 'quick-editor-sections-two-right');
 
@@ -623,18 +810,46 @@ try {
   await ed.selectOption('#ai-form select[name=perSection]', '3');
   await ed.selectOption('#ai-form select[name=lang]', 'no');
   await ed.fill('#ai-form textarea[name=topics]', 'Film\nMusikk');
+  // The number of sections sits above the topics (it decides how many to write), and the hint says the number.
+  assert.deepEqual(await ed.$$eval('#ai-form select[name=sections], #ai-form textarea[name=topics]', (els) => els.map((el) => el.name)), ['sections', 'topics']);
+  assert.match(await ed.textContent('.ai-topics small'), /^2 topics, one per line/);
+  await ed.selectOption('#ai-form select[name=sections]', '1');
+  assert.match(await ed.textContent('.ai-topics small'), /^One topic/);
+  assert.match(await ed.textContent('.ai-too-many'), /Only the first 1 topics/);
+  await ed.selectOption('#ai-form select[name=sections]', '2');
+  await shot(ed, 'quick-editor-ai-dialog');
   const request = await ed.inputValue('#ai-request');
   assert.match(request, /Exactly 2 sections with exactly 3 questions each/);
   assert.match(request, /"Film", "Musikk"/);
   assert.match(request, /Norwegian \(bokmål\)/);
   assert.equal(await ed.textContent('.ai-fill'), 'Make the quiz');
   await shot(ed, 'quick-editor-ai-request');
+  // The reply is shaped like the owner's first real one (2026-10-11): no "type" on any question, a "tick all" question
+  // with a list answer, a "put in order" question with the first option as its answer, and one that sounds like
+  // "tick all" but has one answer (that one stays pick one and is flagged).
   const q = (question, options, answer) => ({ question, options, answer });
   const aiQuiz = {
     title: 'Film og musikk',
     sections: [
-      { name: 'Film', questions: [q('Hvem regisserte Haisommer?', ['Lucas', 'Spielberg', 'Scorsese', 'Nolan'], 'Spielberg'), q('Hvilket år kom Titanic?', ['1995', '1997', '1999', '2001'], '1997'), q('Sant eller usant: Shrek er grønn.', ['Sant', 'Usant'], 'Sant')] },
-      { name: 'Musikk', questions: [q('Hvem sang Thriller?', ['Prince', 'Madonna', 'Michael Jackson', 'Sting'], 'Michael Jackson'), q('Hvor mange strenger har en fiolin?', ['Tre', 'Fire', 'Fem', 'Seks'], 'Fire'), q('Hvilket band ga ut Abbey Road?', ['Queen', 'ABBA', 'Oasis', 'The Beatles'], 'The Beatles')] },
+      {
+        name: 'Film',
+        questions: [
+          q('Hvem regisserte Haisommer?', ['Lucas', 'Spielberg', 'Scorsese', 'Nolan'], 'Spielberg'),
+          q('Hvilket år kom Titanic?', ['1995', '1997', '1999', '2001'], '1997'),
+          q('Sant eller usant: Shrek er grønn.', ['Sant', 'Usant'], 'Sant'),
+          q('Sorter disse Disney-filmene fra eldst til nyest.', ['Snøhvit og de syv dvergene', 'Den lille havfruen', 'Løvenes konge', 'Frost'], 'Snøhvit og de syv dvergene'),
+        ],
+      },
+      {
+        name: 'Musikk',
+        questions: [
+          q('Hvem sang Thriller?', ['Prince', 'Madonna', 'Michael Jackson', 'Sting'], 'Michael Jackson'),
+          q('Hvor mange strenger har en fiolin?', ['Tre', 'Fire', 'Fem', 'Seks'], 'Fire'),
+          q('Hvilket band ga ut Abbey Road?', ['Queen', 'ABBA', 'Oasis', 'The Beatles'], 'The Beatles'),
+          q('Hvilke av disse bandene er norske?', ['a-ha', 'ABBA', 'Röyksopp', 'Oasis'], ['a-ha', 'Röyksopp']),
+          q('Hvilke av disse artistene er svenske?', ['Sigrid', 'Zara Larsson', 'Aurora', 'Karpe'], 'Zara Larsson'),
+        ],
+      },
     ],
   };
   await ed.fill('#ai-reply', `Her er quizen!\n\n\`\`\`json\n${JSON.stringify(aiQuiz, null, 2)}\n\`\`\``);
@@ -644,7 +859,113 @@ try {
   assert.equal(await ed.locator('.ed-sec').count(), 2);
   assert.match(await ed.textContent('.ed-qrow[data-c="1"][data-i="0"]'), /Michael Jackson/);
   assert.match(await ed.textContent('#ed-problems'), /Everything is ready to play/);
+  // The note says what was read, and flags the one to check.
+  assert.equal(await ed.textContent('.ai-summary'), 'Read 9 questions: 7 pick one, 1 tick all that are right, 1 put in order.');
+  assert.deepEqual(await ed.$$eval('.ai-suspect', (els) => els.map((el) => el.textContent)), ['Musikk, question 5: the question sounds like “tick all that are right”, but it was read as “pick one”. Check its kind.']);
+  assert.match(await ed.textContent('.ed-qrow[data-c="0"][data-i="3"]'), /In order/);
+  assert.match(await ed.textContent('.ed-qrow[data-c="1"][data-i="3"]'), /Tick all/);
+  await ed.evaluate(() => document.querySelector('.ai-note').scrollIntoView({ block: 'center' }));
+  await shot(ed, 'quick-editor-ai-summary');
+  const madeId = (await (await fetch(`${base}/api/sets`)).json()).find((x) => x.title === 'Film og musikk').id;
+  const madeSet = (await (await fetch(`${base}/api/sets/${madeId}`)).json()).set;
+  assert.deepEqual(madeSet.sections[0].questions[3], { question: 'Sorter disse Disney-filmene fra eldst til nyest.', type: 'order', options: ['Snøhvit og de syv dvergene', 'Den lille havfruen', 'Løvenes konge', 'Frost'] });
+  assert.deepEqual(madeSet.sections[1].questions[3], { question: 'Hvilke av disse bandene er norske?', type: 'multi', options: ['a-ha', 'ABBA', 'Röyksopp', 'Oasis'], correct: [0, 2] });
+  assert.deepEqual(madeSet.sections[1].questions[4], { question: 'Hvilke av disse artistene er svenske?', options: ['Sigrid', 'Zara Larsson', 'Aurora', 'Karpe'], correct: 1 });
+  await ed.evaluate(() => scrollTo(0, 0));
   await shot(ed, 'quick-editor-ai-made');
+
+  // ----- Filling the empty spots of a Quick quiz with AI -----
+  const holes = {
+    v: 1,
+    kind: 'quick',
+    title: 'Half done',
+    sections: [
+      {
+        name: 'Animals',
+        questions: [
+          { question: 'Which animal says moo?', options: ['Horse', 'Cow', 'Sheep', 'Pig'], correct: 1 },
+          { question: 'How many legs does a spider have?', options: ['Six', 'Eight'], correct: 1 },
+          { question: 'Which of these are mammals?', type: 'multi', options: ['Whale', 'Shark', 'Bat', 'Frog'] },
+          { question: '', options: [] },
+        ],
+      },
+      { name: '', questions: [{ question: 'Which planet is closest to the Sun?', options: ['Venus', 'Earth', 'Mercury', 'Mars'] }] },
+    ],
+  };
+  const { id: holesId } = await (await fetch(`${base}/api/sets`, { method: 'POST', body: JSON.stringify({ set: holes }) })).json();
+  await ed.goto(`${base}/editor#${holesId}`);
+  await ed.reload(); // only the hash changed, so make the editor open that quiz
+  await ed.waitForFunction(() => document.querySelector('.ed-name input')?.value === 'Half done');
+  await ed.click('.ai-fill-open');
+  await ed.waitForSelector('#ai-dialog[open]');
+  assert.equal(await ed.inputValue('#ai-form input[name=target]'), '5'); // the most any section has, at least 5
+  let missing = await ed.textContent('.ai-gaps');
+  assert.match(missing, /Empty questions: 1/);
+  assert.match(missing, /Questions missing answer options: 1/);
+  assert.match(missing, /Questions without a right answer marked: 2/);
+  assert.match(missing, /Sections without a name: 1/);
+  assert.match(missing, /New questions to add: 5/);
+  await ed.fill('#ai-form input[name=target]', '4');
+  await ed.waitForFunction(() => document.querySelector('.ai-gaps').textContent.includes('New questions to add: 3'));
+  const fillRequest = await ed.inputValue('#ai-request');
+  assert.match(fillRequest, /"options": \["Six", "Eight", "", ""\], "answer": "Eight"/);
+  assert.match(fillRequest, /3 of them are new questions/);
+  assert.match(fillRequest, /in English, like the rest/);
+  await shot(ed, 'quick-editor-fill-dialog');
+  const fillReply = {
+    title: 'Half done',
+    sections: [
+      {
+        name: 'Animals',
+        questions: [
+          q('Which animal says moo?', ['Horse', 'Cow', 'Sheep', 'Pig'], 'Cow'),
+          q('How many legs does a spider have?', ['Six', 'Eight', 'Ten', 'Twelve'], 'Eight'),
+          { question: 'Which of these are mammals?', type: 'multi', options: ['Whale', 'Shark', 'Bat', 'Frog'], answer: ['Whale', 'Bat'] },
+          q('Which bird cannot fly?', ['Eagle', 'Penguin', 'Sparrow', 'Owl'], 'Penguin'),
+        ],
+      },
+      {
+        name: 'Space',
+        questions: [
+          q('Which planet is closest to the Sun?', ['Venus', 'Earth', 'Mercury', 'Mars'], 'Mercury'),
+          q('True or false: the Sun is a star.', ['True', 'False'], 'True'),
+          { question: 'Put these in order, closest to the Sun first.', type: 'order', options: ['Mercury', 'Venus', 'Earth'] },
+          q('How many moons does Mars have?', ['None', 'One', 'Two', 'Three'], 'Two'),
+        ],
+      },
+    ],
+  };
+  await ed.fill('#ai-reply', '```json\n' + JSON.stringify(fillReply, null, 2) + '\n```');
+  await ed.click('.ai-fill-gaps');
+  await ed.waitForSelector('#ai-dialog:not([open])', { state: 'hidden' });
+  await ed.waitForSelector('.ai-note');
+  assert.match(await ed.textContent('.ai-note'), /Filled in with AI: 7 questions/);
+  assert.match(await ed.textContent('.ai-note'), /3 of them are new questions/);
+  assert.equal(await ed.textContent('.ai-summary'), 'Filled in or added: 7 questions: 5 pick one, 1 tick all that are right, 1 put in order.');
+  assert.equal(await ed.locator('.ai-suspect').count(), 0);
+  assert.deepEqual(await ed.$$eval('.ed-qrow.ai-filled', (els) => els.map((el) => `${el.dataset.c}-${el.dataset.i}`)), ['0-1', '0-2', '0-3', '1-0', '1-1', '1-2', '1-3']);
+  assert.equal(await ed.inputValue('.ed-sec:nth-of-type(2) input[name=sectionName]'), 'Space');
+  assert.match(await ed.textContent('.ed-qrow[data-c="0"][data-i="0"]'), /Cow/);
+  assert.match(await ed.textContent('.ed-qrow[data-c="1"][data-i="2"]'), /1\.\s*Mercury/);
+  assert.match(await ed.textContent('#ed-problems'), /Everything is ready to play/);
+  await shot(ed, 'quick-editor-filled');
+  const filledSet = await savedSet(holesId, (s) => s.sections[1]?.questions[2]?.type === 'order' && s.sections[0]?.questions[1]?.correct === 1);
+  assert.deepEqual(filledSet.sections[0].questions[1], { question: 'How many legs does a spider have?', options: ['Six', 'Eight', 'Ten', 'Twelve'], correct: 1 });
+  assert.deepEqual(filledSet.sections[0].questions[2].correct, [0, 2]);
+  assert.deepEqual(filledSet.sections[1].questions[2], { question: 'Put these in order, closest to the Sun first.', type: 'order', options: ['Mercury', 'Venus', 'Earth'] });
+  assert.equal(filledSet.sections[1].questions.length, 4);
+  // Nothing missing any more: the number starts at 5 again (so 2 could still be added); at 4 the dialog says nothing is missing.
+  await ed.click('.ai-fill-open');
+  await ed.waitForSelector('#ai-dialog[open]');
+  assert.match(await ed.textContent('.ai-gaps'), /^This is missing:New questions to add: 2$/);
+  await ed.fill('#ai-form input[name=target]', '4');
+  await ed.waitForFunction(() => document.querySelector('.ai-gaps').textContent.includes('Nothing is missing'));
+  assert.equal(await ed.locator('.ai-fill-gaps').isDisabled(), true);
+  await ed.fill('#ai-form input[name=target]', '6');
+  await ed.waitForFunction(() => document.querySelector('.ai-gaps').textContent.includes('New questions to add: 4'));
+  assert.equal(await ed.locator('.ai-fill-gaps').isDisabled(), false);
+  await ed.click('#ai-form button[value=cancel]');
+  await ed.waitForSelector('#ai-dialog:not([open])', { state: 'hidden' });
 
   // The new quiz can be played: it's in the lobby's picker after a restart of the game.
   srv.hub.dispatch({ type: 'restart' });

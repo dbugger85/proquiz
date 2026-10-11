@@ -2,13 +2,15 @@
 import { COLORS, newColor, SHAPES, OPTION_COLORS, REACTIONS } from '/lib/game.js';
 import { connect } from './net.js';
 import { t, pts, setLang, guessLang, translatePage, secondsText } from './i18n.js';
-import { $, h, inkFor, countdown, runCountdowns, setGlass, shapeSvg, optionStyle, setBrand, longWord } from './ui.js';
+import { $, h, fill, inkFor, countdown, runCountdowns, setGlass, shapeSvg, optionStyle, setBrand, longWord } from './ui.js';
 import { keepAwake } from './wake.js';
 import { countTo, shownCount } from './rankanim.js';
 import { AVATAR_PARTS, AVATAR_KEYS, isValidAvatar, randomAvatar } from '/lib/avatar.js';
 import { avatarEl, avatarHtml, HAIR_COLORS } from './avatar.js';
+import { languageName, flagUrl, browserLang, isLanguage } from '/lib/languages.js';
 
 const KEY = 'proquiz.team'; // { id, name, color, avatar } — survives reloads, so a phone re-joins as the same team
+const LANG_KEY = 'proquiz.team.lang'; // the language this phone reads the questions in (a quiz with extra languages)
 
 function loadSaved() {
   try {
@@ -37,6 +39,52 @@ let needPin = false; // joining over the internet, and the host has set a PIN
 let brand = null; // the host's logo, event name and accent colour (brand.js)
 let editingSeen = false; // the join form is showing (so the team's avatar was already put in it)
 let shownScore = null; // { id, score } the header last showed, so new points can count up
+
+// ----- the language this phone reads the questions in (lib/languages.js) -----
+// Only when the quiz has extra languages and the host's switch is on (`view.languages` = { main, extra }). The choice is
+// remembered on the phone. The phone's own buttons follow it only when it is English or Norwegian.
+function savedLang() {
+  try {
+    const v = localStorage.getItem(LANG_KEY);
+    return isLanguage(v) ? v : null;
+  } catch {
+    return null;
+  }
+}
+function saveLang(code) {
+  try {
+    if (code) localStorage.setItem(LANG_KEY, code);
+    else localStorage.removeItem(LANG_KEY);
+  } catch {}
+}
+const offeredLangs = () => (view?.languages ? [view.languages.main, ...view.languages.extra] : []);
+// What this phone has chosen (or would choose): the remembered one if the quiz has it, else the phone's own language
+// if the quiz has it, else the main language. Null when there is no choice to make.
+function chosenLang() {
+  const offered = offeredLangs();
+  if (!offered.length) return null;
+  const mine = view?.you?.lang;
+  for (const code of [mine, savedLang(), browserLang(navigator.language)]) if (code && offered.includes(code)) return code;
+  return offered[0];
+}
+// The language of the phone's own buttons and messages: the host's setting, unless this phone reads the quiz in
+// another language than the main one and that language is one of ours (English or Norwegian).
+function uiLang() {
+  const chosen = chosenLang();
+  return chosen && chosen !== view.languages?.main && ['en', 'no'].includes(chosen) ? chosen : view.lang;
+}
+const flagImg = (code, cls = 'flag') => h('img', { class: cls, src: flagUrl(code), alt: '', 'aria-hidden': 'true' });
+// A pill per offered language, with its flag. `onPick(code)` when one is chosen.
+function langPills(name, current, onPick) {
+  return offeredLangs().map((code) =>
+    h(
+      'label',
+      {},
+      h('input', { type: 'radio', name, value: code, checked: code === current, onchange: () => onPick(code) }),
+      h('span', { lang: code }, flagImg(code), languageName(code)),
+    ),
+  );
+}
 
 setLang(guessLang());
 translatePage();
@@ -180,8 +228,59 @@ $('#join').addEventListener('submit', (e) => {
   $('#join-error').textContent = '';
   saved = { ...saved, name, color, avatar };
   save(saved);
-  pendingJoin = net.send({ type: 'join', name, color, avatar, teamId: saved.id, ...(needPin && { pin }) });
+  // The quiz's language this phone reads in (only when the form offered the choice).
+  const lang = $('#lang-field').hidden ? null : ($('#lang-pills input:checked')?.value ?? null);
+  if (lang) saveLang(lang);
+  pendingJoin = net.send({ type: 'join', name, color, avatar, teamId: saved.id, ...(lang && { lang }), ...(needPin && { pin }) });
   render();
+});
+
+// The join form's "Read questions in:" pills (only when the quiz offers a choice).
+function renderLangField() {
+  const field = $('#lang-field');
+  const offered = offeredLangs();
+  field.hidden = offered.length === 0;
+  if (field.hidden) return;
+  const current = $('#lang-pills input:checked')?.value;
+  const key = `${offered.join(',')}|${current ?? chosenLang()}|${view.lang}`;
+  if (field.dataset.key === key) return;
+  field.dataset.key = key;
+  fill($('#lang-pills'), langPills('quizLang', offered.includes(current) ? current : chosenLang(), () => {}));
+}
+
+// The flag pill in the header (once in the game): tap for the list, pick one and the server sends the texts in it.
+function renderLangPill() {
+  const pill = $('#lang-pill');
+  const menu = $('#lang-menu');
+  const offered = offeredLangs();
+  pill.hidden = offered.length === 0;
+  if (pill.hidden) {
+    menu.hidden = true;
+    pill.setAttribute('aria-expanded', 'false');
+    return;
+  }
+  const chosen = chosenLang();
+  const key = `${offered.join(',')}|${chosen}|${view.lang}`;
+  if (pill.dataset.key === key) return;
+  pill.dataset.key = key;
+  pill.setAttribute('aria-label', t('readInNow', { lang: languageName(chosen) }));
+  pill.title = t('readInNow', { lang: languageName(chosen) });
+  fill(pill, flagImg(chosen), h('span', { class: 'lang-code' }, chosen.toUpperCase()));
+  fill(
+    menu.querySelector('.pills'),
+    langPills('quizLangNow', chosen, (code) => {
+      saveLang(code);
+      net.send({ type: 'language', lang: code });
+      menu.hidden = true;
+      pill.setAttribute('aria-expanded', 'false');
+      pill.dataset.key = ''; // redraw with the new flag as soon as the server answers
+    }),
+  );
+}
+$('#lang-pill').addEventListener('click', () => {
+  const menu = $('#lang-menu');
+  menu.hidden = !menu.hidden;
+  $('#lang-pill').setAttribute('aria-expanded', String(!menu.hidden));
 });
 
 $('#swatches').addEventListener('change', () => {
@@ -213,6 +312,19 @@ function buzzer(live, size = '') {
 
 const nameOf = (id) => view.teams.find((tm) => tm.id === id)?.name ?? '';
 const quick = () => view?.mode === 'quick';
+
+// A phone that reads the quiz in another language (view.textLang, see wantsText() in game.js): the question while
+// the TV shows it, and the answer once it is revealed. Translated text may run right to left, so dir="auto".
+function textBlock() {
+  const x = view.text;
+  if (!x?.question && !x?.answer) return null;
+  return h(
+    'div',
+    { class: 'phone-text', lang: view.textLang },
+    x.question ? h('p', { class: 'phone-question', dir: 'auto' }, x.question) : null,
+    x.answer ? h('p', { class: 'phone-answer', dir: 'auto' }, h('span', {}, `${t('answerLabel')}:`), ' ', x.answer) : null,
+  );
+}
 
 function stage() {
   if (quick()) return quickStage();
@@ -248,10 +360,10 @@ function stage() {
     return [h('div', { class: 'big' }, '💥'), h('div', { class: 'big' }, t('boomYou', { n: pts(ev.amount ?? 0) }))];
   }
   // Fair buzzing can find that a press came before the buzzers were on: too early, like while the host reads.
-  if (s === 'armed') return [buzzer(true), ev?.type === 'early' && ev.teamId === me.id ? h('div', { class: 'big' }, t('tooEarly')) : null];
-  if (s === 'first') return [h('div', { class: 'big' }, t('youreFirst')), h('p', { class: 'small' }, t('answerNow')), countdown(view)];
-  if (s === 'other') return [h('div', { class: 'big' }, t('otherFirst', { name: nameOf(view.buzzedTeam) }))];
-  if (s === 'locked') return [h('p', { class: 'small' }, t('lockedOut'))];
+  if (s === 'armed') return [textBlock(), buzzer(true), ev?.type === 'early' && ev.teamId === me.id ? h('div', { class: 'big' }, t('tooEarly')) : null];
+  if (s === 'first') return [textBlock(), h('div', { class: 'big' }, t('youreFirst')), h('p', { class: 'small' }, t('answerNow')), countdown(view)];
+  if (s === 'other') return [textBlock(), h('div', { class: 'big' }, t('otherFirst', { name: nameOf(view.buzzedTeam) }))];
+  if (s === 'locked') return [textBlock(), h('p', { class: 'small' }, t('lockedOut'))];
   if (s === 'over') {
     const ranked = [...view.teams].sort((a, b) => b.score - a.score);
     const place = ranked.findIndex((tm) => tm.score === me.score) + 1;
@@ -261,17 +373,20 @@ function stage() {
   if (s === 'finalAnswer') return answerStage();
   if (s === 'finalWait') {
     const f = view.final;
-    if (f.judged === null) return [h('div', { class: 'big' }, t('waitJudging')), f.answer ? h('p', { class: 'small' }, t('youAnswered', { text: f.answer })) : null];
-    return [h('div', { class: 'big' }, f.judged ? t('finalRight', { n: pts(f.wager ?? 0) }) : t('finalWrong', { n: pts(f.wager ?? 0) }))];
+    // In another language: the final's question, and its answer once the TV shows it.
+    const finalText = f.question || f.rightAnswer ? h('div', { class: 'phone-text', lang: view.textLang }, f.question ? h('p', { class: 'phone-question', dir: 'auto' }, f.question) : null, f.rightAnswer ? h('p', { class: 'phone-answer', dir: 'auto' }, h('span', {}, `${t('answerLabel')}:`), ' ', f.rightAnswer) : null) : null;
+    if (f.judged === null) return [finalText, h('div', { class: 'big' }, t('waitJudging')), f.answer ? h('p', { class: 'small' }, t('youAnswered', { text: f.answer })) : null];
+    return [finalText, h('div', { class: 'big' }, f.judged ? t('finalRight', { n: pts(f.wager ?? 0) }) : t('finalWrong', { n: pts(f.wager ?? 0) }))];
   }
   // waiting: board, reading or revealed. While the host reads, the (dim) buzzer is there, but pressing it is too early.
   if (view.phase === 'reading') {
     const early = ev?.type === 'early' && ev.teamId === me.id;
-    return [buzzer(false), early ? h('div', { class: 'big' }, t('tooEarly')) : h('p', { class: 'small' }, t('getReady'))];
+    return [textBlock(), buzzer(false), early ? h('div', { class: 'big' }, t('tooEarly')) : h('p', { class: 'small' }, t('getReady'))];
   }
   if (view.phase === 'revealed' && ev?.type === 'correct' && ev.teamId === me.id) {
-    return [h('div', { class: 'big' }, t('gotIt'))];
+    return [h('div', { class: 'big' }, t('gotIt')), textBlock()];
   }
+  if (view.phase === 'revealed' && view.text) return [textBlock(), h('p', { class: 'small' }, t('waitNext'))];
   if (view.phase === 'board' && view.canPick) return pickStage();
   if (view.phase === 'board' && view.settings.phonePick && view.picker && view.picker !== me.id) {
     return [h('p', { class: 'small' }, t('otherPicks', { name: nameOf(view.picker) }))];
@@ -356,7 +471,7 @@ function choiceButtons() {
         },
         picking ? h('span', { class: 'pick-badge', 'aria-hidden': 'true' }) : null,
         shapeSvg(SHAPES[i]),
-        optionText(i) ? h('span', { class: `choice-text${longWord(optionText(i))}` }, optionText(i)) : null,
+        optionText(i) ? h('span', { class: `choice-text${longWord(optionText(i))}`, dir: 'auto' }, optionText(i)) : null,
       ),
     ),
   );
@@ -388,7 +503,7 @@ function optionChip(i, big = false, n = null) {
     { class: `opt-chip${big ? ' big' : ''}${n ? ' numbered' : ''}`, style: optionStyle(OPTION_COLORS[i]) },
     n ? h('b', { class: 'chip-n' }, String(n)) : null,
     shapeSvg(SHAPES[i]),
-    optionText(i) && !big ? h('span', {}, optionText(i)) : null,
+    optionText(i) && !big ? h('span', { dir: 'auto' }, optionText(i)) : null,
   );
 }
 
@@ -477,7 +592,7 @@ function quickStage() {
     const scored = view.teams.some((tm) => tm.score > 0);
     return [
       h('p', { class: 'kicker' }, t('quickSectionOf', { n: (view.pos?.s ?? 0) + 1, total: view.sections.length })),
-      h('div', { class: 'big' }, sec?.name ?? ''),
+      h('div', { class: 'big', dir: 'auto' }, sec?.name ?? ''),
       h('p', { class: 'small' }, t('quickNQuestions', { n: sec?.n ?? 0 })),
       scored ? h('p', { class: 'result' }, t('place', { n: view.rank, total: view.total })) : h('p', { class: 'small' }, t('lookTv')),
       scored ? gapLine() : null,
@@ -486,21 +601,21 @@ function quickStage() {
   if (s === 'ready') {
     return [
       h('p', { class: 'kicker' }, whereText()),
-      q?.question ? h('p', { class: 'phone-question' }, q.question) : h('div', { class: 'big' }, t('quickGetReady')),
+      q?.question ? h('p', { class: 'phone-question', dir: 'auto' }, q.question) : h('div', { class: 'big' }, t('quickGetReady')),
       h('div', { class: 'ready-dots', 'aria-hidden': 'true' }, h('span'), h('span'), h('span')),
       h('p', { class: 'small' }, q?.question ? t('quickGetReady') : t('quickReadTv')),
       countdown(view),
     ];
   }
   if (s === 'answer') {
-    return [q.question ? h('p', { class: 'phone-question' }, q.question) : null, ...choiceButtons(), countdown(view)];
+    return [q.question ? h('p', { class: 'phone-question', dir: 'auto' }, q.question) : null, ...choiceButtons(), countdown(view)];
   }
   if (s === 'answered') {
     const one = q.type !== 'multi' && q.type !== 'order';
     return [
       one ? h('div', { class: 'locked-shape', style: optionStyle(OPTION_COLORS[q.mine.option]) }, shapeSvg(SHAPES[q.mine.option])) : null,
       h('div', { class: 'big' }, t('quickLocked')),
-      one ? (optionText(q.mine.option) ? h('p', { class: 'small' }, optionText(q.mine.option)) : null) : h('div', { class: `right-chips${q.type === 'order' ? ' as-list' : ''}` }, answerChips(q, q.mine)),
+      one ? (optionText(q.mine.option) ? h('p', { class: 'small', dir: 'auto' }, optionText(q.mine.option)) : null) : h('div', { class: `right-chips${q.type === 'order' ? ' as-list' : ''}` }, answerChips(q, q.mine)),
       h('p', { class: 'small' }, t('quickLockedSmall')),
       countdown(view),
     ];
@@ -692,6 +807,7 @@ function answerStage() {
   const input = h('input', { id: 'final-answer', type: 'text', maxlength: 100, autocomplete: 'off', enterkeyhint: 'send', value: f.answer ?? '', 'aria-label': t('yourAnswer') });
   return [
     h('p', { class: 'kicker' }, `${t('finalRound')}: ${f.category}`),
+    f.question ? h('p', { class: 'phone-question', dir: 'auto', lang: view.textLang }, f.question) : null, // in another language (wantsText)
     h(
       'form',
       {
@@ -715,11 +831,11 @@ function answerStage() {
 // don't change it, so typing is never wiped out.
 let stageKey = '';
 function stageKeyFor() {
-  if (quick()) return JSON.stringify([view.lang, view.status, view.pos, view.q, view.rank, view.rankBefore, view.total, view.you, view.deadline, view.sections, view.behind, view.ahead, view.settings.quickReactions, view.status === 'section' ? view.teams.some((tm) => tm.score > 0) : null]);
+  if (quick()) return JSON.stringify([uiLang(), view.textLang, view.status, view.pos, view.q, view.rank, view.rankBefore, view.total, view.you, view.deadline, view.sections, view.behind, view.ahead, view.settings.quickReactions, view.status === 'section' ? view.teams.some((tm) => tm.score > 0) : null]);
   const f = view.final;
   if (!view.canPick) pickCat = null;
   return JSON.stringify([
-    view.lang, view.status, view.phase, view.buzzedTeam, view.event?.seq, view.you.score, view.deadline, f?.wager, f?.answer, f?.judged, f?.maxWager,
+    uiLang(), view.textLang, view.text, view.status, view.phase, view.buzzedTeam, view.event?.seq, view.you.score, view.deadline, f?.wager, f?.answer, f?.judged, f?.maxWager, f?.question, f?.rightAnswer, f?.category,
     view.picker, view.settings.phonePick, view.board, pickCat, view.betting, view.frozen,
     view.status === 'freezeChoose' ? view.teams.map((tm) => [tm.id, tm.name, tm.color]) : null,
   ]);
@@ -780,7 +896,7 @@ addEventListener('resize', fitName);
 document.fonts?.ready.then(fitName);
 
 function render() {
-  if (view) setLang(view.lang);
+  if (view) setLang(uiLang());
   if (view) setGlass(view.settings.glass);
   setBrand(brand);
   $('#brand-name').textContent = brand?.name ?? '';
@@ -803,6 +919,7 @@ function render() {
     if (me?.avatar && !editingSeen) avatar = { ...me.avatar }; // changing a team that joined on another phone or before
     editingSeen = true;
     renderAvatar();
+    renderLangField();
     $('#pin-field').hidden = !needPin;
     $('#join-btn').disabled = pendingJoin;
     $('#join-btn').textContent = pendingJoin ? t('joining') : me ? t('saveTeam') : t('joinButton');
@@ -818,6 +935,7 @@ function render() {
     $('#me').dataset.key = meKey;
     $('#me').replaceChildren(...[avatarEl(me.avatar, 'me-avatar'), h('span', { class: 'me-name' }, me.name)].filter(Boolean));
   }
+  renderLangPill();
   // New points count up (or down) to the new score.
   if (shownScore?.id === me.id && shownScore.score !== me.score) countTo('score', shownCount('score', shownScore.score), me.score, { ms: 600, tick: false, format: (n) => t('points', { n: pts(n) }) });
   shownScore = { id: me.id, score: me.score };

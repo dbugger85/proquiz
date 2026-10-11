@@ -2,6 +2,16 @@
   "v": 1,
   "title": "Sample quiz",
   "description": "A small board quiz to try ProQuiz with: five categories, a round 2 and a final question.",
+  "lang": "en",
+  "languages": [
+    "no"
+  ],
+  "translations": {
+    "no": {
+      "title": "Prøvequiz",
+      "description": "En liten quiz for å prøve ProQuiz: fem kategorier, en runde 2 og et finalespørsmål."
+    }
+  },
   "categories": [
     {
       "name": "Capitals",
@@ -9,30 +19,65 @@
         {
           "value": 100,
           "question": "What is the capital of Norway?",
-          "answer": "Oslo"
+          "answer": "Oslo",
+          "translations": {
+            "no": {
+              "question": "Hva er hovedstaden i Norge?",
+              "answer": "Oslo"
+            }
+          }
         },
         {
           "value": 200,
           "question": "What is the capital of Italy?",
-          "answer": "Rome"
+          "answer": "Rome",
+          "translations": {
+            "no": {
+              "question": "Hva er hovedstaden i Italia?",
+              "answer": "Roma"
+            }
+          }
         },
         {
           "value": 300,
           "question": "This flag flies over which capital city?",
           "image": "sample-flag-japan.svg",
-          "answer": "Tokyo (Japan)"
+          "answer": "Tokyo (Japan)",
+          "translations": {
+            "no": {
+              "question": "Over hvilken hovedstad vaier dette flagget?",
+              "answer": "Tokyo (Japan)"
+            }
+          }
         },
         {
           "value": 400,
           "question": "What is the capital of Australia?",
-          "answer": "Canberra"
+          "answer": "Canberra",
+          "translations": {
+            "no": {
+              "question": "Hva er hovedstaden i Australia?",
+              "answer": "Canberra"
+            }
+          }
         },
         {
           "value": 500,
           "question": "What is the capital of Mongolia?",
-          "answer": "Ulaanbaatar"
+          "answer": "Ulaanbaatar",
+          "translations": {
+            "no": {
+              "question": "Hva er hovedstaden i Mongolia?",
+              "answer": "Ulan Bator"
+            }
+          }
         }
-      ]
+      ],
+      "translations": {
+        "no": {
+          "name": "Hovedsteder"
+        }
+      }
     },
     {
       "name": "Movies",
@@ -40,29 +85,64 @@
         {
           "value": 100,
           "question": "Which film features a snowman called Olaf?",
-          "answer": "Frozen"
+          "answer": "Frozen",
+          "translations": {
+            "no": {
+              "question": "I hvilken film er det en snømann som heter Olaf?",
+              "answer": "Frost"
+            }
+          }
         },
         {
           "value": 200,
           "question": "Who plays Jack in Titanic (1997)?",
-          "answer": "Leonardo DiCaprio"
+          "answer": "Leonardo DiCaprio",
+          "translations": {
+            "no": {
+              "question": "Hvem spiller Jack i Titanic (1997)?",
+              "answer": "Leonardo DiCaprio"
+            }
+          }
         },
         {
           "value": 300,
           "question": "Which film series has a hobbit called Frodo?",
-          "answer": "The Lord of the Rings"
+          "answer": "The Lord of the Rings",
+          "translations": {
+            "no": {
+              "question": "I hvilken filmserie finner vi hobbiten Frodo?",
+              "answer": "Ringenes herre"
+            }
+          }
         },
         {
           "value": 400,
           "question": "What is the name of the lion cub in The Lion King?",
-          "answer": "Simba"
+          "answer": "Simba",
+          "translations": {
+            "no": {
+              "question": "Hva heter løveungen i Løvenes konge?",
+              "answer": "Simba"
+            }
+          }
         },
         {
           "value": 500,
           "question": "Which director made Jaws, E.T. and Jurassic Park?",
-          "answer": "Steven Spielberg"
+          "answer": "Steven Spielberg",
+          "translations": {
+            "no": {
+              "question": "Hvilken regissør laget Haisommer, E.T. og Jurassic Park?",
+              "answer": "Steven Spielberg"
+            }
+          }
         }
-      ]
+      ],
+      "translations": {
+        "no": {
+          "name": "Film"
+        }
+      }
     },
     {
       "name": "Science",
@@ -71,29 +151,64 @@
           "value": 100,
           "question": "Which planet is closest to the Sun?",
           "answer": "Mercury",
-          "answerImage": "sample-mercury.svg"
+          "answerImage": "sample-mercury.svg",
+          "translations": {
+            "no": {
+              "question": "Hvilken planet er nærmest sola?",
+              "answer": "Merkur"
+            }
+          }
         },
         {
           "value": 200,
           "question": "What gas do plants take in from the air?",
-          "answer": "Carbon dioxide (CO2)"
+          "answer": "Carbon dioxide (CO2)",
+          "translations": {
+            "no": {
+              "question": "Hvilken gass tar plantene opp fra lufta?",
+              "answer": "Karbondioksid (CO2)"
+            }
+          }
         },
         {
           "value": 300,
           "question": "How many bones does an adult human have?",
-          "answer": "206"
+          "answer": "206",
+          "translations": {
+            "no": {
+              "question": "Hvor mange bein har en voksen person i kroppen?",
+              "answer": "206"
+            }
+          }
         },
         {
           "value": 400,
           "question": "What is the chemical symbol for gold?",
-          "answer": "Au"
+          "answer": "Au",
+          "translations": {
+            "no": {
+              "question": "Hva er det kjemiske symbolet for gull?",
+              "answer": "Au"
+            }
+          }
         },
         {
           "value": 500,
           "question": "What is the speed of light, roughly, in km per second?",
-          "answer": "About 300,000 km/s"
+          "answer": "About 300,000 km/s",
+          "translations": {
+            "no": {
+              "question": "Hvor stor er lysets hastighet, omtrent, i km per sekund?",
+              "answer": "Omtrent 300 000 km/s"
+            }
+          }
         }
-      ]
+      ],
+      "translations": {
+        "no": {
+          "name": "Vitenskap"
+        }
+      }
     },
     {
       "name": "Music",
@@ -101,30 +216,65 @@
         {
           "value": 100,
           "question": "Which band had a hit with 'Take On Me'?",
-          "answer": "a-ha"
+          "answer": "a-ha",
+          "translations": {
+            "no": {
+              "question": "Hvilket band hadde en hit med «Take On Me»?",
+              "answer": "a-ha"
+            }
+          }
         },
         {
           "value": 200,
           "question": "Which children's song is this?",
           "audio": "sample-twinkle.mp3",
-          "answer": "Twinkle, Twinkle, Little Star"
+          "answer": "Twinkle, Twinkle, Little Star",
+          "translations": {
+            "no": {
+              "question": "Hvilken barnesang er dette?",
+              "answer": "«Twinkle, Twinkle, Little Star»"
+            }
+          }
         },
         {
           "value": 300,
           "question": "Which singer is known as the 'Queen of Pop'?",
-          "answer": "Madonna"
+          "answer": "Madonna",
+          "translations": {
+            "no": {
+              "question": "Hvilken sangerinne kalles «popens dronning»?",
+              "answer": "Madonna"
+            }
+          }
         },
         {
           "value": 400,
           "question": "Which composer wrote the music for Peer Gynt?",
-          "answer": "Edvard Grieg"
+          "answer": "Edvard Grieg",
+          "translations": {
+            "no": {
+              "question": "Hvilken komponist skrev musikken til Peer Gynt?",
+              "answer": "Edvard Grieg"
+            }
+          }
         },
         {
           "value": 500,
           "question": "Which country won Eurovision in 1985 with 'La det swinge'?",
-          "answer": "Norway (Bobbysocks!)"
+          "answer": "Norway (Bobbysocks!)",
+          "translations": {
+            "no": {
+              "question": "Hvilket land vant Eurovision i 1985 med «La det swinge»?",
+              "answer": "Norge (Bobbysocks!)"
+            }
+          }
         }
-      ]
+      ],
+      "translations": {
+        "no": {
+          "name": "Musikk"
+        }
+      }
     },
     {
       "name": "Sports",
@@ -132,29 +282,64 @@
         {
           "value": 100,
           "question": "How many players does a football team have on the field?",
-          "answer": "Eleven"
+          "answer": "Eleven",
+          "translations": {
+            "no": {
+              "question": "Hvor mange spillere har et fotballag på banen?",
+              "answer": "Elleve"
+            }
+          }
         },
         {
           "value": 200,
           "question": "In which sport do you hear 'love' as a score?",
-          "answer": "Tennis"
+          "answer": "Tennis",
+          "translations": {
+            "no": {
+              "question": "I hvilken sport sier man «love» om stillingen?",
+              "answer": "Tennis"
+            }
+          }
         },
         {
           "value": 300,
           "question": "Which country hosted the 1994 Winter Olympics?",
-          "answer": "Norway (Lillehammer)"
+          "answer": "Norway (Lillehammer)",
+          "translations": {
+            "no": {
+              "question": "Hvilket land arrangerte vinter-OL i 1994?",
+              "answer": "Norge (Lillehammer)"
+            }
+          }
         },
         {
           "value": 400,
           "question": "How long is a marathon, to the nearest kilometre?",
-          "answer": "42 km (42.195)"
+          "answer": "42 km (42.195)",
+          "translations": {
+            "no": {
+              "question": "Hvor lang er en maraton, til nærmeste kilometer?",
+              "answer": "42 km (42,195)"
+            }
+          }
         },
         {
           "value": 500,
           "question": "Which Norwegian has the most Winter Olympic medals?",
-          "answer": "Marit Bjørgen (15)"
+          "answer": "Marit Bjørgen (15)",
+          "translations": {
+            "no": {
+              "question": "Hvilken nordmann har flest medaljer fra vinter-OL?",
+              "answer": "Marit Bjørgen (15)"
+            }
+          }
         }
-      ]
+      ],
+      "translations": {
+        "no": {
+          "name": "Sport"
+        }
+      }
     }
   ],
   "round2": {
@@ -165,29 +350,64 @@
           {
             "value": 200,
             "question": "What is the largest ocean on Earth?",
-            "answer": "The Pacific Ocean"
+            "answer": "The Pacific Ocean",
+            "translations": {
+              "no": {
+                "question": "Hva er det største havet på jorda?",
+                "answer": "Stillehavet"
+              }
+            }
           },
           {
             "value": 400,
             "question": "What is the smallest country in the world?",
-            "answer": "Vatican City"
+            "answer": "Vatican City",
+            "translations": {
+              "no": {
+                "question": "Hva er verdens minste land?",
+                "answer": "Vatikanstaten"
+              }
+            }
           },
           {
             "value": 600,
             "question": "Which river flows through Paris?",
-            "answer": "The Seine"
+            "answer": "The Seine",
+            "translations": {
+              "no": {
+                "question": "Hvilken elv renner gjennom Paris?",
+                "answer": "Seinen"
+              }
+            }
           },
           {
             "value": 800,
             "question": "Which mountain range is seen as the border between Europe and Asia in Russia?",
-            "answer": "The Ural Mountains"
+            "answer": "The Ural Mountains",
+            "translations": {
+              "no": {
+                "question": "Hvilken fjellkjede regnes som grensen mellom Europa og Asia i Russland?",
+                "answer": "Uralfjellene"
+              }
+            }
           },
           {
             "value": 1000,
             "question": "In which country is the city of Timbuktu?",
-            "answer": "Mali"
+            "answer": "Mali",
+            "translations": {
+              "no": {
+                "question": "I hvilket land ligger byen Timbuktu?",
+                "answer": "Mali"
+              }
+            }
           }
-        ]
+        ],
+        "translations": {
+          "no": {
+            "name": "Geografi"
+          }
+        }
       },
       {
         "name": "TV Series",
@@ -195,29 +415,64 @@
           {
             "value": 200,
             "question": "In which town do the Simpsons live?",
-            "answer": "Springfield"
+            "answer": "Springfield",
+            "translations": {
+              "no": {
+                "question": "I hvilken by bor familien Simpson?",
+                "answer": "Springfield"
+              }
+            }
           },
           {
             "value": 400,
             "question": "Which series is set in the land of Westeros?",
-            "answer": "Game of Thrones"
+            "answer": "Game of Thrones",
+            "translations": {
+              "no": {
+                "question": "Hvilken serie foregår i landet Westeros?",
+                "answer": "Game of Thrones"
+              }
+            }
           },
           {
             "value": 600,
             "question": "What is the name of the coffee shop in Friends?",
-            "answer": "Central Perk"
+            "answer": "Central Perk",
+            "translations": {
+              "no": {
+                "question": "Hva heter kaféen i Friends?",
+                "answer": "Central Perk"
+              }
+            }
           },
           {
             "value": 800,
             "question": "In Breaking Bad, which subject does Walter White teach?",
-            "answer": "Chemistry"
+            "answer": "Chemistry",
+            "translations": {
+              "no": {
+                "question": "Hvilket fag underviser Walter White i, i Breaking Bad?",
+                "answer": "Kjemi"
+              }
+            }
           },
           {
             "value": 1000,
             "question": "Which British series follows the Shelby family in Birmingham?",
-            "answer": "Peaky Blinders"
+            "answer": "Peaky Blinders",
+            "translations": {
+              "no": {
+                "question": "Hvilken britisk serie følger familien Shelby i Birmingham?",
+                "answer": "Peaky Blinders"
+              }
+            }
           }
-        ]
+        ],
+        "translations": {
+          "no": {
+            "name": "TV-serier"
+          }
+        }
       },
       {
         "name": "The Human Body",
@@ -225,29 +480,64 @@
           {
             "value": 200,
             "question": "What is the largest organ of the human body?",
-            "answer": "The skin"
+            "answer": "The skin",
+            "translations": {
+              "no": {
+                "question": "Hva er kroppens største organ?",
+                "answer": "Huden"
+              }
+            }
           },
           {
             "value": 400,
             "question": "How many chambers does the human heart have?",
-            "answer": "Four"
+            "answer": "Four",
+            "translations": {
+              "no": {
+                "question": "Hvor mange kamre har hjertet?",
+                "answer": "Fire"
+              }
+            }
           },
           {
             "value": 600,
             "question": "What is the hardest substance in the human body?",
-            "answer": "Tooth enamel"
+            "answer": "Tooth enamel",
+            "translations": {
+              "no": {
+                "question": "Hva er det hardeste stoffet i kroppen?",
+                "answer": "Tannemaljen"
+              }
+            }
           },
           {
             "value": 800,
             "question": "In which part of the body is the smallest bone?",
-            "answer": "The ear (the stirrup)"
+            "answer": "The ear (the stirrup)",
+            "translations": {
+              "no": {
+                "question": "Hvor i kroppen sitter det minste beinet?",
+                "answer": "I øret (stigbøylen)"
+              }
+            }
           },
           {
             "value": 1000,
             "question": "Which blood type is known as the universal donor?",
-            "answer": "O negative"
+            "answer": "O negative",
+            "translations": {
+              "no": {
+                "question": "Hvilken blodtype kalles universalgiver?",
+                "answer": "O negativ"
+              }
+            }
           }
-        ]
+        ],
+        "translations": {
+          "no": {
+            "name": "Kroppen"
+          }
+        }
       },
       {
         "name": "Pop & Rock",
@@ -255,29 +545,64 @@
           {
             "value": 200,
             "question": "Which band were John, Paul, George and Ringo in?",
-            "answer": "The Beatles"
+            "answer": "The Beatles",
+            "translations": {
+              "no": {
+                "question": "Hvilket band var John, Paul, George og Ringo med i?",
+                "answer": "The Beatles"
+              }
+            }
           },
           {
             "value": 400,
             "question": "Who sang “Purple Rain”?",
-            "answer": "Prince"
+            "answer": "Prince",
+            "translations": {
+              "no": {
+                "question": "Hvem sang «Purple Rain»?",
+                "answer": "Prince"
+              }
+            }
           },
           {
             "value": 600,
             "question": "Which band had Freddie Mercury as its singer?",
-            "answer": "Queen"
+            "answer": "Queen",
+            "translations": {
+              "no": {
+                "question": "Hvilket band hadde Freddie Mercury som vokalist?",
+                "answer": "Queen"
+              }
+            }
           },
           {
             "value": 800,
             "question": "Which Swedish band won Eurovision in 1974 with “Waterloo”?",
-            "answer": "ABBA"
+            "answer": "ABBA",
+            "translations": {
+              "no": {
+                "question": "Hvilken svensk gruppe vant Eurovision i 1974 med «Waterloo»?",
+                "answer": "ABBA"
+              }
+            }
           },
           {
             "value": 1000,
             "question": "What was Elton John’s first name at birth?",
-            "answer": "Reginald"
+            "answer": "Reginald",
+            "translations": {
+              "no": {
+                "question": "Hva var Elton Johns fornavn da han ble født?",
+                "answer": "Reginald"
+              }
+            }
           }
-        ]
+        ],
+        "translations": {
+          "no": {
+            "name": "Pop og rock"
+          }
+        }
       },
       {
         "name": "Sports Mix",
@@ -285,35 +610,77 @@
           {
             "value": 200,
             "question": "How many rings are on the Olympic flag?",
-            "answer": "Five"
+            "answer": "Five",
+            "translations": {
+              "no": {
+                "question": "Hvor mange ringer er det i det olympiske flagget?",
+                "answer": "Fem"
+              }
+            }
           },
           {
             "value": 400,
             "question": "In which sport can you score a strike or a spare?",
-            "answer": "Bowling"
+            "answer": "Bowling",
+            "translations": {
+              "no": {
+                "question": "I hvilken sport kan man få «strike» og «spare»?",
+                "answer": "Bowling"
+              }
+            }
           },
           {
             "value": 600,
             "question": "Which country has won the most football World Cups?",
-            "answer": "Brazil (5)"
+            "answer": "Brazil (5)",
+            "translations": {
+              "no": {
+                "question": "Hvilket land har vunnet flest VM i fotball?",
+                "answer": "Brasil (5)"
+              }
+            }
           },
           {
             "value": 800,
             "question": "In which city were the first modern Olympic Games held, in 1896?",
-            "answer": "Athens"
+            "answer": "Athens",
+            "translations": {
+              "no": {
+                "question": "I hvilken by ble de første moderne olympiske leker holdt i 1896?",
+                "answer": "Athen"
+              }
+            }
           },
           {
             "value": 1000,
             "question": "Which Norwegian was the Premier League’s top scorer in 2022–23?",
-            "answer": "Erling Haaland"
+            "answer": "Erling Haaland",
+            "translations": {
+              "no": {
+                "question": "Hvilken nordmann ble toppscorer i Premier League i 2022–23?",
+                "answer": "Erling Haaland"
+              }
+            }
           }
-        ]
+        ],
+        "translations": {
+          "no": {
+            "name": "Sportsmiks"
+          }
+        }
       }
     ]
   },
   "final": {
     "category": "Norway",
     "question": "What is the longest fjord in Norway?",
-    "answer": "Sognefjorden"
+    "answer": "Sognefjorden",
+    "translations": {
+      "no": {
+        "category": "Norge",
+        "question": "Hva heter Norges lengste fjord?",
+        "answer": "Sognefjorden"
+      }
+    }
   }
 }

@@ -2,9 +2,10 @@
 //
 // Keys: Space = turn buzzers on / back to the board, Y = correct, N = wrong, R = show answer,
 // Esc = put the question back, U = undo.
-import { ranking, COLORS, KINDS, unveilProgress, MUSIC_MOODS, maxBet, SHAPES, OPTION_COLORS, MAX_PLAYERS, MAX_TEAMS } from '/lib/game.js';
+import { ranking, COLORS, KINDS, unveilProgress, MUSIC_MOODS, maxBet, SHAPES, OPTION_COLORS, MAX_PLAYERS, MAX_TEAMS, wantsText } from '/lib/game.js';
+import { languagesOf, languageName, flagUrl, textOf, optionsOf } from '/lib/languages.js';
 import { connect } from './net.js';
-import { t, pts, setLang, translatePage, fastestTitle, secondsText, licenseName } from './i18n.js';
+import { t, pts, setLang, translatePage, fastestTitle, secondsText, licenseName, mss, lengthText } from './i18n.js';
 import { $, h, fill, qrSvg, shortUrl, urlNodes, countdown, runCountdowns, teamStyle, setGlass, shapeSvg, optionStyle, setBrand, brandLogo, ACCENTS, ask, askNumber, askColor, modalOpen } from './ui.js';
 import { unlockAudio, audioReady, playEvent, playSound, startTicks, setSoundVolume } from './sounds.js';
 import { syncClip, stopClip } from './clip.js';
@@ -15,6 +16,27 @@ import { avatarEl } from './avatar.js';
 
 // A team's avatar (mascot or player face) in a list, or nothing for a team without one.
 const face = (team) => avatarEl(team?.avatar);
+
+// ----- extra languages in the quiz (lib/languages.js) -----
+// The TV always shows the main language. A team that reads the quiz in another language (wantsText() in game.js:
+// the switch is on, the team chose one and the quiz has it) gets a small flag next to its name here, and the host
+// sees that language's text in small grey lines under the question and the answer (and under the Quick options).
+const flagImg = (code, cls = 'flag', alt = '') => h('img', { class: cls, src: flagUrl(code), alt, ...(alt ? {} : { 'aria-hidden': 'true' }) });
+const flagBadge = (team) => {
+  const lang = view && wantsText(view, team);
+  const text = lang && t('readsIn', { lang: languageName(lang) });
+  return lang ? h('span', { class: 'flag-badge', title: text }, flagImg(lang, 'flag', text)) : null; // the words are the picture's alt, so lists read as names only
+};
+// The languages some team in the game reads in right now (in the order of the quiz's list).
+const usedLangs = () => languagesOf(view.set).filter((code) => view.teams.some((tm) => wantsText(view, tm) === code));
+// Small grey lines with `field` of `item` in each of those languages (nothing when they add nothing).
+function translationLines(item, field, cls = '') {
+  const lines = usedLangs()
+    .map((code) => [code, item?.translations?.[code]?.[field]])
+    .filter(([, text]) => typeof text === 'string' && text.trim());
+  if (!lines.length) return null;
+  return h('div', { class: `host-trs ${cls}` }, lines.map(([code, text]) => h('p', { class: 'host-tr', dir: 'auto', lang: code }, flagImg(code), h('span', {}, text))));
+}
 
 let view = null;
 let connected = new Set();
@@ -321,7 +343,7 @@ function renderTeams() {
       return h(
         'li',
         { class: 'plate', style: teamStyle(team) },
-        h('span', { class: 'name' }, face(team), h('span', {}, team.name)),
+        h('span', { class: 'name' }, face(team), h('span', {}, team.name), flagBadge(team)),
         h(
           'span',
           { class: 'conn' },
@@ -600,6 +622,14 @@ function renderQuizOptions() {
   const r2 = view.set.round2?.categories ?? [];
   $('#round2-setting').hidden = r2.length === 0 || quick();
   $('#round2-label').textContent = t('round2Setting', { n: r2.reduce((n, c) => n + c.questions.length, 0) });
+  // Extra languages: only offered when the quiz has some (the label lists them with their flags).
+  const langs = languagesOf(view.set);
+  $('#languages-setting').hidden = langs.length === 0;
+  const key = `${langs.join(',')}|${view.settings.lang}`;
+  if ($('#languages-label').dataset.key !== key) {
+    $('#languages-label').dataset.key = key;
+    fill($('#languages-label'), t('quizLanguagesSetting'), ' ', langs.map((code) => h('span', { class: 'lang-tag', lang: code }, flagImg(code), languageName(code))));
+  }
 }
 
 $('#settings').addEventListener('change', (e) => {
@@ -652,11 +682,22 @@ function renderQuizAbout() {
   const box = $('#quiz-about');
   const cover = view?.set.cover ?? '';
   const description = view?.set.description ?? '';
-  box.hidden = !cover && !description;
-  const key = `${cover}|${description}`;
+  const langs = view ? languagesOf(view.set) : [];
+  box.hidden = !cover && !description && !langs.length;
+  const key = `${cover}|${description}|${langs.join(',')}|${view?.settings.lang}`;
   if (box.dataset.key === key) return; // keep the picture as it is between updates (no flicker)
   box.dataset.key = key;
-  fill(box, cover ? h('img', { class: 'quiz-cover', src: `/files/${encodeURIComponent(cover)}`, alt: '' }) : null, description ? h('p', { class: 'quiz-desc' }, description) : null);
+  fill(
+    box,
+    cover ? h('img', { class: 'quiz-cover', src: `/files/${encodeURIComponent(cover)}`, alt: '' }) : null,
+    h(
+      'div',
+      { class: 'quiz-about-text' },
+      description ? h('p', { class: 'quiz-desc' }, description) : null,
+      // "Also in: 🇳🇴 Norsk, 🇹🇭 ไทย": the extra languages phones can read the questions in.
+      langs.length ? h('p', { class: 'quiz-langs' }, t('alsoIn'), ' ', langs.map((code) => h('span', { class: 'lang-tag', lang: code }, flagImg(code), languageName(code)))) : null,
+    ),
+  );
 }
 $('#set-picker').addEventListener('change', (e) => net.send({ type: 'chooseSet', id: e.target.value }));
 window.addEventListener('focus', loadQuizzes);
@@ -760,11 +801,12 @@ function quickControls(add) {
   } else if (p === 'open') {
     add(' ', t('stopNow'), next, 'btn-primary');
     add('Escape', t('skipQuestion'), { type: 'skip' });
-  } else if (p === 'result') add(' ', t('showTop'), next, 'btn-primary');
-  else if (p === 'ranks') {
+  } else if (p === 'result' || p === 'ranks') {
     const lastQ = view.pos.i + 1 >= view.set.sections[view.pos.s].questions.length;
     const lastS = view.pos.s + 1 >= view.set.sections.length;
-    add(' ', t(!lastQ ? 'nextQuestion' : !lastS ? 'nextSection' : 'showPodium'), next, 'btn-primary');
+    // After the last question's result there is no top 5: Space goes straight to the podium.
+    if (p === 'result') add(' ', t(lastQ && lastS ? 'showPodium' : 'showTop'), next, 'btn-primary');
+    else add(' ', t(!lastQ ? 'nextQuestion' : !lastS ? 'nextSection' : 'showPodium'), next, 'btn-primary');
   } else if (p === 'over') add(' ', t('restartBtn'), confirmRestart, 'btn-primary');
 }
 
@@ -1011,7 +1053,9 @@ function renderQuestion() {
       ? h('div', { class: 'host-imgs' }, img(src.image, 'host-img', t('picQuestion')), img(src.answerImage, 'host-img', t('picAnswer')))
       : null,
     src.question ? h('p', { class: 'question' }, src.question) : null,
+    translationLines(src, 'question'),
     h('p', { class: 'answer' }, h('span', {}, `${t('answerLabel')}:`), src.answer),
+    translationLines(src, 'answer', 'under-answer'),
     clipLine(src),
     unveilLine(q),
     statusLine(),
@@ -1022,14 +1066,16 @@ function renderQuestion() {
 
 // How clear the slowly appearing picture is on the TV right now (kept up to date by the loop below).
 function unveilLine(q) {
-  if (!q.unveil) return null;
+  if (!q?.unveil) return null;
   if (view.phase === 'reading') return h('p', { class: 'clip-line' }, h('span', { class: 'clip-dot' }), t('unveilWaiting'));
-  return h('p', { class: 'clip-line on', 'data-unveil-pct': '' }, h('span', { class: 'clip-dot' }), h('span', {}));
+  if (view.phase === 'ready') return h('p', { class: 'clip-line' }, h('span', { class: 'clip-dot' }), t('unveilWaitingQuick')); // a Quick quiz: it starts with the answers
+  return h('p', { class: 'clip-line on', 'data-unveil-pct': '' }, h('span', { class: 'clip-dot' }), h('span', {}, unveilPct(q)));
 }
+const unveilPct = (q) => t('unveilPct', { n: Math.round(unveilProgress(q.unveil, net.now()) * 100) });
 function runUnveilLine() {
   const tick = () => {
     const el = document.querySelector('[data-unveil-pct]');
-    if (el && view?.q?.unveil) el.lastChild.textContent = t('unveilPct', { n: Math.round(unveilProgress(view.q.unveil, net.now()) * 100) });
+    if (el && view?.q?.unveil) el.lastChild.textContent = unveilPct(view.q);
     requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
@@ -1040,7 +1086,12 @@ runUnveilLine();
 function clipLine(src) {
   if (!src.audio) return null;
   const on = view.media?.playing;
-  return h('p', { class: `clip-line${on ? ' on' : ''}` }, h('span', { class: 'clip-dot' }), on ? t('clipPlaying') : t('clipPaused'), src.audioStart ? ` (${t('clipFrom', { s: src.audioStart })})` : '');
+  // "(from 1:05, 10 s)": the trimmed part, when the clip has one.
+  const parts = [src.audioStart ? t('clipFrom', { s: mss(src.audioStart) }) : null, src.audioLength ? lengthText(src.audioLength) : null].filter(Boolean);
+  // A song clip from "Find a song clip": the host always sees the artist (the TV only after the answer).
+  const c = view.set.credits?.[src.audio];
+  const credit = c ? h('span', { class: 'host-credit' }, t('songCreditLine', { author: c.author || t('songUnknownArtist'), source: t('songSourceDeezer') })) : null;
+  return h('p', { class: `clip-line${on ? ' on' : ''}` }, h('span', { class: 'clip-dot' }), on ? t('clipPlaying') : t('clipPaused'), parts.length ? ` (${parts.join(', ')})` : '', credit);
 }
 
 // ----- final round -----
@@ -1055,7 +1106,9 @@ function renderFinal() {
       ? h('div', { class: 'host-imgs' }, img(src.image, 'host-img', t('picQuestion')), img(src.answerImage, 'host-img', t('picAnswer')))
       : null,
     h('p', { class: 'question' }, p === 'finalWager' ? t('hostWagerHint') : src.question),
+    p !== 'finalWager' ? translationLines(src, 'question') : null,
     h('p', { class: 'answer' }, h('span', {}, `${t('answerLabel')}:`), src.answer),
+    translationLines(src, 'answer', 'under-answer'),
     p !== 'finalWager' ? clipLine(src) : null,
   ];
   if (p === 'finalQuestion') head.push(countdown(view));
@@ -1063,7 +1116,7 @@ function renderFinal() {
     const wager = f.wagers[tm.id];
     const answer = f.answers[tm.id];
     const verdict = f.judged[tm.id];
-    const cells = [h('span', { class: 'who' }, face(tm), tm.name), h('span', { class: 'bet' }, wager == null ? t('betWaiting') : t('betAmount', { n: pts(wager) }))];
+    const cells = [h('span', { class: 'who' }, face(tm), tm.name, flagBadge(tm)), h('span', { class: 'bet' }, wager == null ? t('betWaiting') : t('betAmount', { n: pts(wager) }))];
     if (p !== 'finalWager') cells.push(h('span', { class: 'said' }, answer == null ? t(p === 'finalJudge' ? 'noAnswer' : 'noAnswerYet') : answer || '—'));
     if (p === 'finalJudge') {
       const judge = (correct) => cmd({ type: 'judgeFinal', teamId: tm.id, correct: verdict === correct ? null : correct });
@@ -1123,6 +1176,7 @@ function renderScores() {
           h('span', { class: `dot${connected.has(team.id) ? ' on' : ''}`, title: connected.has(team.id) ? t('online') : t('offline') }),
           face(team),
           h('span', { class: 'name-text' }, team.name),
+          flagBadge(team),
         ),
         h('span', { class: 'pts' }, pts(team.score)),
         h(
@@ -1163,6 +1217,15 @@ function quickOptions() {
   const q = view.q;
   const settled = q.counts != null && ['result', 'ranks'].includes(view.phase);
   const order = q.type === 'order';
+  const src = quickSection().questions[view.pos.i];
+  // The shown option i in each language some player reads in (the same shuffle as the TV and the phones).
+  const optionTranslations = (i) => {
+    const written = q.order ? q.order[i] : i;
+    const lines = usedLangs()
+      .map((code) => [code, src.translations?.[code]?.options?.[written]])
+      .filter(([, text]) => typeof text === 'string' && text.trim());
+    return lines.length ? h('span', { class: 'host-trs inline' }, lines.map(([code, text]) => h('span', { class: 'host-tr', dir: 'auto', lang: code }, flagImg(code), h('span', {}, text)))) : null;
+  };
   const rights = [].concat(q.correct ?? []); // the right options, or the shown positions in the right order
   const countKey = order ? 'quickPlaced' : q.type === 'multi' ? 'quickTicked' : 'quickPicked';
   return [
@@ -1175,7 +1238,7 @@ function quickOptions() {
           { class: `host-opt${!order && rights.includes(i) ? ' right' : ''}`, style: optionStyle(OPTION_COLORS[i]) },
           order ? h('b', { class: 'opt-place' }, `${rights.indexOf(i) + 1}.`) : null,
           h('span', { class: 'opt-shape' }, shapeSvg(SHAPES[i])),
-          h('span', { class: 'opt-text' }, text),
+          h('span', { class: 'opt-text' }, text, optionTranslations(i)),
           !order && rights.includes(i) ? h('span', { class: 'opt-right', title: t('quickRightMark') }, '✓') : null,
           settled ? h('span', { class: 'opt-count' }, t(countKey, { n: q.counts[i] })) : null,
         ),
@@ -1223,8 +1286,10 @@ function renderQuickHost() {
     quickWhere(),
     src.image ? h('div', { class: 'host-imgs' }, img(src.image, 'host-img', t('picQuestion'))) : null,
     src.question ? h('p', { class: 'question' }, src.question) : null,
+    translationLines(src, 'question'),
     quickOptions(),
     clipLine(src),
+    unveilLine(view.q),
     quickStatus(),
     p === 'ready' || p === 'open' ? countdown(view) : null,
     p === 'ranks' ? h('ol', { class: 'rank-list' }, view.ranks.top.map(rankLine)) : null,
@@ -1252,6 +1317,7 @@ function renderQuickScores() {
           h('span', { class: 'rank-small' }, `${e.rank}.`),
           face(e),
           h('span', { class: 'name-text' }, e.name),
+          flagBadge(view.teams.find((tm) => tm.id === e.id)),
           answered ? h('span', { class: 'answered-tick' }, '✓') : null,
         ),
         h('span', { class: 'pts' }, gain ? h('small', { class: 'gain' }, `+${pts(gain)} `) : null, pts(e.score)),

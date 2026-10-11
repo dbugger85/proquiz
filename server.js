@@ -18,6 +18,7 @@ import { apply, newGame, hostView, displayView, phoneView, GameError, DEFAULT_SE
 import { createTunnel } from './lib/tunnel.js';
 import { createBrand, logoHeaders } from './brand.js';
 import { createPictures } from './pictures.js';
+import { createSongs } from './songs.js';
 import { createUpdateCheck, parseVersion } from './lib/update.js';
 import { createSelfUpdate, isCompiled, cleanupOld } from './lib/selfupdate.js';
 
@@ -175,7 +176,7 @@ const HOST_ACTIONS = new Set([
   'next', 'end', 'judgeFinal', 'adjust', 'undo', 'restart', 'removeTeam', 'mediaToggle', 'mediaRestart', 'freeze', 'bet',
   'skip', // Quick quiz
 ]);
-const PHONE_ACTIONS = new Set(['buzz', 'wager', 'finalAnswer', 'pick', 'freezePick', 'bet', 'answer']);
+const PHONE_ACTIONS = new Set(['buzz', 'wager', 'finalAnswer', 'pick', 'freezePick', 'bet', 'answer', 'language']); // language: the phone's choice of quiz language (lib/languages.js)
 
 // Quick quiz reactions: a phone may send one this often; extra ones are dropped (100 players can't flood the TV).
 const REACT_EVERY_MS = 1000;
@@ -661,7 +662,7 @@ export function createHub({ set, info, hostInfo = {}, saved = null, save = () =>
       const previous = c.teamId;
       c.teamId = teamId; // before dispatch, so the new team is never shown as offline
       try {
-        dispatch({ type: 'join', teamId, name: msg.name, color: msg.color, avatar: msg.avatar });
+        dispatch({ type: 'join', teamId, name: msg.name, color: msg.color, avatar: msg.avatar, lang: msg.lang });
       } catch (err) {
         c.teamId = previous;
         throw err;
@@ -812,12 +813,13 @@ function testUpdateOverrides() {
 }
 
 // `tunnelOptions` is for tests (e.g. a pretend DNS check for a pretend cloudflared), and `pictureOptions` too
-// (a pretend `fetchImpl` instead of Openverse and Wikimedia Commons, see pictures.js), as is `updateOptions`
+// (a pretend `fetchImpl` instead of Openverse and Wikimedia Commons, see pictures.js) and `songOptions` (the same
+// for Deezer, see songs.js), as is `updateOptions`
 // (a pretend `fetchImpl` and clock instead of GitHub's releases, see lib/update.js) and `selfUpdateOptions`
 // (a pretend compiled program, release and restart for "Update now", see lib/selfupdate.js). `onQuit` runs once the
 // host's Quit ProQuiz has saved and closed everything: the main program passes `process.exit(0)`; tests pass nothing,
 // so the server just closes.
-export async function startServer({ port = START_PORT, quiet = false, dataDir = DATA_DIR, tunnelOptions = {}, pictureOptions = {}, updateOptions = {}, selfUpdateOptions = {}, onQuit = () => {} } = {}) {
+export async function startServer({ port = START_PORT, quiet = false, dataDir = DATA_DIR, tunnelOptions = {}, pictureOptions = {}, songOptions = {}, updateOptions = {}, selfUpdateOptions = {}, onQuit = () => {} } = {}) {
   const version = await readVersion();
   const sets = createStore(dataDir, { version }); // exports say which ProQuiz wrote them
   const brand = createBrand(dataDir);
@@ -846,13 +848,15 @@ export async function startServer({ port = START_PORT, quiet = false, dataDir = 
   const store = autosaver(dataDir);
   const saved = await store.load();
   const getLang = () => hub?.getState().settings.lang ?? 'en';
-  // The editor's "Find a free picture": the only thing that goes on the internet, and only from the editor.
+  // The editor's "Find a free picture" and "Find a song clip": the things that go on the internet, only from the editor.
   const pictures = createPictures({ store: sets, lang: getLang, ...pictureOptions });
+  const songs = createSongs({ store: sets, ...songOptions });
   const api = apiHandler(sets, {
     onSetSaved: (...a) => hub?.setSaved(...a),
     getLang,
     brand,
     pictures,
+    songs,
     onBrand: () => hub?.broadcast(), // every screen shows the new logo, name or colour at once
   });
   const server = http.createServer((req, res) => serveFile(req, res, { store: sets, api, brand }));

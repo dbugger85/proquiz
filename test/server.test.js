@@ -315,14 +315,18 @@ test('editor API: create, save, list, upload a file, export and import, choose i
   set.categories[0].questions[0].audio = clip.data.name;
   set.categories[0].questions[0].audioStart = 3;
   set.categories[0].questions[2].unveil = 12; // the flag question has a picture: kept
+  set.categories[0].questions[2].unveilStyle = 'blur'; // and how it appears
   set.categories[1].questions[0].unveil = 12; // no picture: dropped
+  set.categories[1].questions[0].unveilStyle = 'blur';
   set.categories[0].questions[1].answer = '';
   let saved = await call('PUT', `/api/sets/${id}`, { set });
   assert.deepEqual(saved.data.problems, [{ code: 'no-answer', c: 0, i: 1 }]);
   const back = (await call('GET', `/api/sets/${id}`)).data.set;
   assert.equal(back.categories[0].questions[0].audioStart, 3);
   assert.equal(back.categories[0].questions[2].unveil, 12);
+  assert.equal(back.categories[0].questions[2].unveilStyle, 'blur');
   assert.equal(back.categories[1].questions[0].unveil, undefined);
+  assert.equal(back.categories[1].questions[0].unveilStyle, undefined);
 
   // A round 2 board is kept, with its own pictures listed for export, and its problems are marked as round 2.
   const withRound2 = { ...set, round2: { categories: [{ name: 'Extra', questions: [{ value: 200, question: 'q', answer: '', image: 'flag.svg', hint: 'x' }] }] } };
@@ -663,4 +667,31 @@ test('Quit ProQuiz: only the host can; the game is saved, every screen gets bye,
     url = was;
     await q.close();
   }
+});
+
+test('a phone may send `language` to change the language it reads the quiz in; it joins with one too', async () => {
+  const host = await client('host');
+  await host.wait((m) => m.type === 'state');
+  // The sample quiz has Norwegian: the lobby offers the choice to every phone, joined or not.
+  const fresh = await client('phone');
+  const offer = (await fresh.wait((m) => m.type === 'state')).view.languages;
+  assert.deepEqual(offer, { main: 'en', extra: ['no'] });
+  fresh.send({ type: 'join', name: 'Nora', color: COLORS[9], lang: 'no' });
+  const id = (await fresh.wait((m) => m.type === 'joined')).teamId;
+  assert.equal(srv.hub.getState().teams.find((t) => t.id === id).lang, 'no');
+  assert.equal((await fresh.wait((m) => m.type === 'state' && m.view.you)).view.textLang, 'no');
+  fresh.send({ type: 'language', lang: 'en' });
+  await host.wait((m) => m.type === 'state' && m.view.teams.find((t) => t.id === id)?.lang === 'en');
+  assert.equal((await fresh.wait((m) => m.type === 'state' && m.view.you?.lang === 'en')).view.textLang, null);
+  // Nonsense is ignored, and a phone that hasn't joined can't send it.
+  fresh.send({ type: 'language', lang: { no: true } });
+  const other = await client('phone');
+  other.send({ type: 'language', lang: 'no' });
+  await new Promise((r) => setTimeout(r, 150));
+  assert.equal(srv.hub.getState().teams.find((t) => t.id === id).lang, 'en');
+  host.send({ type: 'cmd', action: { type: 'removeTeam', teamId: id } });
+  await host.wait((m) => m.type === 'state' && !m.view.teams.some((t) => t.id === id));
+  fresh.close();
+  other.close();
+  host.close();
 });

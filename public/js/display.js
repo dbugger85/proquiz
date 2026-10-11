@@ -256,6 +256,10 @@ const creditLine = (c) =>
       )
     : null;
 
+// A song clip from "Find a song clip": the artist and where the preview came from, never the song's title (the view
+// only has it once the answer is out, like a picture's credit).
+const clipCreditLine = (c) => (c ? h('p', { class: 'pic-credit clip-credit' }, t('songCreditLine', { author: c.author || t('songUnknownArtist'), source: t('songSourceDeezer') })) : null);
+
 // Load every question picture while the board is showing, so a picture never pops in late.
 const images = new Map(); // file → Image, kept for drawing slowly appearing pictures
 function imageFor(file) {
@@ -327,27 +331,47 @@ function renderBoom() {
   );
 }
 
-// ----- slowly appearing pictures: big blocks that get smaller -----
+// ----- slowly appearing pictures: big blocks that get smaller, or a heavy blur that sharpens -----
+// The same canvas for a board question and a Quick quiz question (`key` tells them apart), driven by the server
+// clock through unveilProgress(). The clear picture is only ever drawn into the canvas once the game says the
+// picture is complete; the <img> itself goes on screen only with the answer (board: `revealed`, Quick: `result`).
 
-// Blocks across the picture at each step; after the last step the picture is clear.
+// Pixels: blocks across the picture at each step; after the last step the picture is clear.
 const STEPS = [6, 8, 11, 16, 22, 32, 45, 64, 90, 128];
 const stepAt = (u, now) => Math.min(STEPS.length, Math.floor(unveilProgress(u, now) * (STEPS.length + 1)));
+// Blur: the radius (on the 1280px-wide canvas) at progress p: from BLUR_MAX down, halving every 1/BLUR_HALVINGS of the
+// time (a blur looks the same amount "sharper" per halving, so this feels even), and 0 once the time is up.
+const BLUR_MAX = 90;
+const BLUR_HALVINGS = 6.5;
+const blurAt = (u, now, reduced = reducedMotion()) => {
+  let p = unveilProgress(u, now);
+  if (reduced) p = Math.floor(p * STEPS.length) / STEPS.length; // in steps, like the blocks, instead of every frame
+  return p >= 1 ? 0 : BLUR_MAX * 2 ** (-BLUR_HALVINGS * p);
+};
+// The radius is drawn in steps of about 4% (a smaller change can't be seen), so a long reveal isn't redrawn every frame.
+const blurKey = (r) => (r === 0 ? '0' : String(Math.round(Math.log(r) / Math.log(1.04))));
 
-function unveilCanvas(q) {
+function unveilCanvas(q, key) {
   const u = q.unveil;
-  const key = `${q.c}-${q.i}`;
+  const style = u.style === 'blur' ? 'blur' : 'pixels';
   // Keep the canvas that's already on screen (with its drawing), so updates never flash an empty picture.
-  const canvas = document.querySelector(`canvas.unveil[data-q="${key}"]`) ?? h('canvas', { class: 'q-img unveil', 'data-q': key, 'data-file': q.image });
+  const canvas = document.querySelector(`canvas.unveil[data-q="${key}"]`) ?? h('canvas', { class: `q-img unveil ${style}`, 'data-q': key, 'data-file': q.image, 'data-style': style });
   Object.assign(canvas.dataset, { ms: u.ms, done: u.done, since: u.since ?? '' });
   return canvas;
 }
 
-function drawStep(canvas, img, step) {
+function sizeCanvas(canvas, img) {
   const aspect = img.naturalWidth && img.naturalHeight ? img.naturalWidth / img.naturalHeight : 1.5;
   const W = 1280;
   const H = Math.round(W / aspect);
   if (canvas.width !== W || canvas.height !== H) Object.assign(canvas, { width: W, height: H });
+  return { W, H, aspect };
+}
+
+function drawStep(canvas, img, step) {
+  const { W, H, aspect } = sizeCanvas(canvas, img);
   const ctx = canvas.getContext('2d');
+  ctx.filter = 'none';
   ctx.clearRect(0, 0, W, H);
   if (step >= STEPS.length) {
     ctx.imageSmoothingEnabled = true;
@@ -366,16 +390,53 @@ function drawStep(canvas, img, step) {
   ctx.drawImage(small, 0, 0, sw, sh, 0, 0, W, H);
 }
 
-// Redraws a slowly appearing picture whenever it reaches its next step (on the server clock).
+// The picture blurred by `r` px. It is drawn a little bigger than the canvas so the blur's soft edge falls outside.
+// A browser without canvas filters (old smart TVs) gets a cheap blur instead: the picture drawn small and scaled
+// up with smoothing.
+function drawBlur(canvas, img, r) {
+  const { W, H, aspect } = sizeCanvas(canvas, img);
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.filter = 'none';
+  ctx.clearRect(0, 0, W, H);
+  if (r === 0) return ctx.drawImage(img, 0, 0, W, H);
+  if ('filter' in ctx) {
+    ctx.filter = `blur(${r}px)`;
+    ctx.drawImage(img, -r, -r, W + 2 * r, H + 2 * r);
+    ctx.filter = 'none';
+    return;
+  }
+  const sw = Math.max(2, Math.round(W / (r * 1.5)));
+  const sh = Math.max(2, Math.round(sw / aspect));
+  const small = (drawBlur.small ??= document.createElement('canvas'));
+  Object.assign(small, { width: sw, height: sh });
+  const sctx = small.getContext('2d');
+  sctx.imageSmoothingEnabled = true;
+  sctx.drawImage(img, 0, 0, sw, sh);
+  ctx.drawImage(small, 0, 0, sw, sh, -r, -r, W + 2 * r, H + 2 * r);
+}
+
+// Redraws every slowly appearing picture whenever it reaches its next step (on the server clock).
 function runUnveil() {
   const tick = () => {
     for (const canvas of document.querySelectorAll('canvas.unveil')) {
       const u = { ms: Number(canvas.dataset.ms), done: Number(canvas.dataset.done), since: canvas.dataset.since === '' ? null : Number(canvas.dataset.since) };
-      const step = stepAt(u, net.now());
       const img = imageFor(canvas.dataset.file);
-      if (String(step) === canvas.dataset.step || !img.complete) continue;
-      drawStep(canvas, img, step);
-      canvas.dataset.step = String(step);
+      if (!img.complete) continue;
+      canvas.dataset.pct = String(Math.round(unveilProgress(u, net.now()) * 100));
+      if (canvas.dataset.style === 'blur') {
+        const r = blurAt(u, net.now());
+        const key = blurKey(r);
+        if (key === canvas.dataset.step) continue;
+        drawBlur(canvas, img, r);
+        canvas.dataset.step = key;
+        canvas.dataset.blur = String(Math.round(r));
+      } else {
+        const step = stepAt(u, net.now());
+        if (String(step) === canvas.dataset.step) continue;
+        drawStep(canvas, img, step);
+        canvas.dataset.step = String(step);
+      }
     }
     requestAnimationFrame(tick);
   };
@@ -396,12 +457,13 @@ function renderQuestion() {
     'div',
     { class: `tv-q${picture ? ' has-image' : ''}`, style: zoom ? '' : 'animation: none' },
     h('div', { class: 'where' }, h('span', {}, view.set.categories[q.c].name), q.special ? h('span', { class: `special-badge k-${q.special}` }, badgeFor(view)) : null, h('b', {}, pts(q.value))),
-    blocks ? unveilCanvas(q) : img(picture, `q-img${q.answerImage ? ' reveal-img' : ''}`),
+    blocks ? unveilCanvas(q, `${q.c}-${q.i}`) : img(picture, `q-img${q.answerImage ? ' reveal-img' : ''}`),
     picture ? creditLine(q.credit) : null,
     picture ? null : clipViz(),
     q.question ? h('p', { class: 'question' }, q.question) : h('div', { class: 'spacer' }),
     picture ? clipViz() : null,
     q.answer ? h('p', { class: 'answer' }, q.answer) : null,
+    clipCreditLine(q.clipCredit),
     h('div', { class: 'band' }, band()),
   );
 }
@@ -513,12 +575,16 @@ function answerBars(q) {
 function quickQuestion(fresh) {
   const q = view.q;
   const p = view.phase;
+  // A slowly appearing picture: blocks or a blur until the result (it starts moving when the answers open), and the
+  // clear picture only from the result on, next to the bars, as the pay-off.
+  const unveiled = q.unveil && q.image;
+  const picture = () => (unveiled && p !== 'result' && p !== 'ranks' ? unveilCanvas(q, `quick-${view.pos.s}-${view.pos.i}`) : img(q.image, 'q-img'));
   if (p === 'ready') {
     return h(
       'div',
       { class: `tv-q quick-ready${q.image ? ' has-image' : ''}${fresh ? '' : ' still'}` },
       quickWhere(q),
-      img(q.image, 'q-img'),
+      picture(),
       q.image ? null : clipViz(),
       q.question ? h('p', { class: 'question' }, q.question) : h('div', { class: 'spacer' }),
       styleLine(q),
@@ -527,20 +593,22 @@ function quickQuestion(fresh) {
     );
   }
   const settled = p === 'result' || p === 'ranks';
-  const media = img(q.image, 'q-img') ?? (view.clip ? clipViz() : null);
+  const media = picture() ?? (view.clip ? clipViz() : null);
   return h(
     'div',
     { class: `quick-q${settled ? ' settled' : ''}${fresh ? ' fresh' : ''}` },
     h('div', { class: 'quick-head' }, quickWhere(q), h('p', { class: 'question' }, q.question), styleLine(q)),
     h(
       'div',
-      { class: `quick-mid${media && !settled ? ' has-media' : ''}` },
+      { class: `quick-mid${media && !settled ? ' has-media' : ''}${settled && unveiled ? ' with-picture' : ''}` },
       settled ? null : timerRing(),
+      settled && unveiled ? h('div', { class: 'quick-media unveiled' }, media) : null,
       settled ? (q.type === 'order' ? orderResult(q) : answerBars(q)) : h('div', { class: 'quick-media' }, media),
       settled ? null : answeredCount(q),
     ),
     settled ? h('div', { class: 'quick-verdict' }, h('span', {}, verdictText(q)), fastestBadge(q.fastest)) : null,
     settled ? creditLine(q.credit) : null,
+    settled ? clipCreditLine(q.clipCredit) : null,
     optionTiles(q),
   );
 }
@@ -550,6 +618,11 @@ function fastestBadge(f) {
   if (!f) return null;
   return h('span', { class: 'fastest', style: teamStyle(f) }, h('span', { class: 'fastest-title' }, `⚡ ${fastestTitle(view.pos)}`), h('span', { class: 'plate' }, face(f), h('span', {}, f.name)), h('b', {}, secondsText(f.ms)));
 }
+
+// A player's name on a plate: a long one (more than LONG_NAME letters) gets `.long`, so the plate sets it a little
+// smaller instead of cutting it short.
+const LONG_NAME = 14;
+const rankName = (name) => h('span', { class: `rank-name${[...String(name)].length > LONG_NAME ? ' long' : ''}` }, name);
 
 // The place in a circle, or with an avatar: the face with the place as a small badge on its corner.
 function rankFace(e, rank) {
@@ -569,7 +642,7 @@ function rankRow(e, i, was = e) {
       'span',
       { class: 'plate rank-plate' },
       rankFace(e, was.rank),
-      h('span', { class: 'rank-name' }, e.name),
+      rankName(e.name),
       e.delta ? h('span', { class: 'rank-delta' }, `+${pts(e.delta)}`) : null,
       h('span', { class: 'rank-score' }, pts(was.score)),
     ),
@@ -621,7 +694,7 @@ function quickSection(fresh) {
           'div',
           { class: 'standings' },
           h('h2', {}, t('quickStandings')),
-          h('ol', { class: `standings-list${shown.length > 5 ? ' two' : ''}` }, shown.map((e, i) => h('li', { class: 'plate', style: `${teamStyle(e)}; --i: ${i}` }, rankFace(e, e.rank), h('span', { class: 'rank-name' }, e.name), h('b', {}, pts(e.score))))),
+          h('ol', { class: `standings-list${shown.length > 5 ? ' two' : ''}` }, shown.map((e, i) => h('li', { class: 'plate', style: `${teamStyle(e)}; --i: ${i}` }, rankFace(e, e.rank), rankName(e.name), h('b', {}, pts(e.score))))),
           all.length > shown.length ? h('p', { class: 'final-note' }, t('quickAndMore', { n: all.length - shown.length })) : null,
         )
       : [h('ul', { class: 'final-teams' }, all.map((e) => h('li', { class: 'plate', style: teamStyle(e) }, face(e), h('span', {}, e.name)))), h('p', { class: 'final-note' }, t('quickPlayersReady'))],
@@ -755,6 +828,7 @@ function renderFinal() {
     ),
     f.answer ? h('p', { class: 'judge-answer' }, img(f.answerImage, 'judge-img'), h('span', {}, t('theAnswer')), h('b', {}, f.answer)) : null,
     f.answer ? creditLine(f.credit) : null,
+    f.answer ? clipCreditLine(f.clipCredit) : null,
   );
 }
 

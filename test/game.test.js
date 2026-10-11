@@ -608,12 +608,14 @@ test('sound clips: play when the question opens, pause on a buzz, play on after 
   const set = structuredClone(small);
   set.categories[0].questions[1].audio = 'song.mp3';
   set.categories[0].questions[1].audioStart = 42.5;
+  set.categories[0].questions[1].audioLength = 10; // the trimmed part: 42.5 to 52.5
   set.final.audio = 'final.ogg';
   assert.deepEqual(validateSet(set), []);
 
   let s = run(started({}, set), { type: 'pick', c: 0, i: 1 });
   assert.deepEqual(s.media, { playing: true, seq: 0 });
-  assert.deepEqual(displayView(s).clip, { file: 'song.mp3', start: 42.5 });
+  assert.deepEqual(displayView(s).clip, { file: 'song.mp3', start: 42.5, length: 10 });
+  assert.deepEqual(hostView(s).clip, { file: 'song.mp3', start: 42.5, length: 10 });
   assert.ok(!JSON.stringify(phoneView(s, 'r')).includes('song.mp3'));
   s = apply(s, { type: 'arm', now: 0 });
   assert.equal(s.media.playing, true);
@@ -639,11 +641,28 @@ test('sound clips: play when the question opens, pause on a buzz, play on after 
   // The final question's clip plays while teams type, and stops for the judging.
   s = run(s, { type: 'cancel' }, { type: 'end' }, { type: 'next', now: 5 });
   assert.deepEqual(s.media, { playing: true, seq: 0 });
+  assert.deepEqual(displayView(s).clip, { file: 'final.ogg', start: 0 }, 'no length when the clip plays to its end');
   s = apply(s, { type: 'next', now: 6 });
   assert.equal(s.media.playing, false);
 
   set.categories[1].questions[0].audio = '../x.mp3';
   assert.deepEqual(validateSet(set), [{ code: 'bad-audio', c: 1, i: 0 }]);
+  // A trimmed part must be between half a second and ten minutes long.
+  for (const bad of [0, 0.2, 601, -1, '10', NaN]) {
+    const trimmed = structuredClone(small);
+    trimmed.categories[0].questions[0].audio = 'song.mp3';
+    trimmed.categories[0].questions[0].audioLength = bad;
+    assert.deepEqual(validateSet(trimmed), [{ code: 'bad-audio', c: 0, i: 0 }], String(bad));
+    trimmed.final.audio = 'song.mp3';
+    trimmed.final.audioLength = bad;
+    assert.deepEqual(validateSet(trimmed), [{ code: 'bad-audio', c: 0, i: 0 }, { code: 'bad-audio' }], String(bad));
+  }
+  const fine = structuredClone(small);
+  fine.categories[0].questions[0].audio = 'song.mp3';
+  fine.categories[0].questions[0].audioLength = 0.5;
+  fine.final.audio = 'song.mp3';
+  fine.final.audioLength = 600;
+  assert.deepEqual(validateSet(fine), []);
 });
 
 test('a slowly appearing picture: runs while buzzers are on, freezes on a buzz, clear at the reveal', () => {
@@ -654,7 +673,7 @@ test('a slowly appearing picture: runs while buzzers are on, freezes on a buzz, 
   assert.deepEqual(validateSet(set), []);
 
   let s = run(started({}, set), { type: 'pick', c: 0, i: 1, now: 0 });
-  assert.deepEqual(s.q.unveil, { ms: 10_000, done: 0, since: null }); // blocks while the host reads
+  assert.deepEqual(s.q.unveil, { ms: 10_000, done: 0, since: null, style: 'pixels' }); // blocks while the host reads
   assert.deepEqual(displayView(s).q.unveil, s.q.unveil);
   assert.ok(!JSON.stringify(phoneView(s, 'r')).includes('unveil'));
 
@@ -664,7 +683,7 @@ test('a slowly appearing picture: runs while buzzers are on, freezes on a buzz, 
   assert.equal(unveilProgress(s.q.unveil, 5000), 0.4);
 
   s = apply(s, { type: 'buzz', teamId: 'b', now: 5000 }); // freezes at 4 s
-  assert.deepEqual(s.q.unveil, { ms: 10_000, done: 4000, since: null });
+  assert.deepEqual(s.q.unveil, { ms: 10_000, done: 4000, since: null, style: 'pixels' });
   assert.equal(unveilProgress(s.q.unveil, 99_999), 0.4);
 
   s = apply(s, { type: 'wrong', now: 7000 }); // the others may buzz: it carries on
@@ -675,7 +694,7 @@ test('a slowly appearing picture: runs while buzzers are on, freezes on a buzz, 
   s = run(s, { type: 'buzz', teamId: 'g', now: 9000 }, { type: 'correct', now: 9500 });
   assert.equal(unveilProgress(s.q.unveil, 9500), 1); // the answer shows the whole picture
   s = apply(s, { type: 'undo', now: 12_000 });
-  assert.deepEqual(s.q.unveil, { ms: 10_000, done: 6000, since: null }); // back to what Green saw
+  assert.deepEqual(s.q.unveil, { ms: 10_000, done: 6000, since: null, style: 'pixels' }); // back to what Green saw
 
   // A question without a picture, or without the setting, has no unveil.
   const plain = run(started({}, set), { type: 'pick', c: 1, i: 0, now: 0 });
@@ -686,6 +705,28 @@ test('a slowly appearing picture: runs while buzzers are on, freezes on a buzz, 
   assert.deepEqual(validateSet(set), [{ code: 'bad-unveil', c: 0, i: 1 }]);
   set.categories[0].questions[1].unveil = 'x';
   assert.deepEqual(validateSet(set), [{ code: 'bad-unveil', c: 0, i: 1 }]);
+});
+
+test('a slowly appearing picture can be a blur instead of blocks (unveilStyle), and the TV is told which', () => {
+  const set = structuredClone(small);
+  set.categories[0].questions[1].image = 'photo.jpg';
+  set.categories[0].questions[1].unveil = 8;
+  set.categories[0].questions[1].unveilStyle = 'blur';
+  assert.deepEqual(validateSet(set), []);
+  let s = run(started({}, set), { type: 'pick', c: 0, i: 1, now: 0 });
+  assert.deepEqual(s.q.unveil, { ms: 8000, done: 0, since: null, style: 'blur' });
+  assert.equal(displayView(s).q.unveil.style, 'blur');
+  assert.ok(!JSON.stringify(phoneView(s, 'r')).includes('blur'));
+  s = apply(s, { type: 'arm', now: 1000 });
+  assert.equal(unveilProgress(s.q.unveil, 5000), 0.5); // the timing is the same whatever the style
+  // 'pixels' may be written out; anything else is a problem; a style without a picture is ignored.
+  set.categories[0].questions[1].unveilStyle = 'pixels';
+  assert.deepEqual(validateSet(set), []);
+  assert.equal(run(started({}, set), { type: 'pick', c: 0, i: 1, now: 0 }).q.unveil.style, 'pixels');
+  set.categories[0].questions[1].unveilStyle = 'sparkle';
+  assert.deepEqual(validateSet(set), [{ code: 'bad-unveil-style', c: 0, i: 1 }]);
+  set.categories[1].questions[0].unveilStyle = 'sparkle'; // no picture
+  assert.deepEqual(validateSet(set), [{ code: 'bad-unveil-style', c: 0, i: 1 }]);
 });
 
 test('a slowly appearing picture keeps running while a team answers alone (Kaosmodus)', () => {
@@ -821,4 +862,118 @@ test('a team with a colour from before version 1.7 gets its new version', () => 
   const s = apply(newGame(sample), { type: 'join', teamId: 'r', name: 'Old Red', color: '#e53935' });
   assert.equal(s.teams[0].color, COLORS[0]);
   assert.throws(() => apply(newGame(sample), { type: 'join', teamId: 'x', name: 'X', color: '#123456' }), GameError);
+});
+
+// ----- extra languages in a quiz (lib/languages.js) -----
+
+import { wantsText, languageChoice } from '../lib/game.js';
+
+// The small set with Norwegian and Thai translations on the first tile and the final.
+function translated() {
+  const set = structuredClone(small);
+  Object.assign(set, { lang: 'en', languages: ['no', 'th'] });
+  set.categories[0].translations = { no: { name: 'A-no' } };
+  set.categories[0].questions[0].translations = { no: { question: 'a1-no', answer: 'A1-no' }, th: { question: 'a1-th' } };
+  set.final.translations = { no: { category: 'F-no', question: 'fq-no', answer: 'FA-no' } };
+  return set;
+}
+const joinNo = { type: 'join', teamId: 'n', name: 'Norsk lag', color: COLORS[3], lang: 'no' };
+
+test('languages: joining with a language keeps it on the team; a bad one is ignored; `language` changes it without undo', () => {
+  let s = run(newGame(translated()), joinNo, { type: 'join', teamId: 'x', name: 'X', color: COLORS[4], lang: 'xx' });
+  assert.equal(s.teams.find((t) => t.id === 'n').lang, 'no');
+  assert.equal('lang' in s.teams.find((t) => t.id === 'x'), false);
+  // Joining again without a language keeps the choice; with one, changes it.
+  s = run(s, { type: 'join', teamId: 'n', name: 'Norsk lag', color: COLORS[3] });
+  assert.equal(s.teams.find((t) => t.id === 'n').lang, 'no');
+  s = run(s, { type: 'join', teamId: 'n', name: 'Norsk lag', color: COLORS[3], lang: 'th' });
+  assert.equal(s.teams.find((t) => t.id === 'n').lang, 'th');
+  const before = run(s, { type: 'start', picker: 'n' });
+  const changed = run(before, { type: 'language', teamId: 'n', lang: 'no' });
+  assert.equal(changed.teams.find((t) => t.id === 'n').lang, 'no');
+  assert.equal(changed.history.length, before.history.length, 'not a step to undo');
+  assert.equal(run(changed, { type: 'language', teamId: 'n', lang: 'no' }), changed, 'the same language changes nothing');
+  assert.equal(run(changed, { type: 'language', teamId: 'nobody', lang: 'no' }), changed);
+  const dropped = run(changed, { type: 'language', teamId: 'n', lang: 'en' });
+  assert.equal(dropped.teams.find((t) => t.id === 'n').lang, 'en');
+  assert.equal(run(changed, { type: 'language', teamId: 'n', lang: 'xx' }), changed, 'nonsense is ignored');
+});
+
+test('languages: wantsText is the one rule — the switch on, a chosen language, not the main one, and the quiz has it', () => {
+  const s = run(newGame(translated()), joinNo);
+  const team = s.teams[0];
+  assert.equal(wantsText(s, team), 'no');
+  assert.equal(wantsText(s, { ...team, lang: 'en' }), null, 'the main language');
+  assert.equal(wantsText(s, { ...team, lang: 'de' }), null, 'a language the quiz does not have');
+  assert.equal(wantsText(s, { ...team, lang: undefined }), null);
+  assert.equal(wantsText(s, null), null);
+  assert.equal(wantsText(run(s, { type: 'settings', settings: { quizLanguages: false } }), team), null, 'the host switch off');
+  assert.equal(wantsText({ ...s, set: small }, team), null, 'a quiz without languages');
+  assert.deepEqual(languageChoice(s), { main: 'en', extra: ['no', 'th'] });
+  assert.equal(languageChoice(run(s, { type: 'settings', settings: { quizLanguages: false } })), null);
+  assert.equal(languageChoice({ ...s, set: small }), null);
+  assert.equal(newGame(small).settings.quizLanguages, true, 'on by default');
+});
+
+test('languages: a phone in another language gets the question from reading and the answer at revealed; others stay pure buzzers', () => {
+  let s = run(newGame(translated()), joinNo, { type: 'join', teamId: 'r', name: 'Red', color: COLORS[0] }, { type: 'start', picker: 'r' });
+  const no = () => phoneView(s, 'n');
+  const red = () => phoneView(s, 'r');
+  assert.deepEqual(no().languages, { main: 'en', extra: ['no', 'th'] });
+  assert.equal(no().textLang, 'no');
+  assert.equal(red().textLang, null);
+  assert.equal(no().text, undefined, 'nothing on the board');
+  // The picking phone's board has the category names in its language.
+  s = run(s, { type: 'setPicker', teamId: 'n' });
+  assert.equal(no().board[0].name, 'A-no');
+  assert.equal(no().board[1].name, 'B', 'falls back to the main name');
+  s = run(s, { type: 'pick', c: 0, i: 0 });
+  assert.deepEqual(no().text, { question: 'a1-no' });
+  assert.equal(red().text, undefined);
+  assert.ok(!JSON.stringify(red()).includes('a1'), 'the main-language phone never sees the question');
+  s = run(s, { type: 'arm', now: 1000 });
+  assert.deepEqual(no().text, { question: 'a1-no' });
+  s = run(s, { type: 'buzz', teamId: 'r', now: 1100 });
+  assert.deepEqual(no().text, { question: 'a1-no' }, 'no answer while a team answers');
+  s = run(s, { type: 'correct' });
+  assert.deepEqual(no().text, { question: 'a1-no', answer: 'A1-no' });
+  assert.equal(red().text, undefined);
+  // Thai: the question is translated, the answer falls back to English.
+  s = run(s, { type: 'language', teamId: 'n', lang: 'th' });
+  assert.deepEqual(no().text, { question: 'a1-th', answer: 'A1' });
+  // The host switch off: everyone plays in the main language, and the choice goes from the join form.
+  const off = run(s, { type: 'settings', settings: { quizLanguages: false } });
+  assert.equal(phoneView(off, 'n').text, undefined);
+  assert.equal(phoneView(off, 'n').textLang, null);
+  assert.equal(phoneView(off, 'n').languages, null);
+  // Back on the board: no text. An untranslated tile falls back to the main text.
+  s = run(s, { type: 'language', teamId: 'n', lang: 'no' }, { type: 'next' });
+  assert.equal(no().text, undefined);
+  s = run(s, { type: 'pick', c: 1, i: 0 });
+  assert.deepEqual(no().text, { question: 'b1' });
+  // The TV and the host are untouched by any of this.
+  assert.equal(displayView(s).q.question, 'b1');
+  assert.ok(!JSON.stringify(displayView(s).q).includes('text'));
+});
+
+test('languages: the final in another language — category, the question once shown, the right answer once the TV shows it', () => {
+  let s = run(newGame(translated()), joinNo, { type: 'join', teamId: 'r', name: 'Red', color: COLORS[0] }, { type: 'start', picker: 'r' }, { type: 'end' });
+  const no = () => phoneView(s, 'n').final;
+  assert.equal(s.phase, 'finalWager');
+  assert.equal(no().category, 'F-no');
+  assert.equal(no().question, undefined, 'not before the TV shows it');
+  assert.equal(phoneView(s, 'r').final.category, 'F');
+  s = run(s, { type: 'wager', teamId: 'n', amount: 0 }, { type: 'wager', teamId: 'r', amount: 0 }, { type: 'next', now: 0 });
+  assert.equal(no().question, 'fq-no');
+  assert.equal(no().rightAnswer, undefined);
+  assert.equal(phoneView(s, 'r').final.question, undefined);
+  s = run(s, { type: 'finalAnswer', teamId: 'n', text: 'mitt svar' }, { type: 'next', now: 0 });
+  assert.equal(no().rightAnswer, undefined, 'not until every team is judged');
+  assert.equal(no().answer, 'mitt svar', 'the team’s own answer is still `answer`');
+  s = run(s, { type: 'judgeFinal', teamId: 'n', correct: true }, { type: 'judgeFinal', teamId: 'r', correct: false });
+  assert.equal(no().rightAnswer, 'FA-no');
+  assert.equal(phoneView(s, 'r').final.rightAnswer, undefined);
+  s = run(s, { type: 'next' });
+  assert.equal(s.phase, 'over');
+  assert.equal(no().rightAnswer, 'FA-no');
 });

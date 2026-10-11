@@ -3,39 +3,368 @@
   "kind": "quick",
   "title": "Lynquiz-eksempel",
   "description": "En kort flervalgsquiz for å prøve lynquizen: tre deler, med et bilde, et lydklipp og et spørsmål som gir dobbelt.",
+  "lang": "no",
+  "languages": [
+    "en"
+  ],
+  "translations": {
+    "en": {
+      "title": "Norwegian quick quiz sample",
+      "description": "A short multiple-choice quiz to try the Quick quiz with: three sections, with a picture, a sound clip and a double-points question."
+    }
+  },
   "sections": [
     {
       "name": "Oppvarming",
       "seconds": 20,
       "questions": [
-        { "question": "Hva er hovedstaden i Australia?", "options": ["Sydney", "Melbourne", "Canberra", "Perth"], "correct": 2 },
-        { "question": "Hvilke av disse er pattedyr?", "type": "multi", "options": ["Delfin", "Hai", "Flaggermus", "Pingvin"], "correct": [0, 2] },
-        { "question": "Sant eller usant: en gullfisk husker bare i tre sekunder.", "options": ["Sant", "Usant"], "correct": 1, "seconds": 10 },
-        { "question": "Hvilket nordisk land har flest innbyggere?", "options": ["Norge", "Danmark", "Sverige", "Finland"], "correct": 2 },
-        { "question": "Sett disse i rekkefølge, fra eldst til nyest.", "type": "order", "options": ["Pyramidene i Giza", "Colosseum", "Eiffeltårnet", "Operaen i Oslo"] }
-      ]
+        {
+          "question": "Hva er hovedstaden i Australia?",
+          "options": [
+            "Sydney",
+            "Melbourne",
+            "Canberra",
+            "Perth"
+          ],
+          "correct": 2,
+          "translations": {
+            "en": {
+              "question": "What is the capital of Australia?",
+              "options": [
+                "Sydney",
+                "Melbourne",
+                "Canberra",
+                "Perth"
+              ]
+            }
+          }
+        },
+        {
+          "question": "Hvilke av disse er pattedyr?",
+          "type": "multi",
+          "options": [
+            "Delfin",
+            "Hai",
+            "Flaggermus",
+            "Pingvin"
+          ],
+          "correct": [
+            0,
+            2
+          ],
+          "translations": {
+            "en": {
+              "question": "Which of these are mammals?",
+              "options": [
+                "Dolphin",
+                "Shark",
+                "Bat",
+                "Penguin"
+              ]
+            }
+          }
+        },
+        {
+          "question": "Sant eller usant: en gullfisk husker bare i tre sekunder.",
+          "options": [
+            "Sant",
+            "Usant"
+          ],
+          "correct": 1,
+          "seconds": 10,
+          "translations": {
+            "en": {
+              "question": "True or false: a goldfish only remembers for three seconds.",
+              "options": [
+                "True",
+                "False"
+              ]
+            }
+          }
+        },
+        {
+          "question": "Hvilket nordisk land har flest innbyggere?",
+          "options": [
+            "Norge",
+            "Danmark",
+            "Sverige",
+            "Finland"
+          ],
+          "correct": 2,
+          "translations": {
+            "en": {
+              "question": "Which Nordic country has the most people?",
+              "options": [
+                "Norway",
+                "Denmark",
+                "Sweden",
+                "Finland"
+              ]
+            }
+          }
+        },
+        {
+          "question": "Sett disse i rekkefølge, fra eldst til nyest.",
+          "type": "order",
+          "options": [
+            "Pyramidene i Giza",
+            "Colosseum",
+            "Eiffeltårnet",
+            "Operaen i Oslo"
+          ],
+          "translations": {
+            "en": {
+              "question": "Put these in order, oldest to newest.",
+              "options": [
+                "Pyramids of Giza",
+                "Colosseum",
+                "Eiffel Tower",
+                "Oslo Opera House"
+              ]
+            }
+          }
+        }
+      ],
+      "translations": {
+        "en": {
+          "name": "Warm-up"
+        }
+      }
     },
     {
       "name": "Se og hør",
       "seconds": 20,
       "questions": [
-        { "question": "Hvilket land har dette flagget?", "image": "sample-flag-japan.svg", "options": ["Kina", "Japan", "Sør-Korea", "Bangladesh"], "correct": 1 },
-        { "question": "Hvilken barnesang er dette?", "audio": "sample-twinkle.mp3", "options": ["«Lisa gikk til skolen»", "«Twinkle, Twinkle, Little Star»", "«Lille Petter Edderkopp»", "«Hjulene på bussen»"], "correct": 1, "seconds": 30 },
-        { "question": "Hvem malte «Skrik»?", "options": ["Edvard Munch", "Vincent van Gogh", "Pablo Picasso", "Claude Monet"], "correct": 0 },
-        { "question": "Hva heter Norges høyeste fjell?", "options": ["Glittertind", "Galdhøpiggen", "Snøhetta", "Store Skagastølstind"], "correct": 1 },
-        { "question": "Hvilket år ble unionen mellom Norge og Sverige oppløst?", "options": ["1814", "1884", "1905", "1945"], "correct": 2 }
-      ]
+        {
+          "question": "Hvilket land har dette flagget?",
+          "image": "sample-flag-japan.svg",
+          "unveil": 12,
+          "unveilStyle": "blur",
+          "options": [
+            "Kina",
+            "Japan",
+            "Sør-Korea",
+            "Bangladesh"
+          ],
+          "correct": 1,
+          "translations": {
+            "en": {
+              "question": "Which country has this flag?",
+              "options": [
+                "China",
+                "Japan",
+                "South Korea",
+                "Bangladesh"
+              ]
+            }
+          }
+        },
+        {
+          "question": "Hvilken barnesang er dette?",
+          "audio": "sample-twinkle.mp3",
+          "options": [
+            "«Lisa gikk til skolen»",
+            "«Twinkle, Twinkle, Little Star»",
+            "«Lille Petter Edderkopp»",
+            "«Hjulene på bussen»"
+          ],
+          "correct": 1,
+          "seconds": 30,
+          "translations": {
+            "en": {
+              "question": "Which children's song is this?",
+              "options": [
+                "\"Lisa gikk til skolen\"",
+                "\"Twinkle, Twinkle, Little Star\"",
+                "\"Itsy Bitsy Spider\"",
+                "\"The Wheels on the Bus\""
+              ]
+            }
+          }
+        },
+        {
+          "question": "Hvem malte «Skrik»?",
+          "options": [
+            "Edvard Munch",
+            "Vincent van Gogh",
+            "Pablo Picasso",
+            "Claude Monet"
+          ],
+          "correct": 0,
+          "translations": {
+            "en": {
+              "question": "Who painted \"The Scream\"?",
+              "options": [
+                "Edvard Munch",
+                "Vincent van Gogh",
+                "Pablo Picasso",
+                "Claude Monet"
+              ]
+            }
+          }
+        },
+        {
+          "question": "Hva heter Norges høyeste fjell?",
+          "options": [
+            "Glittertind",
+            "Galdhøpiggen",
+            "Snøhetta",
+            "Store Skagastølstind"
+          ],
+          "correct": 1,
+          "translations": {
+            "en": {
+              "question": "What is Norway's highest mountain?",
+              "options": [
+                "Glittertind",
+                "Galdhøpiggen",
+                "Snøhetta",
+                "Store Skagastølstind"
+              ]
+            }
+          }
+        },
+        {
+          "question": "Hvilket år ble unionen mellom Norge og Sverige oppløst?",
+          "options": [
+            "1814",
+            "1884",
+            "1905",
+            "1945"
+          ],
+          "correct": 2,
+          "translations": {
+            "en": {
+              "question": "In which year was the union between Norway and Sweden dissolved?",
+              "options": [
+                "1814",
+                "1884",
+                "1905",
+                "1945"
+              ]
+            }
+          }
+        }
+      ],
+      "translations": {
+        "en": {
+          "name": "Look and listen"
+        }
+      }
     },
     {
       "name": "Sluttspurt",
       "seconds": 15,
       "questions": [
-        { "question": "Hvilket hav er det største?", "options": ["Atlanterhavet", "Stillehavet", "Indiahavet", "Nordishavet"], "correct": 1 },
-        { "question": "Sant eller usant: en tomat er botanisk sett et bær.", "options": ["Sant", "Usant"], "correct": 0, "seconds": 10 },
-        { "question": "Hvilket grunnstoff har det kjemiske symbolet Fe?", "options": ["Fluor", "Jern", "Fosfor", "Fermium"], "correct": 1 },
-        { "question": "Hvor mange spillere har hvert lag på banen i en fotballkamp?", "options": ["9", "10", "11", "12"], "correct": 2 },
-        { "question": "Doble poeng! Hva er det største dyret som lever i dag?", "options": ["Afrikansk elefant", "Blåhval", "Sjiraff", "Hvalhai"], "correct": 1, "points": 2000 }
-      ]
+        {
+          "question": "Hvilket hav er det største?",
+          "options": [
+            "Atlanterhavet",
+            "Stillehavet",
+            "Indiahavet",
+            "Nordishavet"
+          ],
+          "correct": 1,
+          "translations": {
+            "en": {
+              "question": "Which ocean is the largest?",
+              "options": [
+                "The Atlantic",
+                "The Pacific",
+                "The Indian Ocean",
+                "The Arctic Ocean"
+              ]
+            }
+          }
+        },
+        {
+          "question": "Sant eller usant: en tomat er botanisk sett et bær.",
+          "options": [
+            "Sant",
+            "Usant"
+          ],
+          "correct": 0,
+          "seconds": 10,
+          "translations": {
+            "en": {
+              "question": "True or false: botanically, a tomato is a berry.",
+              "options": [
+                "True",
+                "False"
+              ]
+            }
+          }
+        },
+        {
+          "question": "Hvilket grunnstoff har det kjemiske symbolet Fe?",
+          "options": [
+            "Fluor",
+            "Jern",
+            "Fosfor",
+            "Fermium"
+          ],
+          "correct": 1,
+          "translations": {
+            "en": {
+              "question": "Which element has the chemical symbol Fe?",
+              "options": [
+                "Fluorine",
+                "Iron",
+                "Phosphorus",
+                "Fermium"
+              ]
+            }
+          }
+        },
+        {
+          "question": "Hvor mange spillere har hvert lag på banen i en fotballkamp?",
+          "options": [
+            "9",
+            "10",
+            "11",
+            "12"
+          ],
+          "correct": 2,
+          "translations": {
+            "en": {
+              "question": "How many players does each team have on the pitch in a football match?",
+              "options": [
+                "9",
+                "10",
+                "11",
+                "12"
+              ]
+            }
+          }
+        },
+        {
+          "question": "Doble poeng! Hva er det største dyret som lever i dag?",
+          "options": [
+            "Afrikansk elefant",
+            "Blåhval",
+            "Sjiraff",
+            "Hvalhai"
+          ],
+          "correct": 1,
+          "points": 2000,
+          "translations": {
+            "en": {
+              "question": "Double points! What is the largest animal alive today?",
+              "options": [
+                "African elephant",
+                "Blue whale",
+                "Giraffe",
+                "Whale shark"
+              ]
+            }
+          }
+        }
+      ],
+      "translations": {
+        "en": {
+          "name": "Final sprint"
+        }
+      }
     }
   ]
 }

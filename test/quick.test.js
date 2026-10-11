@@ -4,8 +4,8 @@ import assert from 'node:assert/strict';
 import { readFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { apply, newGame, COLORS, MAX_TEAMS, MAX_PLAYERS, REACTIONS, reactionFor, hostView, displayView, phoneView, clipFor, pointsFor, resumeFix, DEFAULT_SETTINGS } from '../lib/game.js';
-import { shuffledOrder, answerOf, isRightAnswer } from '../lib/quick.js';
+import { apply, newGame, COLORS, MAX_TEAMS, MAX_PLAYERS, REACTIONS, reactionFor, hostView, displayView, phoneView, clipFor, pointsFor, resumeFix, DEFAULT_SETTINGS, unveilProgress } from '../lib/game.js';
+import { shuffledOrder, answerOf, isRightAnswer, isLastQuestion } from '../lib/quick.js';
 import { inkFor } from '../public/js/ui.js';
 import { validateSet, modeOf, rightSet, typeOf, QUESTION_TYPES } from '../lib/validate.js';
 import { createStore, filesOf } from '../store.js';
@@ -24,7 +24,7 @@ const tiny = {
       seconds: 10,
       questions: [
         { question: 'q1', options: ['a', 'b', 'c', 'd'], correct: 1 },
-        { question: 'q2', options: ['yes', 'no'], correct: 0, seconds: 20, audio: 'clip.mp3', audioStart: 3 },
+        { question: 'q2', options: ['yes', 'no'], correct: 0, seconds: 20, audio: 'clip.mp3', audioStart: 3, audioLength: 8 },
       ],
     },
     { name: 'Two', questions: [{ question: 'q3', options: ['x', 'y', 'z'], correct: 2, points: 2000 }] },
@@ -254,7 +254,7 @@ test('the store keeps a quick quiz tidy, lists its kind and finds its files', as
         seconds: '15',
         categories: 'dropped',
         questions: [
-          { question: 'Q', options: ['a', '', 'c', 'x'.repeat(100)], correct: 2, points: 2000, image: 'p.png', audio: 'c.mp3', audioStart: 2, value: 5, answer: 'no' },
+          { question: 'Q', options: ['a', '', 'c', 'x'.repeat(100)], correct: 2, points: 2000, image: 'p.png', audio: 'c.mp3', audioStart: 2, audioLength: 6, value: 5, answer: 'no' },
           { question: 'R', options: ['', 'b', ''], correct: 2, points: 1000 },
         ],
       },
@@ -271,7 +271,7 @@ test('the store keeps a quick quiz tidy, lists its kind and finds its files', as
         name: 'S',
         seconds: 15,
         questions: [
-          { question: 'Q', options: ['a', 'c', 'x'.repeat(80)], correct: 1, points: 2000, image: 'p.png', audio: 'c.mp3', audioStart: 2 },
+          { question: 'Q', options: ['a', 'c', 'x'.repeat(80)], correct: 1, points: 2000, image: 'p.png', audio: 'c.mp3', audioStart: 2, audioLength: 6 },
           // The empty option marked right stays, so the editor can show the problem.
           { question: 'R', options: ['b', ''], correct: 1 },
         ],
@@ -439,10 +439,41 @@ test('a whole quick quiz: section, ready, open, answers, result, top 5, next sec
   s = run(s, answer('b', 2, 34_000), { type: 'next', now: 34_500 });
   assert.equal(s.phase, 'result', 'the host can stop the clock early');
   assert.equal(score(s, 'b'), 2000 - Math.round(2000 * (1000 / 20_000) / 2));
-  s = run(s, { type: 'next', now: 35_000 }, { type: 'next', now: 36_000 });
+  // The last question of the whole quiz: no top 5, Space goes straight to the podium.
+  s = apply(s, { type: 'next', now: 35_000 });
   assert.equal(s.phase, 'over');
   assert.equal(s.event.type, 'over');
   assert.equal(apply(s, { type: 'next', now: 37_000 }), s);
+});
+
+test('after the last question the top 5 is skipped: result → podium, undo goes back to the result, and the host knows', () => {
+  // Section 1 (2 questions): the top 5 still shows after each, also after the section's last one.
+  let s = run(opened(), answer('r', 1, 1000), answer('b', 1, 2000), answer('g', 0, 3000));
+  assert.equal(s.phase, 'result');
+  assert.equal(isLastQuestion(s), false);
+  s = apply(s, { type: 'next', now: 4000 });
+  assert.equal(s.phase, 'ranks');
+  s = run(s, { type: 'next', now: 5000 }, { type: 'next', now: 6000 }, { type: 'skip', now: 7000 });
+  assert.equal(s.phase, 'section', 'the second question skipped: the next section');
+  // Section 2's only question is the last of the quiz.
+  s = run(s, { type: 'next', now: 8000 }, { type: 'next', now: 9000 });
+  assert.equal(isLastQuestion(s), true);
+  s = run(s, answer('g', 2, 9500), { type: 'next', now: 10_000 });
+  assert.equal(s.phase, 'result');
+  assert.equal(hostView(s).ranks.top.length, 3);
+  const over = apply(s, { type: 'next', now: 11_000 });
+  assert.equal(over.phase, 'over');
+  assert.equal(over.event.type, 'over');
+  assert.equal(over.q, null);
+  assert.equal(displayView(over).ranks.total, 3); // the podium still gets everyone
+  assert.deepEqual(displayView(over).standings.map((e) => e.id), ['g', 'r', 'b']);
+  // Undo from the podium goes back to that result, with the points as they were.
+  const back = apply(over, { type: 'undo', now: 12_000 });
+  assert.equal(back.phase, 'result');
+  assert.deepEqual(back.teams.map((t) => t.score), s.teams.map((t) => t.score));
+  assert.equal(apply(back, { type: 'next', now: 13_000 }).phase, 'over');
+  // A saved game that stopped at that result resumes there (resumeFix only touches a showing question).
+  assert.equal(resumeFix(back, 14_000), back);
 });
 
 test('with no read time the answers wait for Space', () => {
@@ -621,10 +652,11 @@ test('the clip starts with the question, plays while answering and stops at the 
   s = apply(s, { type: 'next', now: 2000 }); // ranks
   assert.equal(s.media, null);
   s = apply(s, { type: 'next', now: 3000 }); // ready: question 2 has a clip
-  assert.deepEqual(clipFor(s), { file: 'clip.mp3', start: 3 });
+  assert.deepEqual(clipFor(s), { file: 'clip.mp3', start: 3, length: 8 });
   assert.deepEqual(s.media, { playing: true, seq: 0 });
-  assert.deepEqual(hostView(s).clip, { file: 'clip.mp3', start: 3 });
-  assert.deepEqual(displayView(s).clip, { file: 'clip.mp3', start: 3 });
+  assert.deepEqual(hostView(s).clip, { file: 'clip.mp3', start: 3, length: 8 });
+  assert.deepEqual(displayView(s).clip, { file: 'clip.mp3', start: 3, length: 8 });
+  assert.ok(!JSON.stringify(phoneView(s, 'r')).includes('clip.mp3'), 'phones never get the file');
   s = apply(s, { type: 'next', now: 4000 }); // open
   assert.equal(s.media.playing, true);
   s = apply(s, { type: 'mediaRestart' });
@@ -1027,4 +1059,208 @@ test('put in order: refusals (too few, too many, repeats, a plain option or tick
   assert.equal(isRightAnswer({ type: 'multi', correct: [0, 2] }, { options: [0] }), false);
   assert.equal(isRightAnswer({ correct: [0, 2] }, { option: 2 }), true);
   assert.equal(isRightAnswer({ correct: [0, 2] }, null), false);
+});
+
+// ----- slowly appearing pictures -----
+
+// The first question has a picture that appears over `unveil` seconds (10 s to answer).
+const withUnveil = (unveil, extra = {}) => {
+  const set = structuredClone(tiny);
+  Object.assign(set.sections[0].questions[0], { image: 'photo.jpg', unveil, ...extra });
+  return set;
+};
+
+test('a slowly appearing picture: hidden while the question is read, runs while the answers are open, clear at the result', () => {
+  const set = withUnveil(5, { unveilStyle: 'blur' });
+  assert.deepEqual(validateSet(set), []);
+  let s = run(started({}, set), { type: 'next', now: 0 }); // ready
+  assert.deepEqual(s.q.unveil, { ms: 5000, done: 0, since: null, style: 'blur' });
+  assert.equal(unveilProgress(s.q.unveil, 3000), 0); // nothing moves while the question is read
+  s = apply(s, { type: 'next', now: 1000 }); // open
+  assert.equal(s.q.unveil.since, 1000);
+  assert.equal(unveilProgress(s.q.unveil, 3500), 0.5);
+  assert.equal(unveilProgress(s.q.unveil, 6000), 1); // clear after 5 s, before the 10 s to answer are up
+  // An answer doesn't stop it (unlike a buzz on a board).
+  s = apply(s, answer('r', 1, 2000));
+  assert.equal(s.q.unveil.since, 1000);
+  // Everyone answered early: the result shows it clear at once.
+  s = run(s, answer('b', 0, 2500), answer('g', 1, 3000));
+  assert.equal(s.phase, 'result');
+  assert.deepEqual(s.q.unveil, { ms: 5000, done: 5000, since: null, style: 'blur' });
+  assert.equal(unveilProgress(s.q.unveil, 3000), 1);
+  s = apply(s, { type: 'next', now: 4000 }); // ranks: still clear
+  assert.equal(unveilProgress(s.q.unveil, 4000), 1);
+  // The points are the usual ones (faster is better; a brave early guess pays).
+  assert.equal(score(s, 'r'), pointsFor(1000, 10, 1000));
+  // No picture, or no unveil: nothing.
+  assert.equal(run(started({}, tiny), { type: 'next', now: 0 }).q.unveil, null);
+  assert.equal(run(started({}, withUnveil(undefined)), { type: 'next', now: 0 }).q.unveil, null);
+});
+
+test('a slowly appearing picture is cut to the time to answer, and the clock running out shows it clear', () => {
+  let s = run(started({}, withUnveil(30)), { type: 'next', now: 0 }, { type: 'next', now: 1000 });
+  assert.deepEqual(s.q.unveil, { ms: 10_000, done: 0, since: 1000, style: 'pixels' }); // 30 s asked, 10 s to answer
+  assert.equal(unveilProgress(s.q.unveil, 6000), 0.5);
+  assert.equal(unveilProgress(s.q.unveil, 11_000), 1); // clear exactly when the clock runs out
+  s = apply(s, { type: 'timeout', now: 11_000 });
+  assert.equal(s.phase, 'result');
+  assert.equal(unveilProgress(s.q.unveil, 11_000), 1);
+  // A question's own seconds count, not the section's.
+  const own = withUnveil(30, { seconds: 7 });
+  s = run(started({}, own), { type: 'next', now: 0 }, { type: 'next', now: 1000 });
+  assert.equal(s.q.unveil.ms, 7000);
+});
+
+test('a slowly appearing picture starts over with the clock after undo and on resume, and the host stopping the question shows it clear', () => {
+  let s = run(started({}, withUnveil(5)), { type: 'next', now: 0 }, { type: 'next', now: 1000 }, answer('r', 1, 2000));
+  s = apply(s, { type: 'next', now: 4000 }); // the host stops the question
+  assert.equal(s.phase, 'result');
+  assert.equal(unveilProgress(s.q.unveil, 4000), 1);
+  s = apply(s, { type: 'undo', now: 9000 }); // back to the open question: nobody answered, a fresh clock, the picture from the start
+  assert.equal(s.phase, 'open');
+  assert.deepEqual(s.q.answers, {});
+  assert.deepEqual(s.q.unveil, { ms: 5000, done: 0, since: 9000, style: 'pixels' });
+  assert.equal(unveilProgress(s.q.unveil, 11_500), 0.5);
+  // Resume: back to "get ready" with the picture hidden again.
+  const resumed = resumeFix(s, 20_000);
+  assert.equal(resumed.phase, 'ready');
+  assert.deepEqual(resumed.q.unveil, { ms: 5000, done: 0, since: null, style: 'pixels' });
+  assert.equal(unveilProgress(resumed.q.unveil, 25_000), 0);
+  const on = apply(resumed, { type: 'next', now: 21_000 });
+  assert.equal(on.q.unveil.since, 21_000);
+});
+
+test('who sees a slowly appearing picture: the TV gets its timing and style, never a clear picture before the result; phones nothing', () => {
+  let s = run(started({ quickPhoneText: true }, withUnveil(5, { unveilStyle: 'blur' })), { type: 'next', now: 0 });
+  for (const phase of ['ready', 'open']) {
+    assert.equal(s.phase, phase);
+    const tv = displayView(s);
+    assert.deepEqual(tv.q.unveil, s.q.unveil);
+    assert.equal(tv.q.image, 'photo.jpg'); // the TV draws it blurred from the file; the picture is never clear on screen
+    assert.equal(hostView(s).q.unveil.style, 'blur');
+    for (const id of ['r', 'b']) {
+      const text = JSON.stringify(phoneView(s, id));
+      for (const secret of ['photo.jpg', 'unveil', 'image', 'blur']) assert.ok(!text.includes(secret), `${phase}: ${secret} on a phone`);
+    }
+    if (phase === 'ready') s = apply(s, { type: 'next', now: 1000 });
+  }
+  s = run(s, answer('r', 1, 2000), answer('b', 0, 2500), answer('g', 1, 3000));
+  assert.equal(s.phase, 'result');
+  assert.equal(unveilProgress(displayView(s).q.unveil, 3000), 1);
+  assert.ok(!JSON.stringify(phoneView(s, 'r')).includes('photo.jpg'));
+});
+
+test('validation and saving of a Quick quiz picture that appears slowly', async () => {
+  const bad = withUnveil(0.5);
+  assert.deepEqual(validateSet(bad), [{ code: 'bad-unveil', c: 0, i: 0 }]);
+  assert.deepEqual(validateSet(withUnveil(121)), [{ code: 'bad-unveil', c: 0, i: 0 }]);
+  assert.deepEqual(validateSet(withUnveil(10, { unveilStyle: 'wobble' })), [{ code: 'bad-unveil-style', c: 0, i: 0 }]);
+  assert.deepEqual(validateSet(withUnveil(10, { unveilStyle: 'pixels' })), []);
+  assert.deepEqual(validateSet(withUnveil(120, { unveilStyle: 'blur' })), []);
+  // Saved: `unveil` only with a picture, the style only with `unveil` and only when it isn't the default.
+  const store = createStore(mkdtempSync(join(tmpdir(), 'proquiz-quick-unveil-')));
+  const set = withUnveil(10, { unveilStyle: 'blur' });
+  set.sections[0].questions[1].unveil = 10; // no picture
+  set.sections[0].questions[1].unveilStyle = 'blur';
+  set.sections[1].questions[0].image = 'p.png';
+  set.sections[1].questions[0].unveilStyle = 'blur'; // no unveil
+  const id = await store.create(set);
+  const saved = (await store.get(id)).set;
+  assert.equal(saved.sections[0].questions[0].unveil, 10);
+  assert.equal(saved.sections[0].questions[0].unveilStyle, 'blur');
+  assert.equal(saved.sections[0].questions[1].unveil, undefined);
+  assert.equal(saved.sections[0].questions[1].unveilStyle, undefined);
+  assert.equal(saved.sections[1].questions[0].unveilStyle, undefined);
+  await store.save(id, withUnveil(10, { unveilStyle: 'pixels' }));
+  assert.equal((await store.get(id)).set.sections[0].questions[0].unveilStyle, undefined, 'pixels is the default, left out');
+});
+
+// ----- extra languages in a quiz (lib/languages.js) -----
+
+import { shownOptions } from '../lib/quick.js';
+
+// Tiny with Norwegian translations: the first question has every text, the second only the question.
+function translatedTiny() {
+  const set = structuredClone(tiny);
+  Object.assign(set, { lang: 'en', languages: ['no'] });
+  set.sections[0].translations = { no: { name: 'En' } };
+  set.sections[0].questions[0].translations = { no: { question: 'q1-no', options: ['a-no', 'b-no', 'c-no', 'd-no'] } };
+  set.sections[0].questions[1].translations = { no: { question: 'q2-no' } };
+  return set;
+}
+
+test('languages: a translated player gets the question and options in their language, even with quickPhoneText off', () => {
+  const base = run(
+    newGame(translatedTiny(), { quickPhoneText: false }),
+    { type: 'join', teamId: 'n', name: 'Nora', color: COLORS[0], lang: 'no' },
+    { type: 'join', teamId: 'r', name: 'Red', color: COLORS[0] },
+    { type: 'start' },
+  );
+  let s = run(base, { type: 'next', now: 0 });
+  const nora = () => phoneView(s, 'n');
+  const red = () => phoneView(s, 'r');
+  assert.equal(nora().textLang, 'no');
+  assert.equal(nora().sections[0].name, 'En');
+  assert.equal(red().sections[0].name, 'One');
+  assert.equal(nora().q.question, 'q1-no');
+  assert.equal(nora().q.options, undefined, 'not before the answers open');
+  assert.equal(red().q.question, undefined, 'the setting is off for everyone else');
+  s = run(s, { type: 'next', now: 1000 });
+  assert.deepEqual(nora().q.options, ['a-no', 'b-no', 'c-no', 'd-no']);
+  assert.equal(red().q.options, undefined);
+  assert.equal(displayView(s).q.question, 'q1', 'the TV stays in the main language');
+  assert.deepEqual(displayView(s).q.options, ['a', 'b', 'c', 'd']);
+  // The next question has no translated options: they fall back one by one.
+  s = run(s, { type: 'next', now: 2000 }, { type: 'next', now: 2100 }, { type: 'next', now: 2200 }, { type: 'next', now: 2300 });
+  assert.equal(s.phase, 'open');
+  assert.equal(nora().q.question, 'q2-no');
+  assert.deepEqual(nora().q.options, ['yes', 'no']);
+  // The host switch off: she plays in the main language like everyone (and with the setting off, no text at all).
+  const off = run(s, { type: 'settings', settings: { quizLanguages: false } });
+  assert.equal(phoneView(off, 'n').q.question, undefined);
+  assert.equal(phoneView(off, 'n').languages, null);
+  // With quickPhoneText on, the others get the main text and she still gets hers.
+  const on = run(s, { type: 'settings', settings: { quickPhoneText: true } });
+  assert.equal(phoneView(on, 'r').q.question, 'q2');
+  assert.equal(phoneView(on, 'n').q.question, 'q2-no');
+  // No file names, ever.
+  assert.ok(!JSON.stringify(nora()).includes('clip.mp3'));
+});
+
+test('languages: translated options follow the "put in order" shuffle', () => {
+  const set = structuredClone(translatedTiny());
+  set.sections[0].questions[0] = { question: 'Order these', type: 'order', options: ['first', 'second', 'third', 'fourth'], translations: { no: { question: 'Sorter', options: ['første', 'andre', 'tredje', 'fjerde'] } } };
+  const s = run(
+    newGame(set),
+    { type: 'join', teamId: 'n', name: 'Nora', color: COLORS[0], lang: 'no' },
+    { type: 'join', teamId: 'r', name: 'Red', color: COLORS[1] },
+    { type: 'start', seed: 7 },
+    { type: 'next', now: 0 },
+    { type: 'next', now: 1000 },
+  );
+  const order = s.q.order;
+  assert.notDeepEqual(order, [0, 1, 2, 3]);
+  const main = ['first', 'second', 'third', 'fourth'];
+  const no = ['første', 'andre', 'tredje', 'fjerde'];
+  assert.deepEqual(displayView(s).q.options, order.map((k) => main[k]));
+  assert.deepEqual(phoneView(s, 'n').q.options, order.map((k) => no[k]), 'the same shuffle, in Norwegian');
+  assert.deepEqual(phoneView(s, 'r').q.options, order.map((k) => main[k]));
+  assert.deepEqual(shownOptions(s, 'no'), order.map((k) => no[k]));
+  // Her right order is judged the same way: the shown positions in the written order.
+  const done = run(s, { type: 'answer', teamId: 'n', order: s.q.correct, now: 1500 }, { type: 'answer', teamId: 'r', order: [0, 1, 2, 3], now: 1600 });
+  assert.ok(score(done, 'n') > 0);
+});
+
+test('languages: cleanQuick() keeps the translated options in step with dropped empty options (the keep remap)', async () => {
+  const store = createStore(mkdtempSync(join(tmpdir(), 'proquiz-lang-')));
+  const set = translatedTiny();
+  set.sections[0].questions[0].options = ['a', '', 'c', 'd'];
+  set.sections[0].questions[0].correct = 2;
+  const id = await store.create(set);
+  const saved = (await store.get(id)).set;
+  assert.deepEqual(saved.sections[0].questions[0].options, ['a', 'c', 'd']);
+  assert.equal(saved.sections[0].questions[0].correct, 1);
+  assert.deepEqual(saved.sections[0].questions[0].translations.no.options, ['a-no', 'c-no', 'd-no']);
+  assert.deepEqual(saved.lang, 'en');
+  assert.deepEqual(saved.languages, ['no']);
 });

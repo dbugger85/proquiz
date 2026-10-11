@@ -41,6 +41,12 @@
       <legend data-t="pickColor">Pick your colour</legend>
       <div id="swatches" class="swatches"></div>
     </fieldset>
+    <!-- A quiz with extra languages (lib/languages.js): which one this phone reads the questions in -->
+    <fieldset id="lang-field" class="lang-field" hidden>
+      <legend data-t="readIn">Read questions in:</legend>
+      <div id="lang-pills" class="pills lang-pills"></div>
+      <small id="lang-hint" class="muted" data-t="readInHint"></small>
+    </fieldset>
     <p id="join-error" class="error" role="alert"></p>
     <button id="join-btn" class="btn btn-primary" type="submit" data-t="joinButton">Join the game</button>
   </form>
@@ -48,8 +54,14 @@
   <main id="team" class="phone-team" hidden>
     <header>
       <div id="me" class="me"></div>
+      <!-- The flag of the language this phone reads the questions in (a quiz with extra languages); tap to change it -->
+      <button id="lang-pill" class="lang-pill" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="lang-menu" hidden></button>
       <div id="score" class="score" data-count="score"></div>
     </header>
+    <div id="lang-menu" class="lang-menu" hidden>
+      <p class="small" data-t="readIn"></p>
+      <div class="pills lang-pills"></div>
+    </div>
     <div id="stage" class="stage"></div>
   </main>
 

@@ -11,10 +11,11 @@ import { readFile, writeFile, readdir, mkdir, rename, unlink, stat } from 'node:
 import { createHash, randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { validateSet, modeOf, FILE_NAME, IMAGE_NAME, AUDIO_NAME, MAX_OPTION, MAX_DESCRIPTION, rightSet, typeOf, usedFiles, cleanCredits } from './lib/validate.js';
+import { validateSet, modeOf, FILE_NAME, IMAGE_NAME, AUDIO_NAME, MAX_OPTION, MAX_DESCRIPTION, rightSet, typeOf, usedFiles, cleanCredits, UNVEIL_STYLES } from './lib/validate.js';
 import { KINDS } from './lib/crazy.js';
 import { MAX_LOGO } from './brand.js';
 import { FORMAT_VERSION, formatVersionOf, upgradeExport, FormatError } from './lib/fileformat.js';
+import { isLanguage, languagesOf, cleanItemTranslations, TRANSLATION_FIELDS } from './lib/languages.js';
 
 const ROOT = new URL('./', import.meta.url);
 export const SAMPLE_ID = 'sample';
@@ -206,7 +207,7 @@ export function createStore(dataDir, { version = null, format = {} } = {}) {
 
 // ----- the editor's HTTP API (only for the laptop itself) -----
 
-export function apiHandler(store, { onSetSaved = () => {}, getLang = () => 'en', brand = null, onBrand = () => {}, pictures = null } = {}) {
+export function apiHandler(store, { onSetSaved = () => {}, getLang = () => 'en', brand = null, onBrand = () => {}, pictures = null, songs = null } = {}) {
   return async function api(req, res, url) {
     const parts = url.pathname.split('/').filter(Boolean); // ['api', 'sets', id, sub?]
     const [, what, id, sub] = parts;
@@ -240,6 +241,15 @@ export function apiHandler(store, { onSetSaved = () => {}, getLang = () => 'en',
           return json(res, 200, await pictures.search({ q: p.get('q'), source: p.get('source'), page: p.get('page'), license: p.get('license'), lang: p.get('lang') }));
         }
         if (id === 'fetch' && req.method === 'POST') return json(res, 201, await pictures.fetch(await readJson(req)));
+      }
+      // Finding song clips on Deezer (songs.js): the same rule, only from the editor itself.
+      if (what === 'songs' && songs) {
+        if (!['same-origin', 'none', undefined].includes(req.headers['sec-fetch-site'])) return json(res, 403, { error: 'forbidden' });
+        if (id === 'search' && req.method === 'GET') {
+          const p = url.searchParams;
+          return json(res, 200, await songs.search({ q: p.get('q'), page: p.get('page') }));
+        }
+        if (id === 'fetch' && req.method === 'POST') return json(res, 201, await songs.fetch(await readJson(req)));
       }
       if (what === 'sets' && !id && req.method === 'GET') return json(res, 200, await store.list());
       if (what === 'sets' && !id && req.method === 'POST') {
@@ -317,37 +327,60 @@ function summary(id, set, builtIn, updated) {
 // Every picture and clip a set uses (shared with the editor, which prunes picture credits with it).
 export const filesOf = usedFiles;
 
-// Only the fields ProQuiz knows, so a saved file stays tidy. Picture credits are kept only for pictures still in use.
-// The description and cover picture (both kinds of quiz) come right after the title.
+// Only the fields ProQuiz knows, so a saved file stays tidy. Picture and song credits are kept only for files still in use.
+// The description and cover picture (both kinds of quiz) come right after the title, then the languages (lib/languages.js:
+// `lang`, `languages` and the quiz's own `translations`, each only when there is something to save, so a quiz without
+// extra languages comes out exactly as before).
 export function clean(set) {
-  const { v, kind, title, ...rest } = modeOf(set) === 'quick' ? cleanQuick(set) : cleanBoard(set);
+  const langs = languagesOf(set);
+  const { v, kind, title, ...rest } = modeOf(set) === 'quick' ? cleanQuick(set, langs) : cleanBoard(set, langs);
   const out = { v, ...(kind && { kind }), title };
   const description = typeof set?.description === 'string' ? set.description.replace(/\r\n?/g, '\n').trim().slice(0, MAX_DESCRIPTION) : '';
   if (description) out.description = description;
   if (typeof set?.cover === 'string' && IMAGE_NAME.test(set.cover)) out.cover = set.cover;
+  if (isLanguage(set?.lang)) out.lang = set.lang;
+  if (langs.length) out.languages = langs;
+  translationsOf(set, langs, TRANSLATION_FIELDS.set, out);
   Object.assign(out, rest);
   const credits = cleanCredits(set?.credits, filesOf(out));
   if (Object.keys(credits).length) out.credits = credits;
   return out;
 }
 
-function cleanBoard(set) {
-  const q = (x = {}) => {
+// An item's translations into `out`, tidied (only the quiz's languages and the item's fields; nothing when empty).
+function translationsOf(x, langs, fields, out, opts) {
+  const tr = langs.length ? cleanItemTranslations(x?.translations, langs, fields, opts) : null;
+  if (tr) out.translations = tr;
+  return out;
+}
+
+// A slowly appearing picture: `unveil` (seconds) only with a picture, and `unveilStyle` only with `unveil` and only
+// when it isn't the default 'pixels' (so older files come out unchanged).
+function unveilOf(x, out) {
+  if (x.image && Number(x.unveil) > 0) out.unveil = Number(x.unveil);
+  if (out.unveil && UNVEIL_STYLES.includes(x.unveilStyle) && x.unveilStyle !== 'pixels') out.unveilStyle = x.unveilStyle;
+  return out;
+}
+
+function cleanBoard(set, langs = []) {
+  const q = (x = {}, final = false) => {
     const out = { value: Number(x.value) || 0, question: String(x.question ?? ''), answer: String(x.answer ?? '') };
     if (x.image) out.image = x.image;
     if (x.answerImage) out.answerImage = x.answerImage;
     if (x.audio) out.audio = x.audio;
     if (x.audio && Number(x.audioStart) > 0) out.audioStart = Number(x.audioStart);
-    if (x.image && Number(x.unveil) > 0) out.unveil = Number(x.unveil);
+    if (x.audio && Number(x.audioLength) > 0) out.audioLength = Number(x.audioLength);
+    unveilOf(x, out);
     if (KINDS.includes(x.special)) out.special = x.special;
-    return out;
+    return translationsOf(x, langs, final ? TRANSLATION_FIELDS.final : TRANSLATION_FIELDS.boardQ, out);
   };
-  const board = (cats) => (Array.isArray(cats) ? cats : []).map((c) => ({ name: String(c?.name ?? ''), questions: (c?.questions ?? []).map(q) }));
+  const board = (cats) =>
+    (Array.isArray(cats) ? cats : []).map((c) => translationsOf(c, langs, TRANSLATION_FIELDS.category, { name: String(c?.name ?? ''), questions: (c?.questions ?? []).map((x) => q(x)) }));
   const out = { v: 1, title: String(set?.title ?? ''), categories: board(set?.categories) };
   if (set?.round2) out.round2 = { categories: board(set.round2.categories) };
   if (set?.final) {
     const f = set.final;
-    out.final = { category: String(f.category ?? ''), ...q(f) };
+    out.final = { category: String(f.category ?? ''), ...q(f, true) };
     delete out.final.value;
     delete out.final.special;
   }
@@ -358,11 +391,13 @@ function cleanBoard(set) {
 // the problem), and `correct` follows its option(s): a number for one right answer, a list for several,
 // left out when no option is marked right. `type` is kept only for the new kinds ('multi', whose `correct` is
 // always a list, and 'order', which has none), so older files come out exactly as they went in.
-function cleanQuick(set) {
+function cleanQuick(set, langs = []) {
   const media = (x, out) => {
     if (x.image) out.image = x.image;
     if (x.audio) out.audio = x.audio;
     if (x.audio && Number(x.audioStart) > 0) out.audioStart = Number(x.audioStart);
+    if (x.audio && Number(x.audioLength) > 0) out.audioLength = Number(x.audioLength);
+    unveilOf(x, out);
     return out;
   };
   const seconds = (x) => (Number.isInteger(Number(x)) && Number(x) > 0 ? { seconds: Number(x) } : {});
@@ -378,11 +413,12 @@ function cleanQuick(set) {
     else if (right.length > 0) out.correct = right;
     Object.assign(out, seconds(x.seconds));
     if ([0, 2000].includes(Number(x.points)) && x.points !== null && x.points !== '') out.points = Number(x.points);
-    return media(x, out);
+    media(x, out);
+    // The translated options are by index, so they follow the same `keep` as the options themselves.
+    return translationsOf(x, langs, TRANSLATION_FIELDS.quickQ, out, { options: true, keep });
   };
   const sections = (Array.isArray(set?.sections) ? set.sections : []).map((sec) => ({
-    name: String(sec?.name ?? ''),
-    ...seconds(sec?.seconds),
+    ...translationsOf(sec, langs, TRANSLATION_FIELDS.category, { name: String(sec?.name ?? ''), ...seconds(sec?.seconds) }),
     questions: (Array.isArray(sec?.questions) ? sec.questions : []).map(q),
   }));
   return { v: 1, kind: 'quick', title: String(set?.title ?? ''), sections };

@@ -353,20 +353,22 @@ test('a Wikimedia picture: its PNG render from Wikimedia’s own servers only, r
 
 const credit = (author = 'Ann') => ({ title: 'Tower', author, license: 'CC BY 2.0', licenseUrl: 'https://creativecommons.org/licenses/by/2.0/', source: 'openverse', sourceUrl: 'https://flickr.com/x' });
 
-test('credits are tidied: only pictures in use, short texts, https links only', () => {
-  const used = ['aaaaaaaaaaaaaaaa.png', 'bbbbbbbbbbbbbbbb.jpg', 'clip.mp3'];
+test('credits are tidied: only pictures and clips in use, short texts, https links only', () => {
+  const used = ['aaaaaaaaaaaaaaaa.png', 'bbbbbbbbbbbbbbbb.jpg', 'clip.mp3', 'notes.txt'];
   const out = cleanCredits(
     {
       'aaaaaaaaaaaaaaaa.png': { ...credit(), title: 'x'.repeat(300), author: ' Ann\n\tB ', licenseUrl: 'javascript:alert(1)', sourceUrl: 'http://flickr.com/x', source: 'evil', extra: 1 },
       'bbbbbbbbbbbbbbbb.jpg': { title: '', author: '', license: '' },
       'cccccccccccccccc.png': credit(), // not used any more
-      'clip.mp3': credit(), // not a picture
+      'clip.mp3': { title: 'Dancing Queen', author: 'ABBA', source: 'deezer', sourceUrl: 'https://www.deezer.com/track/884025' }, // a song clip (songs.js)
+      'notes.txt': credit(), // not a picture or a clip
       '../x.png': credit(),
     },
     used,
   );
-  assert.deepEqual(Object.keys(out), ['aaaaaaaaaaaaaaaa.png']);
+  assert.deepEqual(Object.keys(out), ['aaaaaaaaaaaaaaaa.png', 'clip.mp3']);
   assert.deepEqual(out['aaaaaaaaaaaaaaaa.png'], { title: 'x'.repeat(200), author: 'Ann B', license: 'CC BY 2.0' });
+  assert.deepEqual(out['clip.mp3'], { title: 'Dancing Queen', author: 'ABBA', source: 'deezer', sourceUrl: 'https://www.deezer.com/track/884025' });
   assert.deepEqual(cleanCredits(null, used), {});
   assert.deepEqual(cleanCredits([credit()], used), {});
   assert.deepEqual(usedFiles({ categories: [{ questions: [{ image: 'a.png', answerImage: 'b.png' }] }], round2: { categories: [{ questions: [{ audio: 'c.mp3' }] }] }, final: { image: 'd.png' } }).sort(), ['a.png', 'b.png', 'c.mp3', 'd.png']);

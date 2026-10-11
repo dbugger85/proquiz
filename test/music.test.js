@@ -32,6 +32,10 @@ test('the music follows a Quick quiz', () => {
   assert.equal(moodFor(view('result')), 'calm'); // after the reveal chime, a soft tune
   assert.equal(moodFor(view('ranks')), 'calmUp'); // the same tune, a little fuller, under the top 5
   assert.equal(moodFor(view('over')), 'over');
+  // After the last question the game goes from the result straight to the podium (no top 5): a different song, so
+  // the party music crossfades in after the fanfare (MOODS.over.delay), just as it did from the top 5.
+  assert.notEqual(MOODS.calm.song, MOODS.over.song);
+  assert.ok(MOODS.over.delay > 0);
   const clip = { file: 'song.mp3', start: 0 };
   assert.equal(moodFor(view('ready', { clip })), 'silent');
   assert.equal(moodFor(view('open', { clip })), 'silent');

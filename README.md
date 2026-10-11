@@ -12,7 +12,7 @@ A party quiz for the people in the room. A laptop runs the game, a TV shows it, 
 
 - A board of categories and questions (100–500 points). The team that answers right picks the next question, on the laptop or on its own phone.
 - Phones buzz in, and the first team is shown on the TV in its colour. A wrong answer costs points (none, half or all, your choice), and the other teams can try.
-- A picture can start as big blocks and slowly become clear.
+- A picture can appear slowly: as big blocks that get smaller, or as a blur that sharpens.
 - An optional **round 2**: a second board with new questions and double points. The team with the fewest points picks first.
 - A **final round**: teams bet, type their answers on their phones, and you judge each one.
 - **Crazy mode (Kaosmodus):** hidden special tiles, revealed on the TV with a spinning reel: bombs, triple points, a hot seat, a jackpot and more.
@@ -32,11 +32,12 @@ A party quiz for the people in the room. A laptop runs the game, a TV shows it, 
 - **No internet needed.** Everything runs over the room's Wi-Fi. Friends elsewhere can join **over the internet** too, with an optional PIN. See [Playing with people elsewhere](#playing-with-people-elsewhere).
 - **Avatars:** every player (or team mascot) gets a face they can build on their phone.
 - Game-show sounds, timers and background music. You can swap in your own music files.
-- Pictures and sound clips in questions ("Which song is this?").
+- Pictures and sound clips in questions ("Which song is this?"), with a trim bar to choose which part of a clip plays.
 - **Your own logo, event name and colour** on every screen. See [Your own logo and colours](#your-own-logo-and-colours).
 - **English and Norwegian.**
 - A **question editor** that saves by itself, and an autosave that survives a crash.
 - **Free pictures:** the editor can search Openverse and Wikimedia Commons for pictures that are free to use, and the TV shows who made each one after the answer.
+- **Song clips:** the editor can search Deezer for a song and use its 30-second preview (for private, non-commercial quizzes); the TV names the artist after the answer.
 - **Quizzes made with AI:** describe your topics, paste the request into Claude or ChatGPT, and paste the answer back.
 
 ## Screenshots
@@ -98,7 +99,7 @@ Download the zip for your computer from the [latest release](https://github.com/
 ## Before the night
 
 1. Start ProQuiz. Your browser opens the **host screen**.
-2. Click **Edit questions**. Then click **New board quiz** or **New quick quiz** (see below), or open one of the samples. Four sample quizzes are included: a board quiz and a Quick quiz, each in English and Norwegian. The editor saves by itself, and a list tells you what's missing.
+2. Click **New quiz** next to the quiz picker (or **Edit**, then **New quiz** in the editor) and choose **Board quiz** or **Quick quiz** (see below), or open one of the samples. Four sample quizzes are included: a board quiz and a Quick quiz, each in English and Norwegian. The editor saves by itself, and a list tells you what's missing.
 3. Try it once with two phones, so you know how it feels.
 
 ### Every quiz
@@ -106,9 +107,19 @@ Download the zip for your computer from the [latest release](https://github.com/
 - **Description and cover picture:** at the top of a quiz you can write a line or two about it (up to 300 letters) and choose a cover picture (**Choose a file** or **Find a free picture**). Both show in the editor's list and in the lobby under the quiz list, and they go with the quiz when you export it.
 - **Archive:** click **Archive** next to a quiz you're done with (the samples too). It leaves the lobby's list but is kept, folded away under **Archived** at the bottom of the editor's list; **Bring back** puts it back. This is personal to your computer and isn't part of the quiz file.
 
+### Several languages in one quiz
+
+A quiz can be read in more than one language at the same time. The TV always shows the quiz in its **main language**; a player whose phone picks another language reads each question on the phone instead.
+
+- In the editor, under the description, **Languages** shows the main language and **Add a language** (about 25 to choose from, each with a small flag: Norwegian, Swedish, English, German, Arabic, Thai, Somali, Ukrainian, Chinese and more). Each added language gets a chip with how many texts are still missing and a **Translations** button: the original text on the left, the translation on the right, with **Show only missing**. Empty translations simply fall back to the original, so a half-translated quiz still works. **Translate with AI** works like Fill empty spots: copy the request (only the missing texts), paste it into Claude or ChatGPT, paste the answer back, and only the empty ones are filled in. Read through them: an AI can change a meaning so the answer no longer fits.
+- In the lobby the quiz says **Also in: Norsk, ไทย**, and a tick **Phones may read the questions in another language** (on by default) lets you turn the whole thing off for tonight, so everyone plays in the main language.
+- On the phone, the join form asks **Read the questions in:** with a flag per language (the phone's own language is picked when the quiz has it). A flag pill in the header changes it later. In a board quiz such a phone shows the question while the TV shows it and the answer once it is revealed (phones in the main language stay plain buzzers, as always); in a Quick quiz it shows the question and the answer buttons in that language, whatever the **Show question and answers on the phones** setting says. If the chosen language is English or Norwegian, the phone's own buttons switch too.
+- The host sees a flag next to each team that reads in another language, and that language's text in small grey lines under the question and the answer (and under each answer option in a Quick quiz). The TV never changes.
+- The four sample quizzes each come with one translation (the English ones in Norwegian, the Norwegian ones in English).
+
 ### Making a board quiz
 
-- Click a tile to write its question and answer, and add a picture or sound clip if you like.
+- Click a tile to write its question and answer, and add a picture or sound clip if you like. Under a picture, **Show the picture slowly** makes it appear bit by bit once the buzzers are on, as **Pixels** (big blocks that get smaller) or **Blur** (a blur that sharpens); set the seconds until it is clear. Under a clip, a **trim bar** shows the whole clip: drag the left handle to where it should start and the right one to where it should stop (leave it at the very end to play to the end), and press **Try it** to hear just that part. The handles also move with the arrow keys.
 - **Round 2:** tick **This quiz has a round 2** under the board. A second board appears, the same size, with double points (you can change them). Write its questions like the first board's.
 - **Special tiles:** you can place Crazy mode specials yourself. See [Crazy mode](#crazy-mode-kaosmodus).
 
@@ -120,22 +131,30 @@ Download the zip for your computer from the [latest release](https://github.com/
   - **Tick all that are right:** tick every right answer. Players tick the ones they think are right and press **Submit answers**; only exactly the right ones score. Every answer may be right.
   - **Put in order:** write at least 3 answers in the right order, the first at the top, and say which way in the question ("oldest to newest"). The game shuffles them; players tap them in order and submit. Only the whole order scores.
   - Don't say in the question how many answers are right: the TV and the phones tell the players what kind of question it is.
-- Each question can have its own time, **Normal**, **Double** or **No points**, a picture and a sound clip.
+- Each question can have its own time, **Normal**, **Double** or **No points**, a picture and a sound clip (with the same trim bar as a board quiz). A picture can appear slowly here too (**Show the picture slowly**, then **Pixels** or **Blur**): it starts hidden when the answers open and is clear when the time to answer is up, so a quick guess from a blurry picture earns more points.
 - Use ▲ and ▼ to change the order of questions and sections, and × to remove one. **Add a question** and **Add a section** are under them.
 
 ### Find a free picture
 
 In a question, click **Find a free picture** next to **Choose a file**. Type what you want to see (English words work best on Openverse; Wikimedia Commons also knows Norwegian names, and is good for flags, maps, places and famous people), click a picture to see it bigger, and click **Use this picture**. Keep **Free for any use** for company events; **Also non-commercial** adds more pictures that are only fine for a quiz with friends. The picture is copied into your quiz, so the game doesn't need the internet; only the search does. Who made it and its licence are kept with the quiz (listed under **Picture credits**), and the TV shows them in small text after the answer (turn that off under **Look and branding** in the lobby).
 
+### Find a song clip
+
+In a question, click **Find a song clip** next to **Choose a file** under the sound clip. Type the artist and the song, press ▶ to listen to a result, and click **Use this clip**. ProQuiz copies the song's **30-second preview from Deezer** into your quiz, so the game doesn't need the internet; only the search does. Trim it with the trim bar if 30 seconds is too long. The previews are meant for private, non-commercial quizzes (that is Deezer's rule), so don't use them at paid or company events. The song's title and artist are kept with the quiz (under **Picture and song credits**), and the TV shows "ABBA · preview from Deezer" in small text after the answer, never the title before it (turn the line off under **Look and branding** in the lobby).
+
 ### Make a quiz with AI
 
-In the editor, click **Make questions with AI**. Under **Kind of quiz** at the top, choose **Board quiz** or **Quick quiz (multiple choice)**. Type a few topics (one per line; each becomes a category, or a section in a quick quiz), add example questions if you like, and choose the difficulty (kids 5–9, easy, medium, hard or expert) and the language.
-- For a board quiz, also choose the board size, the final question and a round 2 (with its own topics if you like).
-- For a quick quiz, choose the number of sections and questions per section.
+In the editor, click **Make questions with AI**. Under **Kind of quiz** at the top, choose **Board quiz** or **Quick quiz (multiple choice)** and its size, since that decides how many topics to write:
+- For a board quiz, the board size, the final question and a round 2 (with its own topics if you like).
+- For a quick quiz, the number of sections and questions per section.
+
+Then type the topics (one per line; each becomes a category, or a section in a quick quiz; the hint under the box says how many), add example questions if you like, and choose the difficulty (kids 5–9, easy, medium, hard or expert) and the language.
 
 Click **Copy the request**, paste it into Claude or ChatGPT, then copy the AI's whole answer back into the box and click **Fill the board** (**Make the quiz** for a quick quiz). Your new quiz opens in the editor. **Check every answer: AI can get facts wrong.** ProQuiz itself never contacts an AI.
 
-**Fill the empty spots with AI** (board quizzes only): started a quiz but ran out of ideas? Open it in the editor and click **Fill empty spots with AI** under the board. ProQuiz shows what is missing (empty questions, questions without an answer, answers without a question, category names, the final), on both boards if the quiz has a round 2. The request includes everything you have already written, so the AI matches its topics, difficulty and language and avoids repeating your answers. You can choose a difficulty yourself, and give topics for categories that are completely empty. Paste the answer back and only the empty spots are filled: nothing you wrote changes, and the new tiles get a dashed edge so you can check them. Picture and sound questions without an answer are left for you, because the AI can't see them.
+For a quick quiz the request asks the AI to say the kind of every question: pick one, tick all that are right, put in order, or pick one where several answers count. If the AI leaves that out anyway, ProQuiz guesses from the wording (a question that asks you to sort or rank becomes "put in order"; "Which of these are…" with several right answers becomes "tick all that are right"). The note above the new quiz says what it read, for example "Read 19 questions: 14 pick one, 3 tick all that are right, 2 put in order", and points out any question that sounds like tick-all or put-in-order but came in as pick one, so you can check its kind in the question dialog.
+
+**Fill the empty spots with AI**: started a quiz but ran out of ideas? Open it in the editor and click **Fill empty spots with AI** under the board (or under the sections of a quick quiz). ProQuiz shows what is missing. For a board quiz: empty questions, questions without an answer, answers without a question, category names and the final, on both boards if the quiz has a round 2. For a quick quiz: empty questions, questions with fewer than four answer options (a true-or-false question with its two is fine), questions with no right answer marked, and section names; a number **Fill each section up to this many questions** also lets the AI add new questions at the end of the shorter sections (it starts at the most any section has, at least 5). The request includes everything you have already written, so the AI matches its topics, difficulty and language and avoids repeating your answers. You can choose a difficulty yourself, and give topics for categories or sections that are completely empty. Paste the answer back and only the empty spots are filled: nothing you wrote changes (not a question, an option, a mark or the kind of question), and the new tiles or rows get a dashed edge so you can check them. Picture and sound questions without text are left for you, because the AI can't see them.
 
 ### Ready-made quizzes to import
 
@@ -185,7 +204,7 @@ These steps are the same for both kinds of quiz.
 | **R** | Show the answer (nobody got it) |
 | **Esc** | Put the question back (picked by mistake) |
 | **U** | Undo the last judgement or score change |
-| **P** / **0** | Play or pause the sound clip / play it from the start |
+| **P** / **0** | Play or pause the sound clip / play it from the start (a trimmed clip stops by itself at the end of its part) |
 | **M** | Sound effects on or off |
 | **B** | Background music on or off |
 | **H** | Without a separate TV screen: switch between the TV view and the host view |
@@ -231,12 +250,12 @@ When a team picks one, the TV spins a reel and lands on the special. Press **Spa
 2. The question shows on the TV. A moment later the answers appear on the TV, and as big coloured buttons on the phones. For a **tick all that are right** question the TV says so, and the phones get a **Submit answers** button: tick, then submit. For a **put in order** question the answers come shuffled; players tap them in order (each gets its number; a tap on a numbered one takes its number and the later ones away, **Clear** starts over) and submit.
 3. A right answer is worth 1000 points at once, and less the longer you wait, down to 500 at the last moment (twice that for a double-points question). For tick-all and put-in-order questions the whole answer must be right, and the time counts from the Submit press. A wrong answer costs nothing. When every player has answered, the question closes by itself.
 4. The TV shows how many picked each answer, the right one (or ones; for put in order, the right order), and who was fastest. Each phone says right or wrong, the player's place, and how many points they are behind the next player.
-5. **Space** shows the top 5, with arrows for who moved up or down. **Space** again goes to the next question, the next section, or at the end the podium.
+5. **Space** shows the top 5, with arrows for who moved up or down. **Space** again goes to the next question or the next section. After the very last question there is no top 5: **Space** goes straight to the podium.
 6. **Reactions:** while the result and the top 5 show, every phone has six emoji (😂 🔥 😱 👏 😭 🎉). A tap sends it to the TV, where it floats up with the player's name. One a second per player, and at most twelve on the screen at once, so a big crowd can't flood it. Untick **Players can send reactions** in the lobby to turn it off.
 
 | Key | What it does |
 |---|---|
-| **Space** | Go on: start the section, show the answers now, stop the clock early, show the top 5, next question |
+| **Space** | Go on: start the section, show the answers now, stop the clock early, show the top 5, next question (after the last question: the podium) |
 | **Esc** | Skip this question (nobody scores) |
 | **U** | Undo the last step |
 | **P** / **0**, **M**, **B**, **H**, **F** | The same as in the board quiz |
@@ -304,8 +323,9 @@ Your quizzes, their pictures and clips, your logo and colours, and the autosave 
 npm install
 npm start        # starts the server and opens the host page (PROQUIZ_NO_OPEN=1 to skip)
 npm test         # unit and server tests
-npm run e2e      # browser tests with a host, a TV and three phones (four in the Quick quiz test), branding, and the picture search
+npm run e2e      # all the browser tests (about 5 minutes): a host, a TV and phones in headless Chromium
+npm run e2e:quick  # one browser suite; also e2e:board, e2e:crazy, e2e:single, e2e:remote, e2e:brand, e2e:pictures, e2e:songs
 npm run build    # the zips in dist/ (needs Deno and zip)
 ```
 
-See [CLAUDE.md](CLAUDE.md) for how it's built and [PLAN.md](PLAN.md) for the plan and decisions.
+See [CLAUDE.md](CLAUDE.md) for how it's built (with the detailed notes per area in [docs/dev/](docs/dev/)), [PLAN.md](PLAN.md) for the decisions, status and open items, and [docs/dev/history.md](docs/dev/history.md) for what was built when.

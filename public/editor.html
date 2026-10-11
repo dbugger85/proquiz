@@ -20,14 +20,13 @@
       <aside class="ed-side">
         <h2><button id="ed-side-toggle" class="ed-side-toggle" type="button" data-t="edYourQuizzes"></button></h2>
         <div class="ed-side-actions">
+          <!-- Opens "What kind of quiz?" (chooseKind() in editor.js): a board quiz or a Quick quiz -->
           <button id="new-quiz" class="btn btn-primary" type="button" data-t="edNew"></button>
-          <button id="new-quick" class="btn btn-primary" type="button" data-t="edNewQuick" data-t-title="edQuickHint"></button>
           <label class="btn">
             <span data-t="edImport"></span>
             <input id="import-file" type="file" accept=".json,application/json" hidden>
           </label>
           <button id="ai-quiz" class="btn" type="button" data-t="aiButton"></button>
-          <a id="export-all" class="btn" href="/api/export" download data-t="edExportAll"></a>
         </div>
         <ul id="quiz-list" class="ed-list"></ul>
         <!-- Quizzes put away on this computer (Archive in the list): folded, with Bring back -->
@@ -35,6 +34,8 @@
           <summary></summary>
           <ul class="ed-list"></ul>
         </details>
+        <!-- Last in the column: every quiz the host made in one file -->
+        <a id="export-all" class="btn ed-export-all" href="/api/export" download data-t="edExportAll"></a>
       </aside>
 
       <main id="ed-main" class="ed-main">
@@ -50,6 +51,16 @@
   <!-- "Find a free picture" (openPictureDialog() in editor.js): opens on top of the question dialog. -->
   <dialog id="pic-dialog" class="ed-dialog pic-dialog">
     <form method="dialog" id="pic-form"></form>
+  </dialog>
+
+  <!-- "Find a song clip" (openSongDialog() in editor.js): Deezer previews, on top of the question dialog. -->
+  <dialog id="song-dialog" class="ed-dialog song-dialog">
+    <form method="dialog" id="song-form"></form>
+  </dialog>
+
+  <!-- Translations into one of the quiz's extra languages (openTranslationsDialog() in editor.js, lib/languages.js) -->
+  <dialog id="tr-dialog" class="ed-dialog tr-dialog">
+    <form method="dialog" id="tr-form"></form>
   </dialog>
 
   <dialog id="ai-dialog" class="ed-dialog">

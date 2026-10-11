@@ -89,7 +89,7 @@
         <div class="settings-group quiz-group">
           <label class="field">
             <span data-t="questionSet">Questions</span>
-            <span class="row picker-row"><select id="set-picker"></select> <a id="edit-set" class="btn btn-small" href="/editor" data-t="editShort"></a></span>
+            <span class="row picker-row"><select id="set-picker"></select> <span class="picker-actions"><a id="new-set" class="btn btn-small" href="/editor?new" data-t="newQuizShort"></a> <a id="edit-set" class="btn btn-small" href="/editor" data-t="editShort"></a></span></span>
           </label>
           <!-- The chosen quiz's cover picture and description (from the quiz file), when it has them -->
           <div id="quiz-about" class="quiz-about" hidden></div>
@@ -106,6 +106,8 @@
             <label class="seconds" id="final-seconds"><input type="number" name="finalSeconds" min="0" max="300" step="1" data-t-aria-label="finalSeconds"> <span data-t="secondsShort"></span></label>
           </div>
           <label class="check quiz-specials" id="quiz-specials" hidden><input type="checkbox" name="quizSpecials"> <span><span id="quiz-specials-label"></span><br><small data-t="quizSpecialsHint"></small></span></label>
+          <!-- A quiz with extra languages (lib/languages.js): may the phones choose one? Only shown when the quiz has some. -->
+          <label class="check with-hint quiz-languages" id="languages-setting" hidden><input type="checkbox" name="quizLanguages"> <span><span id="languages-label"></span><br><small data-t="quizLanguagesHint"></small></span></label>
         </div>
 
         <!-- Quick quiz (multiple choice): only shown when the chosen quiz is one. -->

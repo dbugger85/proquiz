@@ -79,6 +79,10 @@ async function barStaysOnTop(page, scrolled) {
 
 // Choose one of the lobby's pill buttons (language, wrong answer, Crazy mode).
 const pickPill = (page, name, value) => page.click(`label:has(> input[name=${name}][value=${value}])`);
+// The editor's "About the quiz" fold (description, cover, languages) is closed to begin with: open it when needed.
+const openAbout = async (page) => {
+  if (!(await page.$('.ed-about-fold[open]'))) await page.click('.ed-about-fold > summary');
+};
 
 // The same screen with the glass look on (the default) and off, mid-game: glass-on-<name>.png and glass-off-<name>.png.
 async function glassPair(page, name) {
@@ -117,6 +121,14 @@ try {
   await tv.waitForSelector('#lobby:not([hidden])');
   await shot(host, 'host-1-empty');
   await shot(tv, 'tv-0-sound-hint');
+  // The sample quiz has Norwegian translations. For this test it gets Thai too, on the Capitals 200 question and the
+  // final, so a phone can pick a language the bundled fonts don't have letters for.
+  const withThai = structuredClone(srv.hub.getState().set);
+  withThai.languages = ['no', 'th'];
+  withThai.categories[0].questions[1].translations.th = { question: 'เมืองหลวงของอิตาลีคือเมืองใด', answer: 'โรม' };
+  withThai.final.translations.th = { question: 'ฟยอร์ดที่ยาวที่สุดในนอร์เวย์ชื่ออะไร', answer: 'ซองเนฟยอร์ด' };
+  srv.hub.dispatch({ type: 'loadSet', set: withThai, setId: 'sample' });
+  await host.waitForFunction(() => /ไทย/.test(document.querySelector('#quiz-about')?.textContent ?? ''));
   await tv.mouse.click(5, 5); // a click lets the TV play sound; every sound below must play without errors
   await tv.waitForSelector('#sound-unlock[hidden]', { state: 'attached' });
   await tv.waitForSelector('body[data-music=lobby]', { state: 'attached', timeout: 6000 });
@@ -151,6 +163,16 @@ try {
       await p.click('#avatar-random');
       await shot(p, 'phone-1-join');
     }
+    // "Read the questions in:" English (the main language, chosen for an English browser), Norsk or ไทย, each with a flag.
+    await p.waitForSelector('#lang-field:not([hidden])');
+    assert.deepEqual(await p.$$eval('#lang-pills input', (els) => els.map((el) => el.value)), ['en', 'no', 'th']);
+    assert.equal(await p.locator('#lang-pills img.flag').count(), 3);
+    assert.equal(await p.inputValue('#lang-pills input:checked'), 'en');
+    if (name === 'Blue Steel') {
+      await p.click('#lang-pills label:has(> input[value=th])'); // Blue Steel reads the quiz in Thai
+      await p.evaluate(() => document.querySelector('#lang-field').scrollIntoView({ block: 'center' }));
+      await shot(p, 'phone-lang-join');
+    }
     await p.fill('#name', name);
     await p.click(`#swatches label:nth-child(${n + 1})`);
     await p.click('#join-btn');
@@ -176,6 +198,29 @@ try {
   await shot(host, 'host-2-teams');
   await tv.waitForTimeout(500); // let the pop-in finish
   await shot(tv, 'tv-1-lobby');
+
+  // ----- Extra languages in the lobby: Blue Steel's flag, the "Also in" line, and the host's switch -----
+  assert.equal(await host.locator('#teams li .flag-badge img').count(), 1, 'only the team reading in another language gets a flag');
+  assert.equal(await host.getAttribute('#teams li:nth-child(2) .flag-badge', 'title'), 'Reads the questions in ไทย');
+  assert.equal(await phones[1].evaluate(() => localStorage.getItem('proquiz.team.lang')), 'th', 'the choice is remembered on the phone');
+  assert.match(await phones[1].textContent('#lang-pill'), /TH/);
+  assert.equal(await phones[0].locator('#lang-pill').isVisible(), true, 'the main-language phone can change its mind later');
+  assert.equal(await host.locator('#languages-setting').isVisible(), true);
+  assert.equal(await host.isChecked('#languages-setting input'), true);
+  assert.match(await host.textContent('#languages-label'), /another language:.*Norsk.*ไทย/);
+  assert.match(await host.textContent('#quiz-about .quiz-langs'), /^Also in: Norskไทย$/);
+  assert.equal(await host.locator('#quiz-about .quiz-langs img.flag').count(), 2);
+  await host.evaluate(() => document.querySelector('#languages-setting').scrollIntoView({ block: 'center' }));
+  await shot(host, 'host-lang-lobby');
+  // The switch off: no choice on the join form, no flags, everyone plays in the main language. Then on again.
+  await host.click('#languages-setting input');
+  await fourth.waitForSelector('#lang-field[hidden]', { state: 'attached' });
+  await host.waitForFunction(() => document.querySelectorAll('#teams li .flag-badge').length === 0);
+  assert.equal(await phones[1].locator('#lang-pill').isHidden(), true);
+  await shot(fourth, 'phone-lang-join-off');
+  await host.click('#languages-setting input');
+  await fourth.waitForSelector('#lang-field:not([hidden])');
+  await host.waitForFunction(() => document.querySelectorAll('#teams li .flag-badge').length === 1);
 
   // Reloading a phone keeps the team (no join form again).
   await phones[1].reload();
@@ -301,6 +346,8 @@ try {
       questions: cat.questions.map((q, i) => ({ value: q.value * 2, question: `Round 2 question ${i + 1}?`, answer: `Round 2 answer ${i + 1}` })),
     })),
   };
+  // Capitals II for 1 000 gets a picture that appears slowly as a blur.
+  Object.assign(withUnveil.round2.categories[0].questions[4], { image: 'sample-mercury.svg', unveil: 12, unveilStyle: 'blur' });
   srv.hub.dispatch({ type: 'loadSet', set: withUnveil, setId: 'sample' });
   await host.waitForSelector('#round2-setting:not([hidden])');
   assert.match(await host.textContent('#round2-setting'), /Play round 2 \(25 questions/);
@@ -331,6 +378,28 @@ try {
   await tv.waitForTimeout(450);
   await shot(tv, 'tv-4-question');
   await shot(yellow, 'phone-4-too-early');
+
+  // ----- Extra languages during a question -----
+  // Blue Steel reads Thai: its phone shows the Thai question while the TV shows the English one. Red (the main
+  // language) stays a pure buzzer. Lemon Heads switches to Norwegian with the flag pill in the header, mid-question.
+  assert.equal(await blue.textContent('.phone-text .phone-question'), 'เมืองหลวงของอิตาลีคือเมืองใด');
+  assert.equal(await blue.locator('.phone-answer').count(), 0, 'no answer before it is revealed');
+  await shot(blue, 'phone-lang-thai');
+  assert.equal(await red.locator('.phone-text').count(), 0);
+  await yellow.click('#lang-pill');
+  await yellow.waitForSelector('#lang-menu:not([hidden])');
+  await yellow.click('#lang-menu label:has(> input[value=no])');
+  await yellow.waitForFunction(() => document.querySelector('.phone-text .phone-question')?.textContent === 'Hva er hovedstaden i Italia?');
+  await yellow.waitForFunction(() => document.querySelector('#lang-pill .lang-code')?.textContent === 'NO');
+  assert.match(await yellow.textContent('#stage'), /For tidlig!|Gjør deg klar/, 'the phone’s own words follow a Norwegian choice');
+  await shot(yellow, 'phone-lang-question-no');
+  assert.doesNotMatch(await tv.textContent('body'), /Hovedstaden i Italia|เมืองหลวง/, 'the TV stays in the main language');
+  // The host sees both translations in small grey lines under the question and under the answer.
+  await host.waitForFunction(() => document.querySelectorAll('.host-q .host-tr').length === 4);
+  assert.match(await host.textContent('.host-trs.under-answer'), /Roma/);
+  assert.match(await host.textContent('.host-trs.under-answer'), /โรม/);
+  assert.equal(await host.locator('.score-row .flag-badge').count(), 2);
+  await shot(host, 'host-lang-question');
   await glassPair(tv, 'tv-question');
   await glassPair(red, 'phone-buzzer');
 
@@ -369,6 +438,18 @@ try {
   await tv.waitForTimeout(500);
   await shot(tv, 'tv-7-revealed');
   await shot(red, 'phone-8-correct');
+  // Revealed: the translated answer on the phones that read in another language; nothing of it on Red's.
+  await yellow.waitForSelector('.phone-text .phone-answer');
+  assert.match(await yellow.textContent('.phone-text .phone-answer'), /Svar:.*Roma/);
+  assert.match(await blue.textContent('.phone-text .phone-answer'), /โรม/);
+  assert.equal(await red.locator('.phone-text').count(), 0);
+  await shot(yellow, 'phone-lang-answer');
+  // Lemon Heads goes back to English (the main language): no more texts on that phone.
+  await yellow.click('#lang-pill');
+  await yellow.click('#lang-menu label:has(> input[value=en])');
+  await yellow.waitForSelector('.phone-text', { state: 'detached' });
+  await yellow.waitForFunction(() => document.querySelector('#lang-pill .lang-code')?.textContent === 'EN');
+  await host.waitForFunction(() => document.querySelectorAll('.host-q .host-tr').length === 2);
 
   // U = undo, then judge again.
   await host.keyboard.press('u');
@@ -579,8 +660,23 @@ try {
   assert.match(await host.textContent('.host-q'), /Round 2 question 5\?[\s\S]*Round 2 answer 5/);
   assert.match(await tv.textContent('.tv-q'), /Round 2 question 5\?/);
   await shot(tv, 'tv-19-round2-question');
+  // Its picture appears slowly as a blur: heavily blurred while the host reads, sharper once the buzzers are on, and the
+  // clear picture only with the answer.
+  const blurOf = () => tv.$eval('.tv-q canvas.unveil.blur', (c) => ({ pct: Number(c.dataset.pct), blur: Number(c.dataset.blur) }));
+  await tv.waitForSelector('.tv-q canvas.unveil.blur[data-step]');
+  assert.equal(await tv.locator('.tv-q img.q-img').count(), 0);
+  const hidden = await blurOf();
+  assert.ok(hidden.pct === 0 && hidden.blur >= 80, JSON.stringify(hidden));
+  await host.keyboard.press('Space');
+  await host.waitForSelector('body[data-phase=armed]');
+  await tv.waitForFunction(() => Number(document.querySelector('.tv-q canvas.unveil.blur')?.dataset.pct) >= 20);
+  const blurred = await blurOf();
+  assert.ok(blurred.blur > 0 && blurred.blur < hidden.blur && blurred.pct < 100, JSON.stringify(blurred));
+  assert.equal(await tv.locator('.tv-q img.q-img').count(), 0);
+  await shot(tv, 'tv-unveil-blur');
   await host.keyboard.press('r');
   await host.waitForSelector('body[data-phase=revealed]');
+  await tv.waitForSelector('.tv-q img.q-img');
   await host.keyboard.press('Space');
   await host.waitForSelector('body[data-phase=board]');
   await shot(tv, 'tv-20-round2-board');
@@ -623,6 +719,10 @@ try {
   await blue.waitForTimeout(200);
   assert.equal(await blue.inputValue('#final-answer'), 'Not sure');
   await shot(red, 'phone-11-final-answer');
+  // The final question in Thai on Blue Steel's phone (the TV shows the English one).
+  assert.equal(await blue.textContent('#stage .phone-question'), 'ฟยอร์ดที่ยาวที่สุดในนอร์เวย์ชื่ออะไร');
+  assert.equal(await red.locator('#stage .phone-question').count(), 0);
+  await shot(blue, 'phone-lang-final-thai');
   await tv.waitForTimeout(450);
   await shot(tv, 'tv-13-final-question');
   await shot(host, 'host-9-final-question');
@@ -663,7 +763,8 @@ try {
   await ed.waitForSelector('.ed-note'); // only the built-in sample so far: it's read-only
   await shot(ed, 'editor-1-sample');
 
-  await ed.click('#new-quiz');
+  await ed.click('#new-quiz'); // "What kind of quiz?"
+  await ed.click('.ed-kind-modal[open] .ed-kind-board');
   await ed.waitForSelector('.ed-name input:not([disabled])');
   await ed.fill('.ed-name input', 'Musikkquiz');
   await ed.fill('.ed-col:nth-child(1) .ed-cat input', 'Songs');
@@ -671,26 +772,65 @@ try {
   await ed.click('.ed-col:nth-child(1) .ed-tile:nth-of-type(1)');
   await ed.waitForSelector('#q-dialog[open]');
   await ed.fill('#q-form textarea', 'Name this tune');
-  await ed.fill('#q-form .field:nth-of-type(3) input', 'Twinkle, Twinkle');
+  await ed.fill('#q-form input[name=answer]', 'Twinkle, Twinkle');
   const root = new URL('..', import.meta.url).pathname;
   const pickers = ed.locator('#q-form input[type=file]');
   await pickers.nth(0).setInputFiles(join(root, 'sets/files/sample-flag-japan.svg'));
   await ed.waitForSelector('#q-form .ed-media img');
   await ed.check('#q-form input[name=unveil]');
   await ed.fill('#q-form input[name=unveilSeconds]', '20');
+  // How it appears: Pixels (the default) or Blur.
+  assert.equal(await ed.isChecked('#q-form input[name=unveilStyle][value=pixels]'), true);
+  await ed.click('#q-form label:has(> input[name=unveilStyle][value=blur])');
+  await ed.evaluate(() => document.querySelector('#q-form .ed-unveil').scrollIntoView({ block: 'center' }));
+  await ed.mouse.move(0, 0); // off the pills, so the screenshot shows neither of them lit by the mouse
+  await shot(ed, 'editor-unveil-style');
   await pickers.nth(2).setInputFiles(join(root, 'sets/files/sample-twinkle.mp3'));
   await ed.waitForSelector('#q-form .ed-media audio');
-  await ed.fill('#q-form input[type=number][step="0.5"]', '1.5');
+  // The trim bar: the left handle three half-seconds in (the clip then starts at 1.5 s and plays to its end).
+  await ed.waitForSelector('#q-form .ed-trim:not(.loading)');
+  await ed.focus('#q-form .ed-trim-handle.start');
+  for (let n = 0; n < 3; n++) await ed.keyboard.press('ArrowRight');
+  assert.match(await ed.textContent('#q-form .ed-trim-times'), /^0:01\.5 – /);
   // A wrong kind of file is refused with a clear message.
   await pickers.nth(1).setInputFiles({ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('hello') });
   await ed.waitForSelector('#q-form .ed-media-status.bad');
   // A special placed by hand.
   await ed.selectOption('#q-form select[name=special]', 'double');
   await shot(ed, 'editor-2-question');
-  await ed.click('#q-form button[value=done]');
+  // The dialog uses the screen: the words left, the media right, the title bar with its × and Done always in view
+  // (editor-space-question-*.png at a laptop's and a TV's size); × closes and saves like Done.
+  for (const [w, hgt] of [[1280, 800], [1920, 1080]]) {
+    await ed.setViewportSize({ width: w, height: hgt });
+    await ed.evaluate(() => (document.querySelector('#q-form').scrollTop = 0));
+    const bars = await ed.evaluate(() => {
+      const r = (sel) => document.querySelector(sel).getBoundingClientRect();
+      const dlg = r('#q-dialog');
+      return { dialog: dlg.width, head: r('#q-form .ed-dialog-head').top - dlg.top, close: r('#q-form .ed-dialog-close'), done: r('#q-form button[value=done]').bottom <= innerHeight, cols: r('.ed-q-media').left > r('.ed-q-main').right };
+    });
+    assert.ok(bars.dialog >= 1000 && bars.dialog <= 1100, `${w}: the dialog is wide (${bars.dialog})`);
+    assert.ok(bars.head < 4, `${w}: the title bar sits at the top`);
+    assert.ok(bars.close.width >= 48 && bars.close.height >= 48, `${w}: the × is a 48px target`);
+    assert.ok(bars.done, `${w}: Done is in view`);
+    assert.ok(bars.cols, `${w}: words left, media right`);
+    await shot(ed, `editor-space-question-${w}`);
+  }
+  await ed.setViewportSize({ width: 1366, height: 768 });
+  await ed.click('#q-form .ed-dialog-close');
   await ed.waitForSelector('#q-dialog:not([open])', { state: 'attached' });
   await ed.waitForFunction(() => document.querySelector('#ed-status').textContent === 'Saved');
+  assert.equal(await ed.getAttribute('#q-form .ed-dialog-close', 'aria-label'), 'Close');
   await shot(ed, 'editor-3-board');
+  // The board starts right under the name: the description, cover and languages are folded as "About the quiz".
+  assert.equal(await ed.$('.ed-about-fold[open]'), null, 'About the quiz starts folded');
+  assert.match(await ed.textContent('.ed-about-fold > summary'), /About the quiz.*No description · No cover picture · English/);
+  for (const [w, hgt] of [[1280, 800], [1920, 1080]]) {
+    await ed.setViewportSize({ width: w, height: hgt });
+    const tiles = await ed.evaluate(() => document.querySelector('.ed-tile[data-c="0"][data-i="0"]').getBoundingClientRect().top);
+    assert.ok(tiles < 400, `${w}: the first tile is near the top (${tiles})`);
+    await shot(ed, `editor-space-board-${w}`);
+  }
+  await ed.setViewportSize({ width: 1366, height: 768 });
   assert.match(await ed.textContent('.ed-problems'), /Fix these/);
   assert.equal(await ed.textContent('.ed-tile[data-c="0"][data-i="0"] .ed-special'), '🎲');
 
@@ -700,10 +840,69 @@ try {
   const saved = (await (await fetch(`${base}/api/sets/${mine.id}`)).json()).set;
   assert.equal(saved.categories[0].name, 'Songs');
   assert.equal(saved.categories[0].questions[0].question, 'Name this tune');
+
+  // ----- Extra languages in the editor: add Norwegian, the translations table, a pasted AI reply -----
+  await ed.waitForSelector('.ed-about-fold');
+  await openAbout(ed);
+  await ed.waitForSelector('.ed-languages');
+  assert.equal(await ed.inputValue('.ed-languages select[name=mainLang]'), 'en'); // guessed from the quiz's text
+  assert.equal(await ed.locator('.lang-chip').count(), 0);
+  await ed.click('.ed-add-language');
+  await ed.waitForSelector('.ed-lang-modal[open]');
+  assert.ok((await ed.locator('.ed-lang-modal[open] .ed-lang-pick').count()) >= 24);
+  assert.equal(await ed.locator('.ed-lang-modal[open] .ed-lang-pick[value=en]').count(), 0, 'not the main language');
+  await shot(ed, 'editor-languages-picker');
+  await ed.click('.ed-lang-modal[open] .ed-lang-pick[value=no]');
+  await ed.waitForSelector('#tr-dialog[open]'); // the translations open straight away
+  assert.match(await ed.textContent('#tr-form .tr-count'), /4 of 4 texts still missing/); // the title, the category, the question and its answer
+  assert.equal(await ed.locator('#tr-form .tr-row').count(), 4);
+  assert.equal(await ed.textContent('#tr-form .tr-row[data-id="q0-0"] .tr-main span'), 'Name this tune');
+  await ed.fill('#tr-form textarea[data-id="c0"]', 'Sanger');
+  await ed.waitForFunction(() => /3 of 4/.test(document.querySelector('#tr-form .tr-count').textContent));
+  await ed.check('#tr-form input[name=onlyMissing]');
+  assert.equal(await ed.locator('#tr-form .tr-row').count(), 3);
+  await shot(ed, 'editor-languages-table');
+  // Translate with AI: the request asks for the 3 missing texts by id; the pasted reply fills only those.
+  await ed.click('.ai-translate-open');
+  await ed.waitForSelector('#ai-dialog[open]');
+  const trRequest = await ed.inputValue('#ai-request');
+  assert.deepEqual(JSON.parse(trRequest.match(/```json\n([\s\S]*?)\n```/)[1]).translations.map((x) => x.id), ['t', 'q0-0', 'a0-0']);
+  assert.match(trRequest, /translated into Norsk/);
+  await shot(ed, 'editor-languages-ai');
+  const trReply = { translations: [{ id: 't', text: 'Musikkquiz' }, { id: 'q0-0', text: 'Hvilken sang er dette?' }, { id: 'a0-0', text: 'Blinke, blinke' }, { id: 'c0', text: 'SKAL IKKE BRUKES' }] };
+  await ed.fill('#ai-reply', '```json\n' + JSON.stringify(trReply) + '\n```');
+  await ed.click('.ai-translate-go');
+  await ed.waitForSelector('#ai-dialog:not([open])', { state: 'hidden' });
+  await ed.waitForFunction(() => /All 4 texts translated/.test(document.querySelector('#tr-form .tr-count').textContent));
+  assert.equal(await ed.locator('#tr-form .tr-row').count(), 0, 'nothing missing any more');
+  await ed.uncheck('#tr-form input[name=onlyMissing]');
+  assert.equal(await ed.inputValue('#tr-form textarea[data-id="c0"]'), 'Sanger', 'a translation already there is never overwritten');
+  assert.equal(await ed.inputValue('#tr-form textarea[data-id="q0-0"]'), 'Hvilken sang er dette?');
+  await ed.click('#tr-form button[value=done]');
+  await ed.waitForSelector('#tr-dialog:not([open])', { state: 'hidden' });
+  await ed.waitForFunction(() => document.querySelector('#ed-status').textContent === 'Saved');
+  assert.match(await ed.textContent('.lang-chip[data-lang=no]'), /Norsk.*complete/);
+  assert.equal(await ed.locator('.ed-languages select[name=mainLang] option[value=no]').count(), 0, 'an added language can’t be the main one');
+  await ed.evaluate(() => document.querySelector('.ed-languages').scrollIntoView({ block: 'center' }));
+  await shot(ed, 'editor-languages');
+  const withNo = (await (await fetch(`${base}/api/sets/${mine.id}`)).json()).set;
+  assert.equal(withNo.lang, 'en');
+  assert.deepEqual(withNo.languages, ['no']);
+  assert.deepEqual(withNo.translations, { no: { title: 'Musikkquiz' } });
+  assert.deepEqual(withNo.categories[0].translations, { no: { name: 'Sanger' } });
+  assert.deepEqual(withNo.categories[0].questions[0].translations, { no: { question: 'Hvilken sang er dette?', answer: 'Blinke, blinke' } });
+  // Removing the language asks first (red button); Cancel keeps it.
+  await ed.click('.lang-chip[data-lang=no] .lang-remove');
+  await ed.waitForSelector(`${MODAL}.danger`);
+  assert.match(await ed.textContent(MODAL), /Remove Norsk from this quiz\? Its 4 translations are deleted too/);
+  await answerModal(ed, false);
+  assert.equal(await ed.locator('.lang-chip').count(), 1);
   assert.match(saved.categories[0].questions[0].audio, /^[0-9a-f]{16}\.mp3$/);
   assert.match(saved.categories[0].questions[0].image, /^[0-9a-f]{16}\.svg$/);
   assert.equal(saved.categories[0].questions[0].audioStart, 1.5);
+  assert.equal(saved.categories[0].questions[0].audioLength, undefined, 'the right handle at the end: to the end');
   assert.equal(saved.categories[0].questions[0].unveil, 20);
+  assert.equal(saved.categories[0].questions[0].unveilStyle, 'blur');
   assert.equal(saved.categories[0].questions[0].special, 'double');
 
   // Round 2: tick it, and a second board appears with double points. Its tiles open like the others.
@@ -782,6 +981,7 @@ try {
   assert.equal(aiSaved.problems, 0);
 
   // A description and a cover picture for the quiz (part of the quiz file, so exports carry them), at the top.
+  await openAbout(ed);
   await ed.fill('.ed-about textarea', 'En quiz for de minste.\nHovedsteder, dyr og mat.');
   await ed.locator('.ed-cover input[type=file]').setInputFiles(join(root, 'sets/files/sample-mercury.svg'));
   await ed.waitForSelector('.ed-cover img');
@@ -800,6 +1000,52 @@ try {
   await ed.locator('.ed-cover input[type=file]').setInputFiles(join(root, 'sets/files/sample-mercury.svg'));
   await ed.waitForSelector('.ed-cover img');
   await ed.waitForFunction(() => document.querySelector('#ed-status').textContent === 'Saved');
+
+  // The list with covers and long titles never grows wider than its column (no sideways scroll bar, and the
+  // Archive buttons and the column's own buttons stay fully in view), at a laptop's and a phone's width, glass on
+  // and off. Two throwaway quizzes with covers for this, deleted again below.
+  const longOnes = [];
+  for (const [title, description] of [
+    ['Den store julequizen for hele familien 2026', 'Jul, nisser, pinnekjøtt og ribbe. Et spørsmål for hver dag fram til jul.'],
+    ['Supercalifragilisticexpialidocious: a very long quiz title that keeps on going', 'Films, songs and long words from the whole century.'],
+  ]) {
+    const made = await (await fetch(`${base}/api/sets`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ set: { ...about, title, description } }) })).json();
+    longOnes.push(made.id);
+  }
+  await ed.goto(`${base}/editor#${aiSaved.id}`);
+  await ed.reload(); // (only the hash changed, so goto alone wouldn't load the page again)
+  await ed.waitForSelector('.ed-item.with-cover:has-text("Supercali")');
+  const sideFits = () =>
+    ed.evaluate(() => {
+      const side = document.querySelector('.ed-side');
+      const box = side.getBoundingClientRect();
+      const out = [...side.querySelectorAll('.ed-item, .ed-archive, .ed-side-actions .btn, .ed-export-all')].filter((el) => {
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && (r.right > box.right + 0.5 || r.left < box.left - 0.5);
+      });
+      return { sideways: side.scrollWidth > side.clientWidth, out: out.map((el) => `${el.className}: ${el.textContent.trim().slice(0, 20)}`) };
+    });
+  for (const [width, height] of [
+    [1280, 860],
+    [390, 760],
+  ]) {
+    await ed.setViewportSize({ width, height });
+    for (const glass of [true, false]) {
+      await ed.evaluate((on) => document.body.classList.toggle('glass', on), glass);
+      await ed.waitForTimeout(100);
+      const fit = await sideFits();
+      assert.deepEqual(fit, { sideways: false, out: [] }, `the quiz list fits at ${width}px, glass ${glass ? 'on' : 'off'}`);
+      // (The list scrolled to its end, so both quizzes with a cover are in the picture.)
+      if (glass) await ed.evaluate(() => document.querySelector('#quiz-list .ed-row:last-child').scrollIntoView({ block: 'end' }));
+      if (glass) await shot(ed, width === 1280 ? 'editor-list-covers' : 'editor-list-covers-phone');
+    }
+  }
+  await ed.evaluate(() => document.body.classList.add('glass'));
+  await ed.setViewportSize({ width: 1366, height: 768 });
+  for (const id of longOnes) assert.equal((await fetch(`${base}/api/sets/${id}`, { method: 'DELETE' })).ok, true);
+  await ed.reload();
+  await ed.waitForSelector('.ed-item:has-text("Supercali")', { state: 'detached' });
+  await ed.waitForFunction(() => document.querySelector('.ed-name input')?.value === 'Barnas quiz');
 
   // Fill only the empty spots of a quiz that is started: the AI sees what is there and nothing else changes.
   await ed.click('.ed-item:has-text("Musikkquiz")');
@@ -865,7 +1111,9 @@ try {
   const picks = () => host.evaluate(() => [...document.querySelectorAll('#set-picker option')].map((o) => o.value));
   const refreshPicker = async () => {
     await host.evaluate(() => document.activeElement?.blur()); // the picker isn't redrawn while it has focus
+    const refreshed = host.waitForResponse((r) => r.url().endsWith('/api/sets')); // the focus makes the page fetch the list again
     await host.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await (await refreshed).finished();
   };
   await ed.click('.ed-row:has(.ed-item:has-text("Barnas quiz")) .ed-archive');
   await ed.waitForSelector('#quiz-archived:not([hidden])');
@@ -873,11 +1121,11 @@ try {
   assert.equal(await ed.locator('#quiz-list .ed-item:has-text("Barnas quiz")').count(), 0);
   await ed.click('#quiz-archived summary');
   await ed.waitForSelector('#quiz-archived .ed-item:has-text("Barnas quiz")');
-  assert.equal(await ed.textContent('#quiz-archived .ed-archive'), 'Bring back');
+  assert.equal(await ed.getAttribute('#quiz-archived .ed-archive', 'aria-label'), 'Bring back');
   await ed.locator('#quiz-archived .ed-item').scrollIntoViewIfNeeded();
   await shot(ed, 'editor-10-archived');
   await refreshPicker();
-  await host.waitForTimeout(300);
+  await host.waitForFunction((id) => [...document.querySelectorAll('#set-picker option')].some((o) => o.value === id), aiSaved.id);
   assert.ok((await picks()).includes(aiSaved.id), 'the chosen quiz stays in the picker while archived');
   await host.selectOption('#set-picker', 'sample');
   await host.waitForFunction(() => document.querySelector('#set-title').textContent === 'Sample quiz');
@@ -942,6 +1190,39 @@ try {
   await host.waitForSelector('body[data-phase=lobby]');
   await pickPill(host, 'lang', 'en');
   await tv.waitForFunction(() => document.body.textContent.includes('Scan to join'));
+
+  // ----- The lobby's New quiz button: the editor opens straight on "What kind of quiz?" -----
+  // (A second host page, so this one stays on the lobby for the Quit check below.)
+  const lobby = await open('/host', { width: 1366, height: 768 }, 'host 2');
+  await lobby.waitForSelector('#lobby:not([hidden])');
+  await lobby.waitForSelector('#new-set');
+  assert.equal(await lobby.textContent('#new-set'), 'New quiz');
+  await shot(lobby, 'host-lobby-new-quiz');
+  const quizzesBefore = (await fetch(`${base}/api/sets`).then((r) => r.json())).length;
+  await lobby.click('#new-set');
+  await lobby.waitForSelector('.ed-kind-modal[open] .ed-kind-quick');
+  assert.match(lobby.url(), /\/editor#/, 'the ?new is tidied away from the address');
+  assert.match(await lobby.textContent('.ed-kind-modal'), /What kind of quiz\?/);
+  await lobby.waitForTimeout(300); // the dialog fades in
+  await shot(lobby, 'editor-new-chooser');
+  // Esc = nothing made.
+  await lobby.keyboard.press('Escape');
+  await lobby.waitForSelector('.ed-kind-modal', { state: 'detached' });
+  assert.equal((await fetch(`${base}/api/sets`).then((r) => r.json())).length, quizzesBefore);
+  // The same pop-up at a phone's width, then Quick quiz makes a Quick quiz.
+  await lobby.setViewportSize({ width: 390, height: 760 });
+  await lobby.click('#new-quiz');
+  await lobby.waitForSelector('.ed-kind-modal[open]');
+  await lobby.waitForTimeout(300);
+  await shot(lobby, 'editor-new-chooser-phone');
+  const cardBox = await lobby.locator('.ed-kind-quick').boundingBox();
+  assert.ok(cardBox.height >= 48 && cardBox.width >= 48, 'the cards are big enough to tap');
+  await lobby.click('.ed-kind-quick');
+  await lobby.waitForSelector('.ed-sec input[name=sectionName]:not([disabled])');
+  assert.equal(await lobby.locator('.ed-sec').count(), 2);
+  assert.equal((await fetch(`${base}/api/sets`).then((r) => r.json())).length, quizzesBefore + 1);
+  await lobby.context().close();
+
   await scrollArea(host, 'end');
   await host.click('#quit-btn');
   await host.waitForSelector(MODAL);

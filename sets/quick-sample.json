@@ -3,39 +3,368 @@
   "kind": "quick",
   "title": "Sample quick quiz",
   "description": "A short multiple-choice quiz to try the Quick quiz with: three sections, with a picture, a sound clip and a double-points question.",
+  "lang": "en",
+  "languages": [
+    "no"
+  ],
+  "translations": {
+    "no": {
+      "title": "Lynquiz på prøve",
+      "description": "En kort flervalgsquiz for å prøve lynquizen: tre deler, med et bilde, et lydklipp og et spørsmål som gir dobbelt."
+    }
+  },
   "sections": [
     {
       "name": "Warm-up",
       "seconds": 20,
       "questions": [
-        { "question": "Which planet is closest to the Sun?", "options": ["Mercury", "Venus", "Earth", "Mars"], "correct": 0 },
-        { "question": "Which of these are mammals?", "type": "multi", "options": ["Dolphin", "Shark", "Bat", "Penguin"], "correct": [0, 2] },
-        { "question": "True or false: bats are blind.", "options": ["True", "False"], "correct": 1, "seconds": 10 },
-        { "question": "Which is the largest ocean on Earth?", "options": ["Atlantic", "Indian", "Pacific", "Arctic"], "correct": 2 },
-        { "question": "Put these in order, oldest to newest.", "type": "order", "options": ["Pyramids of Giza", "Colosseum", "Eiffel Tower", "Sydney Opera House"] }
-      ]
+        {
+          "question": "Which planet is closest to the Sun?",
+          "options": [
+            "Mercury",
+            "Venus",
+            "Earth",
+            "Mars"
+          ],
+          "correct": 0,
+          "translations": {
+            "no": {
+              "question": "Hvilken planet er nærmest sola?",
+              "options": [
+                "Merkur",
+                "Venus",
+                "Jorda",
+                "Mars"
+              ]
+            }
+          }
+        },
+        {
+          "question": "Which of these are mammals?",
+          "type": "multi",
+          "options": [
+            "Dolphin",
+            "Shark",
+            "Bat",
+            "Penguin"
+          ],
+          "correct": [
+            0,
+            2
+          ],
+          "translations": {
+            "no": {
+              "question": "Hvilke av disse er pattedyr?",
+              "options": [
+                "Delfin",
+                "Hai",
+                "Flaggermus",
+                "Pingvin"
+              ]
+            }
+          }
+        },
+        {
+          "question": "True or false: bats are blind.",
+          "options": [
+            "True",
+            "False"
+          ],
+          "correct": 1,
+          "seconds": 10,
+          "translations": {
+            "no": {
+              "question": "Sant eller usant: flaggermus er blinde.",
+              "options": [
+                "Sant",
+                "Usant"
+              ]
+            }
+          }
+        },
+        {
+          "question": "Which is the largest ocean on Earth?",
+          "options": [
+            "Atlantic",
+            "Indian",
+            "Pacific",
+            "Arctic"
+          ],
+          "correct": 2,
+          "translations": {
+            "no": {
+              "question": "Hvilket hav er det største på jorda?",
+              "options": [
+                "Atlanterhavet",
+                "Indiahavet",
+                "Stillehavet",
+                "Nordishavet"
+              ]
+            }
+          }
+        },
+        {
+          "question": "Put these in order, oldest to newest.",
+          "type": "order",
+          "options": [
+            "Pyramids of Giza",
+            "Colosseum",
+            "Eiffel Tower",
+            "Sydney Opera House"
+          ],
+          "translations": {
+            "no": {
+              "question": "Sett disse i rekkefølge, fra eldst til nyest.",
+              "options": [
+                "Pyramidene i Giza",
+                "Colosseum",
+                "Eiffeltårnet",
+                "Operahuset i Sydney"
+              ]
+            }
+          }
+        }
+      ],
+      "translations": {
+        "no": {
+          "name": "Oppvarming"
+        }
+      }
     },
     {
       "name": "Look and listen",
       "seconds": 20,
       "questions": [
-        { "question": "This flag belongs to which country?", "image": "sample-flag-japan.svg", "options": ["China", "South Korea", "Japan", "Bangladesh"], "correct": 2 },
-        { "question": "Which children's song is this?", "audio": "sample-twinkle.mp3", "options": ["Happy Birthday", "Twinkle, Twinkle, Little Star", "Mary Had a Little Lamb", "Jingle Bells"], "correct": 1, "seconds": 30 },
-        { "question": "Who painted the Mona Lisa?", "options": ["Michelangelo", "Leonardo da Vinci", "Raphael", "Rembrandt"], "correct": 1 },
-        { "question": "Which is the highest mountain on Earth?", "options": ["K2", "Kilimanjaro", "Mont Blanc", "Mount Everest"], "correct": 3 },
-        { "question": "How many colours are there in a rainbow, as we usually count them?", "options": ["5", "6", "7", "8"], "correct": 2 }
-      ]
+        {
+          "question": "This flag belongs to which country?",
+          "image": "sample-flag-japan.svg",
+          "unveil": 12,
+          "unveilStyle": "blur",
+          "options": [
+            "China",
+            "South Korea",
+            "Japan",
+            "Bangladesh"
+          ],
+          "correct": 2,
+          "translations": {
+            "no": {
+              "question": "Hvilket land har dette flagget?",
+              "options": [
+                "Kina",
+                "Sør-Korea",
+                "Japan",
+                "Bangladesh"
+              ]
+            }
+          }
+        },
+        {
+          "question": "Which children's song is this?",
+          "audio": "sample-twinkle.mp3",
+          "options": [
+            "Happy Birthday",
+            "Twinkle, Twinkle, Little Star",
+            "Mary Had a Little Lamb",
+            "Jingle Bells"
+          ],
+          "correct": 1,
+          "seconds": 30,
+          "translations": {
+            "no": {
+              "question": "Hvilken barnesang er dette?",
+              "options": [
+                "Happy Birthday",
+                "Twinkle, Twinkle, Little Star",
+                "Mary Had a Little Lamb",
+                "Jingle Bells"
+              ]
+            }
+          }
+        },
+        {
+          "question": "Who painted the Mona Lisa?",
+          "options": [
+            "Michelangelo",
+            "Leonardo da Vinci",
+            "Raphael",
+            "Rembrandt"
+          ],
+          "correct": 1,
+          "translations": {
+            "no": {
+              "question": "Hvem malte Mona Lisa?",
+              "options": [
+                "Michelangelo",
+                "Leonardo da Vinci",
+                "Rafael",
+                "Rembrandt"
+              ]
+            }
+          }
+        },
+        {
+          "question": "Which is the highest mountain on Earth?",
+          "options": [
+            "K2",
+            "Kilimanjaro",
+            "Mont Blanc",
+            "Mount Everest"
+          ],
+          "correct": 3,
+          "translations": {
+            "no": {
+              "question": "Hvilket fjell er det høyeste på jorda?",
+              "options": [
+                "K2",
+                "Kilimanjaro",
+                "Mont Blanc",
+                "Mount Everest"
+              ]
+            }
+          }
+        },
+        {
+          "question": "How many colours are there in a rainbow, as we usually count them?",
+          "options": [
+            "5",
+            "6",
+            "7",
+            "8"
+          ],
+          "correct": 2,
+          "translations": {
+            "no": {
+              "question": "Hvor mange farger har regnbuen, slik vi vanligvis teller dem?",
+              "options": [
+                "5",
+                "6",
+                "7",
+                "8"
+              ]
+            }
+          }
+        }
+      ],
+      "translations": {
+        "no": {
+          "name": "Se og hør"
+        }
+      }
     },
     {
       "name": "Final sprint",
       "seconds": 15,
       "questions": [
-        { "question": "Which country has the most people?", "options": ["China", "India", "USA", "Indonesia"], "correct": 1 },
-        { "question": "True or false: a tomato is a fruit.", "options": ["True", "False"], "correct": 0, "seconds": 10 },
-        { "question": "How many minutes are there in a day?", "options": ["1,240", "1,440", "1,640", "2,400"], "correct": 1 },
-        { "question": "Which element has the chemical symbol O?", "options": ["Gold", "Osmium", "Oxygen", "Oganesson"], "correct": 2 },
-        { "question": "Double points! What is the largest animal alive today?", "options": ["African elephant", "Blue whale", "Giraffe", "Whale shark"], "correct": 1, "points": 2000 }
-      ]
+        {
+          "question": "Which country has the most people?",
+          "options": [
+            "China",
+            "India",
+            "USA",
+            "Indonesia"
+          ],
+          "correct": 1,
+          "translations": {
+            "no": {
+              "question": "Hvilket land har flest innbyggere?",
+              "options": [
+                "Kina",
+                "India",
+                "USA",
+                "Indonesia"
+              ]
+            }
+          }
+        },
+        {
+          "question": "True or false: a tomato is a fruit.",
+          "options": [
+            "True",
+            "False"
+          ],
+          "correct": 0,
+          "seconds": 10,
+          "translations": {
+            "no": {
+              "question": "Sant eller usant: en tomat er en frukt.",
+              "options": [
+                "Sant",
+                "Usant"
+              ]
+            }
+          }
+        },
+        {
+          "question": "How many minutes are there in a day?",
+          "options": [
+            "1,240",
+            "1,440",
+            "1,640",
+            "2,400"
+          ],
+          "correct": 1,
+          "translations": {
+            "no": {
+              "question": "Hvor mange minutter er det i et døgn?",
+              "options": [
+                "1 240",
+                "1 440",
+                "1 640",
+                "2 400"
+              ]
+            }
+          }
+        },
+        {
+          "question": "Which element has the chemical symbol O?",
+          "options": [
+            "Gold",
+            "Osmium",
+            "Oxygen",
+            "Oganesson"
+          ],
+          "correct": 2,
+          "translations": {
+            "no": {
+              "question": "Hvilket grunnstoff har det kjemiske symbolet O?",
+              "options": [
+                "Gull",
+                "Osmium",
+                "Oksygen",
+                "Oganesson"
+              ]
+            }
+          }
+        },
+        {
+          "question": "Double points! What is the largest animal alive today?",
+          "options": [
+            "African elephant",
+            "Blue whale",
+            "Giraffe",
+            "Whale shark"
+          ],
+          "correct": 1,
+          "points": 2000,
+          "translations": {
+            "no": {
+              "question": "Doble poeng! Hva er det største dyret som lever i dag?",
+              "options": [
+                "Afrikansk elefant",
+                "Blåhval",
+                "Sjiraff",
+                "Hvalhai"
+              ]
+            }
+          }
+        }
+      ],
+      "translations": {
+        "no": {
+          "name": "Sluttspurt"
+        }
+      }
     }
   ]
 }

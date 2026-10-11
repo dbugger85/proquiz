@@ -1,8 +1,9 @@
 // The question editor (laptop only). Quizzes save themselves a moment after each change.
-import { validateSet, usedFiles, cleanCredits, modeOf, MAX_DESCRIPTION, MAX_CATEGORIES, MAX_QUESTIONS, MAX_SECTIONS, MAX_SECTION_QUESTIONS, MAX_OPTION, MIN_SECONDS, MAX_SECONDS, DEFAULT_SECONDS, rightSet, typeOf, QUESTION_TYPES } from '/lib/validate.js';
-import { buildRequest, parseReply, splitTopics, AiQuizError, DIFFICULTIES, FILL_DIFFICULTIES, MIN_SIZE, QUICK_SECTIONS, QUICK_PER_SECTION, gapsOf, guessLanguage, buildFillRequest, parseFill } from '/lib/aiquiz.js';
+import { validateSet, usedFiles, cleanCredits, modeOf, MAX_DESCRIPTION, MIN_AUDIO_LENGTH, MAX_CATEGORIES, MAX_QUESTIONS, MAX_SECTIONS, MAX_SECTION_QUESTIONS, MAX_OPTION, MIN_SECONDS, MAX_SECONDS, DEFAULT_SECONDS, rightSet, typeOf, QUESTION_TYPES, UNVEIL_STYLES } from '/lib/validate.js';
+import { buildRequest, parseReply, splitTopics, AiQuizError, DIFFICULTIES, FILL_DIFFICULTIES, MIN_SIZE, QUICK_SECTIONS, QUICK_PER_SECTION, gapsOf, guessLanguage, buildFillRequest, parseFill, suggestedTarget, buildTranslateRequest, parseTranslation } from '/lib/aiquiz.js';
 import { SHAPES, OPTION_COLORS } from '/lib/quick.js';
-import { t, pts, setLang, getLang, translatePage, licenseName } from './i18n.js';
+import { LANGUAGES, languageName, flagUrl, mainLang, languagesOf, translationSlots, slotTranslation, setSlotTranslation, missingTranslations, removeLanguage } from '/lib/languages.js';
+import { t, pts, setLang, getLang, translatePage, licenseName, lengthText, mss } from './i18n.js';
 import { $, h, fill, setGlass, savedGlass, shapeSvg, optionStyle, setBrand, ask, tell } from './ui.js';
 import { KINDS } from '/lib/crazy.js';
 import { ICONS } from './specials.js';
@@ -14,10 +15,36 @@ let builtIn = false;
 let problems = [];
 let saveTimer = null;
 let savePromise = Promise.resolve();
-let aiNote = null; // { id, duplicates, filled?, left? } for a quiz just made or filled with AI (shown until another quiz is opened)
+let aiNote = null; // { id, duplicates, filled?, left?, summary? } for a quiz just made or filled with AI (shown until another quiz is opened)
+
+// A Quick quiz read from a pasted AI answer: how many questions of each kind were read ("Read 19 questions: 14 pick one,
+// 3 tick all that are right, 2 put in order"), and a line for each pick-one question whose wording sounds like
+// "tick all" or "put in order", so the host checks its kind (the owner's first AI quiz lost them, 2026-10-11).
+function aiSummaryLines(note) {
+  const sum = note.summary;
+  if (!sum || !sum.questions) return [];
+  const kinds = [
+    sum.choice && t('aiKindChoice', { n: sum.choice }),
+    sum.any && t('aiKindAny', { n: sum.any }),
+    sum.multi && t('aiKindMulti', { n: sum.multi }),
+    sum.order && t('aiKindOrder', { n: sum.order }),
+  ].filter(Boolean);
+  const where = (x) => t('edWhereQuick', { cat: set?.sections?.[x.c]?.name?.trim() || t('edSection', { n: x.c + 1 }), n: x.i + 1 });
+  return [
+    h('p', { class: 'muted ai-summary' }, t(note.filled ? 'aiNowSummary' : 'aiReadSummary', { n: sum.questions, kinds: kinds.join(', ') })),
+    ...sum.suspects.map((x) => h('p', { class: 'muted ai-suspect' }, t(x.looks === 'order' ? 'aiLooksOrder' : 'aiLooksMulti', { where: where(x) }))),
+  ];
+}
 
 // A Quick quiz (multiple choice in sections) instead of a board: see renderSections() and openQuestion().
 const quick = () => modeOf(set) === 'quick';
+
+// Every editor dialog starts with the same bar: the title and an × in the corner (48px, "Close"). The × closes the
+// dialog exactly like its Done or Cancel button: `dialog.close()` fires the same `close` event, so whatever the
+// dialog does then (save, stop a preview, redraw) happens the same way. The bar stays put while the rest scrolls.
+// `dialog` may be a function giving the dialog, for a dialog that is only made after its buttons (chooseKind()).
+const closeButton = (dialog, value) => h('button', { class: 'ed-dialog-close', type: 'button', 'aria-label': t('edClose'), title: t('edClose'), onclick: () => (typeof dialog === 'function' ? dialog() : dialog).close(value) }, '×');
+const dialogHead = (dialog, ...title) => h('div', { class: 'ed-dialog-head' }, h('h2', {}, ...title), closeButton(dialog));
 
 setGlass(savedGlass()); // the look the host chose last (the editor has no game state of its own)
 // The host's branding (logo and accent colour), fetched once (the editor is on the laptop, so /api/ answers).
@@ -83,6 +110,7 @@ function changed({ board = false } = {}) {
   if (board) renderBoard();
   else markTiles();
   renderProblems();
+  if (document.querySelector('.ed-languages') && languagesOf(set).length) redrawLanguages(); // the "n missing" counts
   scheduleSave();
 }
 
@@ -97,7 +125,7 @@ function renderList() {
       { class: `ed-row${q.archived ? ' archived' : ''}` },
       h(
         'button',
-        { class: `ed-item${q.id === currentId ? ' on' : ''}`, type: 'button', onclick: () => select(q.id).then(foldList) },
+        { class: `ed-item${q.id === currentId ? ' on' : ''}${q.cover ? ' with-cover' : ''}`, type: 'button', onclick: () => select(q.id).then(foldList) },
         q.cover ? h('img', { class: 'ed-item-thumb', src: `/files/${encodeURIComponent(q.cover)}`, alt: '' }) : null,
         h(
           'span',
@@ -113,8 +141,14 @@ function renderList() {
       ),
       h(
         'button',
-        { class: 'btn btn-small btn-quiet ed-archive', type: 'button', title: t(q.archived ? 'edUnarchiveTitle' : 'edArchiveTitle'), onclick: () => setArchived(q, !q.archived) },
-        t(q.archived ? 'edUnarchive' : 'edArchive'),
+        {
+          class: 'ed-archive',
+          type: 'button',
+          title: t(q.archived ? 'edUnarchiveTitle' : 'edArchiveTitle'),
+          'aria-label': t(q.archived ? 'edUnarchive' : 'edArchive'),
+          onclick: () => setArchived(q, !q.archived),
+        },
+        archiveIcon(q.archived),
       ),
     );
   const archived = quizzes.filter((q) => q.archived);
@@ -182,8 +216,110 @@ async function createQuiz(newSet) {
   await select(id);
 }
 
-$('#new-quiz').addEventListener('click', () => createQuiz(blankSet()));
-$('#new-quick').addEventListener('click', () => createQuiz(blankQuickSet()));
+// ----- New quiz: "What kind of quiz?" -----
+
+// Small flat pictures for the two cards, drawn in the app's own colours (CSS variables, so they follow branding).
+const SVG = 'http://www.w3.org/2000/svg';
+function svgEl(tag, attrs = {}, ...children) {
+  const el = document.createElementNS(SVG, tag);
+  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+  el.append(...children);
+  return el;
+}
+const picture = (...children) => svgEl('svg', { viewBox: '0 0 160 100', class: 'ed-kind-pic', 'aria-hidden': 'true' }, ...children);
+
+// A board: three category headers, point tiles underneath and three team buzzers along the bottom.
+function boardPicture() {
+  const cols = [4, 56, 108];
+  const headers = cols.map((x) => svgEl('rect', { x, y: 4, width: 48, height: 16, rx: 5, fill: 'var(--light)' }));
+  const names = cols.map((x, i) => svgEl('rect', { x: x + 9, y: 10, width: 30 - i * 6, height: 4, rx: 2, fill: 'rgb(255 255 255 / 0.85)' }));
+  const tiles = [];
+  [100, 200, 300].forEach((points, row) => {
+    for (const x of cols) {
+      const y = 24 + row * 18;
+      tiles.push(
+        svgEl('rect', { x, y, width: 48, height: 15, rx: 4, fill: 'rgb(var(--light-2-rgb) / 0.28)', stroke: 'rgb(var(--light-3-rgb) / 0.4)' }),
+        svgEl('text', { x: x + 24, y: y + 11, 'text-anchor': 'middle', 'font-size': '9', 'font-weight': '700', fill: 'currentColor' }, String(points)),
+      );
+    }
+  });
+  // Three phones with a big buzzer each, in the first teams' colours.
+  const buzzers = ['#ff453a', '#0a84ff', '#30d158'].flatMap((color, i) => {
+    const x = 44 + i * 26;
+    return [
+      svgEl('rect', { x, y: 80, width: 20, height: 24, rx: 4, fill: 'rgb(255 255 255 / 0.16)', stroke: 'rgb(255 255 255 / 0.35)' }),
+      svgEl('circle', { cx: x + 10, cy: 91, r: 6, fill: color }),
+    ];
+  });
+  return picture(...headers, ...names, ...tiles, ...buzzers);
+}
+
+// A Quick quiz: a question bar and the four answer shapes in their colours.
+function quickPicture() {
+  const bar = [
+    svgEl('rect', { x: 20, y: 4, width: 120, height: 22, rx: 6, fill: 'rgb(var(--light-2-rgb) / 0.28)', stroke: 'rgb(var(--light-3-rgb) / 0.4)' }),
+    svgEl('rect', { x: 32, y: 10, width: 72, height: 4, rx: 2, fill: 'rgb(255 255 255 / 0.85)' }),
+    svgEl('rect', { x: 32, y: 17, width: 48, height: 4, rx: 2, fill: 'rgb(255 255 255 / 0.5)' }),
+  ];
+  const options = SHAPES.flatMap((shape, i) => {
+    const x = 20 + (i % 2) * 62;
+    const y = 32 + Math.floor(i / 2) * 34;
+    const icon = shapeSvg(shape, 'ed-kind-shape');
+    icon.setAttribute('x', x + 19);
+    icon.setAttribute('y', y + 5);
+    icon.setAttribute('width', 20);
+    icon.setAttribute('height', 20);
+    return [svgEl('rect', { x, y, width: 58, height: 30, rx: 7, fill: OPTION_COLORS[i] }), icon];
+  });
+  return picture(...bar, ...options);
+}
+
+// The pop-up behind New quiz: two big cards. Resolves 'board', 'quick', or null for Cancel, Esc or closing.
+function chooseKind() {
+  return new Promise((resolve) => {
+    const card = (kind, pic, name, hint) =>
+      h(
+        'button',
+        { class: `ed-kind ed-kind-${kind}`, type: 'button', value: kind, onclick: () => dialog.close(kind) },
+        pic,
+        h('b', {}, name),
+        h('span', {}, hint),
+      );
+    const cancel = h('button', { class: 'btn', type: 'button', onclick: () => dialog.close('cancel') }, t('dlgCancel'));
+    const form = h(
+      'form',
+      { method: 'dialog', novalidate: true },
+      h('h2', { id: 'ed-kind-title' }, t('edKindTitle')),
+      closeButton(() => dialog, 'cancel'),
+      h(
+        'div',
+        { class: 'ed-kinds' },
+        card('board', boardPicture(), t('edKindBoard'), t('edKindBoardHint')),
+        card('quick', quickPicture(), t('edKindQuick'), t('edKindQuickHint')),
+      ),
+      h('div', { class: 'pq-modal-actions' }, cancel),
+    );
+    const dialog = h('dialog', { class: 'pq-modal ed-kind-modal', 'aria-labelledby': 'ed-kind-title' }, form);
+    const before = document.activeElement;
+    dialog.addEventListener('close', () => {
+      dialog.remove();
+      if (before?.isConnected && typeof before.focus === 'function') before.focus({ preventScroll: true });
+      resolve(['board', 'quick'].includes(dialog.returnValue) ? dialog.returnValue : null);
+    });
+    document.body.append(dialog);
+    dialog.returnValue = '';
+    dialog.showModal();
+    form.querySelector('.ed-kind').focus();
+  });
+}
+
+async function newQuiz() {
+  const kind = await chooseKind();
+  if (kind === 'board') await createQuiz(blankSet());
+  else if (kind === 'quick') await createQuiz(blankQuickSet());
+}
+
+$('#new-quiz').addEventListener('click', newQuiz);
 
 $('#import-file').addEventListener('change', async (e) => {
   const file = e.target.files[0];
@@ -221,6 +357,8 @@ function renderMain() {
             'div',
             {},
             h('p', {}, aiNote.filled ? t('aiFilledNote', { n: aiNote.filled.size }) : t('aiMadeNote')),
+            aiNote.added ? h('p', { class: 'muted' }, t('aiAddedNote', { n: aiNote.added })) : null,
+            ...aiSummaryLines(aiNote),
             aiNote.left ? h('p', { class: 'muted' }, t('aiFillLeft', { n: aiNote.left })) : null,
             aiNote.duplicates.length ? h('p', { class: 'muted' }, t('aiDuplicates', { list: aiNote.duplicates.join(', ') })) : null,
           ),
@@ -269,13 +407,50 @@ function renderMain() {
             t('edDelete'),
           ),
     ),
-    aboutBlock(),
+    aboutFold(),
     quick() ? h('div', { id: 'ed-sections', class: 'ed-sections' }) : [h('div', { id: 'ed-board' }), h('div', { id: 'ed-round2' }), h('div', { id: 'ed-final' })],
     h('div', { id: 'ed-problems' }),
     h('div', { id: 'ed-credits' }),
   );
   renderBoard();
   renderProblems();
+}
+
+// The description, the cover picture and the languages are used once per quiz, so they sit folded under the name
+// ("About the quiz"), with a one-line status in the summary, and the questions start right under it. The fold
+// stays as the host left it (localStorage), closed to begin with.
+const ABOUT_OPEN_KEY = 'proquiz.edAboutOpen';
+let redrawAboutStatus = () => {};
+function aboutStatus() {
+  const langs = languagesOf(set);
+  return [
+    set.description?.trim() ? t('edDescription') : t('edNoDescription'),
+    set.cover ? t('edCover') : t('edNoCover'),
+    [languageName(guessedMain()), ...langs.map(languageName)].join(' + '),
+  ].join(' · ');
+}
+function aboutFold() {
+  const status = h('small', { class: 'ed-fold-status muted' });
+  redrawAboutStatus = () => (status.textContent = aboutStatus());
+  redrawAboutStatus();
+  let open = false;
+  try {
+    open = localStorage.getItem(ABOUT_OPEN_KEY) === '1';
+  } catch {}
+  return h(
+    'details',
+    {
+      class: 'ed-fold ed-about-fold',
+      open,
+      ontoggle: (e) => {
+        try {
+          localStorage.setItem(ABOUT_OPEN_KEY, e.target.open ? '1' : '0');
+        } catch {}
+      },
+    },
+    h('summary', {}, h('b', {}, t('edAbout')), status),
+    h('div', { class: 'ed-fold-body' }, aboutBlock(), languagesBlock()),
+  );
 }
 
 // The quiz's description and cover picture (part of the quiz file, so exports carry them), under the name.
@@ -291,6 +466,7 @@ function aboutBlock() {
   const draw = (status = '') => {
     const cover = set.cover;
     const credit = cover ? set.credits?.[cover] : null;
+    redrawAboutStatus();
     const input = h('input', {
       type: 'file',
       accept: 'image/*',
@@ -324,6 +500,7 @@ function aboutBlock() {
             oninput: (e) => {
               set.description = e.target.value;
               changed();
+              redrawAboutStatus();
             },
           },
           set.description ?? '',
@@ -367,6 +544,264 @@ function aboutBlock() {
   };
   draw();
   return box;
+}
+
+// ----- extra languages (lib/languages.js): the main language, the added ones, and their translations -----
+
+const flagImg = (code, cls = 'flag') => h('img', { class: cls, src: flagUrl(code), alt: '', 'aria-hidden': 'true' });
+// The quiz's main language for the select: what the file says, else a guess from its text, else the editor's language.
+const guessedMain = () => (set.lang ? mainLang(set) : (guessLanguage(set) ?? getLang()));
+let redrawLanguages = () => {};
+
+// Under the description: the main language, a chip per added language (its flag, the name, how many texts are still
+// missing, Translations and ×), and Add a language. Phones can then read the questions in one of these.
+function languagesBlock() {
+  const box = h('div', { class: 'ed-languages' });
+  const draw = () => {
+    const main = guessedMain();
+    const langs = languagesOf(set);
+    redrawAboutStatus();
+    const chip = (code) => {
+      const missing = missingTranslations(set, code).length;
+      return h(
+        'span',
+        { class: `lang-chip${missing ? ' missing' : ''}`, 'data-lang': code },
+        flagImg(code),
+        h('b', { lang: code }, languageName(code)),
+        h('small', {}, missing ? t('edLangMissing', { n: missing }) : t('edLangComplete')),
+        h('button', { class: 'btn btn-small lang-translate', type: 'button', onclick: () => openTranslationsDialog(code) }, t('edTranslations')),
+        builtIn
+          ? null
+          : h(
+              'button',
+              {
+                class: 'ed-x lang-remove',
+                type: 'button',
+                title: t('edRemoveLanguage', { lang: languageName(code) }),
+                'aria-label': t('edRemoveLanguage', { lang: languageName(code) }),
+                onclick: async () => {
+                  const ok = await ask({ title: t('dlgRemoveLanguageTitle'), text: t('edConfirmRemoveLanguage', { lang: languageName(code), n: translationSlots(set).length - missing }), ok: t('dlgRemove'), danger: true });
+                  if (!ok) return;
+                  removeLanguage(set, code);
+                  changed();
+                  draw();
+                },
+              },
+              '×',
+            ),
+      );
+    };
+    fill(
+      box,
+      h('span', { class: 'ed-media-label' }, t('edLanguages')),
+      h('small', {}, t('edLanguagesHint')),
+      h(
+        'div',
+        { class: 'row ed-lang-row' },
+        h(
+          'label',
+          { class: 'field ed-main-lang' },
+          h('span', {}, t('edMainLanguage')),
+          h(
+            'select',
+            {
+              name: 'mainLang',
+              disabled: builtIn,
+              onchange: (e) => {
+                set.lang = e.target.value;
+                changed();
+                draw();
+              },
+            },
+            LANGUAGES.filter((l) => !langs.includes(l.code)).map((l) => h('option', { value: l.code, selected: l.code === main, lang: l.code }, l.name)),
+          ),
+        ),
+        h('div', { class: 'lang-chips' }, langs.map(chip), builtIn ? null : h('button', { class: 'btn btn-small ed-add-language', type: 'button', onclick: () => openLanguagePicker(main, langs, draw) }, `+ ${t('edAddLanguage')}`)),
+      ),
+    );
+  };
+  redrawLanguages = draw;
+  draw();
+  return box;
+}
+
+// "Add a language": a pop-up with a flag button per language not yet in the quiz.
+function openLanguagePicker(main, langs, done) {
+  const choices = LANGUAGES.filter((l) => l.code !== main && !langs.includes(l.code));
+  const dialog = h('dialog', { class: 'pq-modal ed-lang-modal', 'aria-labelledby': 'ed-lang-title' });
+  const form = h(
+    'form',
+    { method: 'dialog', novalidate: true },
+    h('h2', { id: 'ed-lang-title' }, t('edAddLanguage')),
+    h('p', { class: 'pq-modal-text' }, t('edAddLanguageHint')),
+    h(
+      'div',
+      { class: 'ed-lang-grid' },
+      choices.map((l) => h('button', { class: 'ed-lang-pick', type: 'button', value: l.code, lang: l.code, onclick: () => dialog.close(l.code) }, flagImg(l.code), h('span', {}, l.name))),
+    ),
+    h('div', { class: 'pq-modal-actions' }, h('button', { class: 'btn', type: 'button', onclick: () => dialog.close('cancel') }, t('dlgCancel'))),
+  );
+  dialog.append(form);
+  const before = document.activeElement;
+  dialog.addEventListener('close', () => {
+    dialog.remove();
+    if (before?.isConnected && typeof before.focus === 'function') before.focus({ preventScroll: true });
+    const code = dialog.returnValue;
+    if (!choices.some((l) => l.code === code)) return;
+    set.lang = main; // the main language is now part of the file too
+    set.languages = [...languagesOf(set), code];
+    changed();
+    done();
+    openTranslationsDialog(code);
+  });
+  document.body.append(dialog);
+  dialog.returnValue = '';
+  dialog.showModal();
+  form.querySelector('.ed-lang-pick')?.focus();
+}
+
+// Where a text is, for the translations table: "Capitals · 300", "Warm-up, question 2", "Final question".
+function slotLabel(slot) {
+  if (slot.final) return t('edFinal');
+  if (slot.c === undefined) return '';
+  const cats = catsOf(slot.r ?? 1);
+  const cat = cats[slot.c];
+  const name = cat?.name?.trim() || t(quick() ? 'edSection' : 'edCategory', { n: slot.c + 1 });
+  if (slot.i === undefined) return slot.r === 2 ? `${t('edRound2')}: ${name}` : name;
+  const where = quick() ? t('edWhereQuick', { cat: name, n: slot.i + 1 }) : `${name} · ${pts(cat?.questions[slot.i]?.value ?? '')}`;
+  return slot.r === 2 ? `${t('edRound2')}: ${where}` : where;
+}
+
+// The translations into one language: every text of the quiz on the left (read-only), its translation on the right,
+// with "Show only missing" and the count. Typing saves (autosave). Translate with AI fills the empty ones from a pasted reply.
+function openTranslationsDialog(code) {
+  const dialog = $('#tr-dialog');
+  const form = $('#tr-form');
+  let onlyMissing = false;
+  const count = h('span', { class: 'tr-count', role: 'status' });
+  const list = h('div', { class: 'tr-list' });
+  const drawCount = () => {
+    const slots = translationSlots(set);
+    const missing = slots.filter((slot) => !slotTranslation(slot, code)).length;
+    count.textContent = missing ? t('edLangMissingOf', { n: missing, total: slots.length }) : t('edLangAllDone', { total: slots.length });
+    count.classList.toggle('good', !missing);
+    redrawLanguages();
+  };
+  const drawList = () => {
+    const slots = translationSlots(set);
+    let lastWhere = null;
+    const rows = [];
+    for (const slot of slots) {
+      const value = slotTranslation(slot, code);
+      if (onlyMissing && value) continue;
+      const where = slot.kind === 'title' || slot.kind === 'description' ? t('edQuizName') : slotLabel(slot);
+      if (where !== lastWhere) {
+        rows.push(h('h3', { class: 'tr-where' }, where));
+        lastWhere = where;
+      }
+      const kind = slot.kind === 'option' ? t('trKind-option', { n: slot.k + 1 }) : t(`trKind-${slot.kind}`);
+      const input = h('textarea', {
+        rows: 1,
+        dir: 'auto',
+        lang: code,
+        'data-id': slot.id,
+        'aria-label': `${kind}: ${slot.text}`,
+        disabled: builtIn,
+        placeholder: t('edTranslationPlaceholder', { lang: languageName(code) }),
+        oninput: (e) => {
+          setSlotTranslation(slot, code, e.target.value);
+          e.target.closest('.tr-row').classList.toggle('missing', !e.target.value.trim());
+          changed();
+          drawCount();
+        },
+      });
+      input.value = value;
+      rows.push(
+        h(
+          'div',
+          { class: `tr-row${value ? '' : ' missing'}`, 'data-id': slot.id },
+          h('div', { class: 'tr-main' }, h('small', { class: 'tr-kind' }, kind), h('span', { dir: 'auto' }, slot.text)),
+          h('div', { class: 'tr-input' }, input),
+        ),
+      );
+    }
+    fill(list, rows.length ? rows : h('p', { class: 'muted' }, t(onlyMissing ? 'edLangNothingMissing' : 'edLangNothingToTranslate')));
+  };
+  fill(
+    form,
+    dialogHead(dialog, flagImg(code, 'flag big'), ' ', t('edTranslationsTitle', { lang: languageName(code) })),
+    h('p', { class: 'muted' }, t('edTranslationsIntro', { main: languageName(mainLang(set, guessedMain())), lang: languageName(code) })),
+    h(
+      'div',
+      { class: 'row tr-tools' },
+      count,
+      h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'onlyMissing', onchange: (e) => ((onlyMissing = e.target.checked), drawList()) }), h('span', {}, t('edShowOnlyMissing'))),
+      builtIn ? null : h('button', { class: 'btn ai-translate-open', type: 'button', onclick: () => openTranslateAiDialog(code, () => (drawList(), drawCount())) }, `✨ ${t('aiTranslateButton')}`),
+    ),
+    list,
+    h('div', { class: 'ed-dialog-actions' }, h('button', { class: 'btn btn-primary', value: 'done' }, t('edDone'))),
+  );
+  drawCount();
+  drawList();
+  dialog.onclose = () => saveNow();
+  dialog.showModal();
+}
+
+// Translate with AI: like Fill empty spots, by copy and paste. The request lists only the texts still missing, each
+// with its id; the pasted reply fills only those (never a text that is already translated).
+function openTranslateAiDialog(code, done) {
+  const dialog = $('#ai-dialog');
+  const form = $('#ai-form');
+  const missing = missingTranslations(set, code).length;
+  const request = h('textarea', { id: 'ai-request', class: 'ai-request', readonly: true, rows: 8 });
+  const copied = h('span', { class: 'ed-status', role: 'status' });
+  const reply = h('textarea', { id: 'ai-reply', rows: 6, placeholder: t('aiReplyPlaceholder'), oninput: () => (error.textContent = '') });
+  const error = h('p', { id: 'ai-error', class: 'ed-media-status bad', role: 'alert' });
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(request.value);
+    } catch {
+      request.select();
+      document.execCommand('copy');
+    }
+    copied.textContent = t('aiCopied');
+    setTimeout(() => (copied.textContent = ''), 2000);
+  }
+  function fillTranslations() {
+    error.textContent = '';
+    let made;
+    try {
+      made = parseTranslation(reply.value, set, code);
+    } catch (err) {
+      if (!(err instanceof AiQuizError)) throw err;
+      error.textContent = t(`ai-${err.code}`);
+      return;
+    }
+    set = made.set;
+    reply.value = '';
+    dialog.close();
+    changed();
+    done(made);
+  }
+  fill(
+    form,
+    dialogHead(dialog, t('aiTranslateTitle', { lang: languageName(code) })),
+    h('p', { class: 'muted' }, t('aiTranslateIntro', { n: missing })),
+    ...(missing
+      ? [
+          h('h3', {}, t('aiStep2')),
+          request,
+          h('div', { class: 'row' }, h('button', { class: 'btn btn-primary ai-copy', type: 'button', onclick: copy }, t('aiCopy')), copied),
+          h('h3', {}, t('aiStep3')),
+          reply,
+          h('p', { class: 'ai-warn' }, t('aiTranslateWarn')),
+          error,
+          h('div', { class: 'ed-dialog-actions' }, h('button', { class: 'btn btn-quiet', value: 'cancel' }, t('aiCancel')), h('button', { class: 'btn btn-primary ai-translate-go', type: 'button', onclick: fillTranslations }, t('aiTranslateGo'))),
+        ]
+      : [h('div', { class: 'ed-dialog-actions' }, h('button', { class: 'btn btn-primary', value: 'cancel' }, t('aiDismiss')))]),
+  );
+  if (missing) request.value = buildTranslateRequest(set, code);
+  dialog.showModal();
 }
 
 // The categories of a board: r = 1 is the main board, r = 2 the round 2 board.
@@ -640,7 +1075,7 @@ function questionRow(sec, c, q, i) {
     h(
       'button',
       {
-        class: `ed-qrow${hasProblem(c, i) ? ' bad' : ''}${blank ? ' blank' : ''}`,
+        class: `ed-qrow${hasProblem(c, i) ? ' bad' : ''}${blank ? ' blank' : ''}${aiNote?.id === currentId && aiNote.filled?.has(tileKey(c, i)) ? ' ai-filled' : ''}`,
         type: 'button',
         'data-c': c,
         'data-i': i,
@@ -760,6 +1195,7 @@ function renderSections() {
             },
             `+ ${t('edAddSection')}`,
           ),
+          h('button', { class: 'btn ai-fill-open', type: 'button', onclick: openFillDialog }, `✨ ${t('aiFillButton')}`),
         ),
   );
 }
@@ -811,13 +1247,19 @@ function pruneCredits() {
   else delete set.credits;
 }
 
-const sourceName = (source) => t(source === 'wikimedia' ? 'picSourceWikimedia' : 'picSourceOpenverse');
+const sourceName = (source) => t(source === 'deezer' ? 'songSourceDeezer' : source === 'wikimedia' ? 'picSourceWikimedia' : 'picSourceOpenverse');
 const outLink = (href, text) => (href ? h('a', { href, target: '_blank', rel: 'noopener noreferrer' }, text) : text);
+const isSong = (c) => c?.source === 'deezer';
 
-// "Picture: Ann · CC BY 2.0 · Openverse", with the source as a link to the picture's own page.
+// "Picture: Ann · CC BY 2.0 · Openverse" (or "Song: Dancing Queen – ABBA · Deezer" for a song clip), with the source
+// as a link to the picture's or song's own page.
 function creditNodes(c) {
   const mark = '\u0000';
-  const line = c.author ? t('picCreditLine', { author: c.author, license: licenseName(c.license), source: mark }) : t('picCreditNoAuthor', { license: licenseName(c.license), source: mark });
+  const line = isSong(c)
+    ? t('songCreditEditor', { title: c.title || '?', author: c.author || t('songUnknownArtist'), source: mark })
+    : c.author
+      ? t('picCreditLine', { author: c.author, license: licenseName(c.license), source: mark })
+      : t('picCreditNoAuthor', { license: licenseName(c.license), source: mark });
   const [before, after] = line.split(mark);
   return [before, outLink(c.sourceUrl, sourceName(c.source)), after];
 }
@@ -843,8 +1285,8 @@ function renderCredits() {
               h(
                 'li',
                 {},
-                h('img', { src: `/files/${encodeURIComponent(name)}`, alt: '', loading: 'lazy' }),
-                h('span', {}, c.title ? h('b', {}, c.title) : null, h('span', {}, creditNodes(c), c.licenseUrl ? [' · ', outLink(c.licenseUrl, t('picAboutLicense'))] : null)),
+                isSong(c) ? h('span', { class: 'ed-credit-note', 'aria-hidden': 'true' }, '♪') : h('img', { src: `/files/${encodeURIComponent(name)}`, alt: '', loading: 'lazy' }),
+                h('span', {}, c.title && !isSong(c) ? h('b', {}, c.title) : null, h('span', {}, creditNodes(c), c.licenseUrl ? [' · ', outLink(c.licenseUrl, t('picAboutLicense'))] : null)),
               ),
             ),
           ),
@@ -870,7 +1312,8 @@ function openQuestion(c, i, r = 1) {
   const field = (label, input, hint) => h('label', { class: 'field' }, h('span', {}, label), input, hint ? h('small', {}, hint) : null);
   const text = (key, { area = false, max = 300 } = {}) =>
     h(area ? 'textarea' : 'input', {
-      ...(area ? { rows: 3 } : { type: 'text', value: q[key] ?? '' }),
+      ...(area ? { rows: 3, class: 'ed-q-text' } : { type: 'text', value: q[key] ?? '' }),
+      name: key,
       maxlength: max,
       disabled: builtIn,
       oninput: (e) => {
@@ -906,7 +1349,7 @@ function openQuestion(c, i, r = 1) {
           }
         },
       });
-      const credit = name && kind === 'image' ? set.credits?.[name] : null;
+      const credit = name ? set.credits?.[name] : null; // a found picture, or a song clip from "Find a song clip"
       fill(box, 
         h('span', { class: 'ed-media-label' }, label),
         hint ? h('small', {}, hint) : null,
@@ -936,7 +1379,25 @@ function openQuestion(c, i, r = 1) {
                     },
                     t('picSearch'),
                   )
-                : null,
+                : h(
+                    'button',
+                    {
+                      class: 'btn ed-song-search',
+                      type: 'button',
+                      onclick: () =>
+                        openSongDialog({
+                          query: suggestQuery(q.answer || q.question),
+                          onPick: ({ name: picked, credit: found }) => {
+                            set.credits = { ...(set.credits ?? {}), [picked]: found };
+                            delete q.audioStart; // the trim bar starts over for the new clip
+                            delete q.audioLength;
+                            upd(key, picked);
+                            draw();
+                          },
+                        }),
+                    },
+                    t('songSearch'),
+                  ),
               name
                 ? h(
                     'button',
@@ -945,10 +1406,12 @@ function openQuestion(c, i, r = 1) {
                       type: 'button',
                       onclick: () => {
                         upd(key, null);
-                        if (key === 'audio') delete q.audioStart;
+                        if (key === 'audio') {
+                          delete q.audioStart;
+                          delete q.audioLength;
+                        }
                         if (key === 'image') delete q.unveil;
                         draw();
-                        drawStart();
                       },
                     },
                     t('edRemove'),
@@ -957,41 +1420,41 @@ function openQuestion(c, i, r = 1) {
             ),
         status ? h('p', { class: `ed-media-status${status === t('edUploadFailed') ? ' bad' : ''}` }, status) : null,
       );
-      if (key === 'audio') drawStart();
+      if (key === 'audio') drawTrim(preview);
       if (key === 'image') drawUnveil();
     };
     return { box, draw };
   }
 
-  // "Start at (seconds)" only when there is a clip.
+  // The trim bar, only when there is a clip: the whole clip as a track with a handle at each end (drag the left one
+  // for where the clip starts, the right one for where it stops), the chosen part highlighted, the times as m:ss,
+  // and "Try it", which plays just that part with a moving playhead. The right handle at the very end means "to
+  // the end" (no `audioLength`). `preview` is the clip's own <audio> element: its metadata gives the length.
   const startBox = h('div');
-  function drawStart() {
-    fill(startBox, 
-      q.audio
-        ? field(
-            t('edClipStart'),
-            h('input', {
-              type: 'number',
-              min: 0,
-              step: 0.5,
-              value: q.audioStart ?? 0,
-              disabled: builtIn,
-              oninput: (e) => {
-                const n = Number(e.target.value);
-                upd('audioStart', Number.isFinite(n) && n > 0 ? n : null);
-              },
-            }),
-          )
-        : '',
-    );
+  function drawTrim(preview) {
+    if (!q.audio || !preview) return fill(startBox);
+    const bar = trimBar({
+      audio: preview,
+      get: () => ({ start: Number(q.audioStart) || 0, length: Number(q.audioLength) || null }),
+      set: ({ start, length }) => {
+        upd('audioStart', start > 0 ? start : null);
+        upd('audioLength', length > 0 ? length : null);
+      },
+      disabled: builtIn,
+    });
+    fill(startBox, bar);
   }
 
-  // "Show the picture slowly" (big blocks that get smaller) only when there is a question picture.
-  // Not offered on the final question.
+  // "Show the picture slowly" only when there is a question picture: the seconds, and how it appears (Pixels: big
+  // blocks that get smaller, or Blur: a heavy blur that sharpens). Not offered on the final question. In a Quick
+  // quiz it runs while the answers are open, so a time longer than the question's seconds is cut to them (said here).
   const unveilBox = h('div');
+  const quickSeconds = () => Number(q.seconds) || Number(set.sections?.[c]?.seconds) || DEFAULT_SECONDS;
   function drawUnveil() {
-    if (isFinal || isQuick || !q.image) return fill(unveilBox);
+    if (isFinal || !q.image) return fill(unveilBox);
     const on = Number(q.unveil) > 0;
+    const style = UNVEIL_STYLES.includes(q.unveilStyle) ? q.unveilStyle : 'pixels';
+    const capped = isQuick && on && Number(q.unveil) > quickSeconds();
     fill(
       unveilBox,
       h(
@@ -1003,32 +1466,68 @@ function openQuestion(c, i, r = 1) {
           checked: on,
           disabled: builtIn,
           onchange: (e) => {
-            upd('unveil', e.target.checked ? 15 : null);
+            upd('unveil', e.target.checked ? Math.min(15, isQuick ? quickSeconds() : 15) : null);
+            if (!e.target.checked) upd('unveilStyle', null);
             drawUnveil();
           },
         }),
         h('span', {}, t('edUnveil')),
       ),
       on
-        ? field(
-            t('edUnveilSeconds'),
-            h('input', {
-              type: 'number',
-              name: 'unveilSeconds',
-              min: 1,
-              max: 120,
-              step: 1,
-              value: q.unveil,
-              disabled: builtIn,
-              oninput: (e) => {
-                const n = Math.round(Number(e.target.value));
-                if (Number.isFinite(n) && n >= 1) upd('unveil', Math.min(120, n));
-              },
-            }),
+        ? h(
+            'div',
+            { class: 'ed-unveil' },
+            field(
+              t('edUnveilSeconds'),
+              h('input', {
+                type: 'number',
+                name: 'unveilSeconds',
+                min: 1,
+                max: 120,
+                step: 1,
+                value: q.unveil,
+                disabled: builtIn,
+                oninput: (e) => {
+                  const n = Math.round(Number(e.target.value));
+                  if (Number.isFinite(n) && n >= 1) upd('unveil', Math.min(120, n));
+                  drawUnveilNote();
+                },
+              }),
+            ),
+            h(
+              'div',
+              { class: 'field' },
+              h('span', {}, t('edUnveilStyle')),
+              h(
+                'div',
+                { class: 'pills ed-unveil-pills', role: 'radiogroup' },
+                UNVEIL_STYLES.map((k) =>
+                  h(
+                    'label',
+                    {},
+                    h('input', {
+                      type: 'radio',
+                      name: 'unveilStyle',
+                      value: k,
+                      checked: k === style,
+                      disabled: builtIn,
+                      onchange: () => upd('unveilStyle', k === 'pixels' ? null : k), // pixels is the default, left out of the file
+                    }),
+                    h('span', {}, unveilIcon(k), t(k === 'blur' ? 'edUnveilBlur' : 'edUnveilPixels')),
+                  ),
+                ),
+              ),
+            ),
           )
         : null,
-      on ? h('small', {}, t('edUnveilHint')) : null,
+      on ? h('small', { class: 'ed-unveil-note' }, unveilNote(capped)) : null,
     );
+  }
+  const unveilNote = (capped) => (capped ? t('edUnveilCapped', { n: Number(q.unveil), s: quickSeconds() }) : t(isQuick ? 'edUnveilHintQuick' : 'edUnveilHint'));
+  // Only the note under the control (the seconds field keeps its focus while typing).
+  function drawUnveilNote() {
+    const note = unveilBox.querySelector('.ed-unveil-note');
+    if (note) note.textContent = unveilNote(isQuick && Number(q.unveil) > quickSeconds());
   }
 
   const picQ = mediaField('image', 'image', t('edPicQ'));
@@ -1038,40 +1537,59 @@ function openQuestion(c, i, r = 1) {
   const question = text('question', { area: true });
   question.value = q.question ?? '';
 
-  if (isQuick) fill(form, ...quickFields(c, i, q, question, field, upd), h('div', { class: 'ed-media-grid two' }, h('div', {}, picQ.box), h('div', {}, clip.box, startBox)), h('div', { class: 'ed-dialog-actions' }, h('button', { class: 'btn btn-primary', value: 'done' }, t('edDone'))));
-  else fill(form, 
-    h('h2', {}, isFinal ? t('edFinal') : `${r === 2 ? `${t('edRound2')}: ` : ''}${cats[c].name || t('edCategory', { n: c + 1 })}`),
-    isFinal
-      ? field(t('edFinalCategory'), text('category', { max: 40 }))
-      : field(
-          t('edPoints'),
-          h('input', {
-            type: 'number',
-            min: 1,
-            step: 1,
-            value: q.value,
-            disabled: builtIn,
-            oninput: (e) => {
-              q.value = Math.round(Number(e.target.value)) || 0;
-              changed();
-            },
-          }),
-        ),
-    field(t('edQuestion'), question),
-    field(t('edAnswer'), text('answer', { max: 120 })),
-    isFinal
-      ? null
-      : field(
-          t('edSpecial'),
-          h(
-            'select',
-            { name: 'special', disabled: builtIn, onchange: (e) => upd('special', e.target.value) },
-            h('option', { value: '', selected: !q.special }, t('edSpecialNone')),
-            KINDS.map((kind) => h('option', { value: kind, selected: q.special === kind }, `${ICONS[kind]}  ${t(`n-${kind}`)}`)),
+  // The dialog: the title bar (with ×) and Done stay put; between them the words on the left and the media on the
+  // right (one column in a narrow window). A board question's two pictures share a row, the clip spans both.
+  const media = isQuick
+    ? h('div', { class: 'ed-q-media' }, picQ.box, unveilBox, clip.box, startBox)
+    : h('div', { class: 'ed-q-media board' }, picQ.box, picA.box, unveilBox, clip.box, startBox);
+  unveilBox.className = 'ed-unveil-box ed-media-wide';
+  clip.box.classList.add('ed-media-wide');
+  startBox.className = 'ed-media-wide';
+  let title;
+  let main;
+  if (isQuick) ({ title, fields: main } = quickFields(c, i, q, question, field, upd, drawUnveilNote));
+  else {
+    title = isFinal ? t('edFinal') : `${r === 2 ? `${t('edRound2')}: ` : ''}${cats[c].name || t('edCategory', { n: c + 1 })}`;
+    main = [
+      isFinal
+        ? field(t('edFinalCategory'), text('category', { max: 40 }))
+        : h(
+            'div',
+            { class: 'ed-q-row' },
+            field(
+              t('edPoints'),
+              h('input', {
+                type: 'number',
+                name: 'points',
+                min: 1,
+                step: 1,
+                value: q.value,
+                disabled: builtIn,
+                oninput: (e) => {
+                  q.value = Math.round(Number(e.target.value)) || 0;
+                  changed();
+                },
+              }),
+            ),
+            field(
+              t('edSpecial'),
+              h(
+                'select',
+                { name: 'special', disabled: builtIn, onchange: (e) => upd('special', e.target.value) },
+                h('option', { value: '', selected: !q.special }, t('edSpecialNone')),
+                KINDS.map((kind) => h('option', { value: kind, selected: q.special === kind }, `${ICONS[kind]}  ${t(`n-${kind}`)}`)),
+              ),
+              t('edSpecialHint'),
+            ),
           ),
-        ),
-    isFinal ? null : h('small', { class: 'muted ed-special-hint' }, t('edSpecialHint')),
-    h('div', { class: 'ed-media-grid' }, h('div', {}, picQ.box, unveilBox), picA.box, h('div', {}, clip.box, startBox)),
+      field(t('edQuestion'), question),
+      field(t('edAnswer'), text('answer', { max: 120 })),
+    ];
+  }
+  fill(
+    form,
+    dialogHead(dialog, title),
+    h('div', { class: 'ed-q-body' }, h('div', { class: 'ed-q-main' }, main), media),
     h('div', { class: 'ed-dialog-actions' }, h('button', { class: 'btn btn-primary', value: 'done' }, t('edDone'))),
   );
   picQ.draw();
@@ -1094,14 +1612,37 @@ function openQuestion(c, i, r = 1) {
 // move up (with a note) once the host leaves the answers, so the dialog shows the colours and shapes the game
 // will use; until then a note says it will happen (moving them while the host is still clicking there would be
 // confusing).
-function quickFields(c, i, q, question, field, upd) {
+// A small picture of each way a picture can appear: a few blocks, or a soft blurred shape.
+// (An <i>, not a <span>: the pill's own styling is on `.pills span`.)
+function unveilIcon(style) {
+  const svg = (inner) => {
+    const el = h('i', { class: 'ed-unveil-icon', 'aria-hidden': 'true' });
+    el.innerHTML = `<svg viewBox="0 0 24 24" width="22" height="22">${inner}</svg>`;
+    return el;
+  };
+  if (style === 'blur') return svg('<defs><filter id="ed-unveil-blur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.2"/></filter></defs><circle cx="12" cy="12" r="6.5" fill="currentColor" filter="url(#ed-unveil-blur)"/>');
+  const cells = [];
+  for (let y = 0; y < 3; y++) for (let x = 0; x < 3; x++) cells.push(`<rect x="${3 + x * 6}" y="${3 + y * 6}" width="6" height="6" fill="currentColor" opacity="${[0.35, 0.7, 1, 0.7, 1, 0.5, 1, 0.5, 0.35][y * 3 + x]}"/>`);
+  return svg(cells.join(''));
+}
+
+// `onSeconds` is told when the seconds change (the slowly appearing picture's note depends on them).
+function quickFields(c, i, q, question, field, upd, onSeconds = () => {}) {
   const sec = set.sections[c];
   const slots = SHAPES.map((_, n) => String(q.options?.[n] ?? ''));
+  // The translated options (lib/languages.js), by slot like the options themselves, so they move with them.
+  const trSlots = Object.fromEntries(Object.entries(q.translations ?? {}).map(([code, tr]) => [code, SHAPES.map((_, n) => String(tr?.options?.[n] ?? ''))]));
   let type = QUESTION_TYPES.includes(typeOf(q)) ? typeOf(q) : 'choice';
   let right = rightSet(q).filter((n) => n < slots.length); // the slots marked right (one or more; any of them counts)
   const sync = () => {
     const keep = kept();
     q.options = keep.map((n) => slots[n]);
+    for (const [code, list] of Object.entries(trSlots)) {
+      const options = keep.map((n) => list[n] ?? '');
+      while (options.length && !options.at(-1).trim()) options.pop();
+      if (options.length) q.translations[code].options = options;
+      else delete q.translations[code].options;
+    }
     if (type === 'choice') delete q.type;
     else q.type = type;
     const marks = type === 'order' ? [] : right.map((n) => keep.indexOf(n));
@@ -1206,6 +1747,10 @@ function quickFields(c, i, q, question, field, upd) {
     const texts = keep.map((n) => slots[n]);
     right = right.map((n) => keep.indexOf(n));
     slots.forEach((_, n) => (slots[n] = texts[n] ?? ''));
+    for (const list of Object.values(trSlots)) {
+      const moved = keep.map((n) => list[n]);
+      list.forEach((_, n) => (list[n] = moved[n] ?? ''));
+    }
     rows.forEach((row, n) => (row.querySelector('input[type=text]').value = slots[n]));
     showMarks();
     movedNote.textContent = t('edOptionsMoved', { from: gaps[0] + 1, to: keep.indexOf(gaps[0]) + 1 });
@@ -1225,14 +1770,14 @@ function quickFields(c, i, q, question, field, upd) {
     rows,
     movedNote,
   );
-  return [
-    h('h2', {}, `${sec.name?.trim() || t('edSection', { n: c + 1 })}: ${t('edQuestionN', { n: i + 1 })}`),
+  const title = `${sec.name?.trim() || t('edSection', { n: c + 1 })}: ${t('edQuestionN', { n: i + 1 })}`;
+  const fields = [
     h('div', { class: 'field' }, h('span', {}, t('edStyle')), kindPills), // a div: a label around the pills' own labels would misfire
     field(t('edQuestion'), question),
     opts,
     h(
       'div',
-      { class: 'ed-quick-row' },
+      { class: 'ed-q-row ed-quick-row' },
       field(
         t('edSeconds'),
         h('input', {
@@ -1247,6 +1792,7 @@ function quickFields(c, i, q, question, field, upd) {
           oninput: (e) => {
             const v = e.target.value.trim();
             upd('seconds', v === '' ? null : Math.round(Number(v)));
+            onSeconds();
           },
         }),
         t('edSecondsHint', { n: fallback }),
@@ -1265,6 +1811,7 @@ function quickFields(c, i, q, question, field, upd) {
       ),
     ),
   ];
+  return { title, fields };
 }
 
 // ----- "Find a free picture": search Openverse or Wikimedia Commons through ProQuiz's own server (pictures.js) -----
@@ -1287,6 +1834,171 @@ const remember = (key, value) => {
     localStorage.setItem(key, value);
   } catch {}
 };
+
+// ----- the clip's trim bar -----
+
+const TRIM_STEP = 0.5; // seconds per arrow key
+const TRIM_BIG_STEP = 5; // seconds per Page Up/Down
+const TRIM_MIN = MIN_AUDIO_LENGTH;
+const round1 = (n) => Math.round(n * 10) / 10;
+
+// `audio` is the clip's <audio> element (the track is as long as it says), `get()` gives { start, length } (length
+// null = to the end) and `set({ start, length })` stores a change. Returns the bar's element.
+function trimBar({ audio, get, set, disabled = false }) {
+  const range = h('div', { class: 'ed-trim-range' });
+  const playhead = h('div', { class: 'ed-trim-playhead', hidden: true });
+  const handle = (which) =>
+    h('button', {
+      class: `ed-trim-handle ${which}`,
+      type: 'button',
+      role: 'slider',
+      'aria-label': t(which === 'start' ? 'edTrimStart' : 'edTrimEnd'),
+      'aria-orientation': 'horizontal',
+      disabled,
+    });
+  const left = handle('start');
+  const right = handle('end');
+  const track = h('div', { class: 'ed-trim-track' }, range, playhead, left, right);
+  const times = h('span', { class: 'ed-trim-times' });
+  const tryBtn = h('button', { class: 'btn ed-trim-try', type: 'button', disabled: true }, t('edTrimTry'));
+  const box = h(
+    'div',
+    { class: 'ed-trim' },
+    h('div', { class: 'ed-trim-head' }, h('span', { class: 'ed-media-label' }, t('edTrim')), times),
+    track,
+    h('div', { class: 'row ed-trim-foot' }, tryBtn, h('small', {}, t(disabled ? 'edTrimHintSample' : 'edTrimHint'))),
+  );
+
+  let duration = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : 0;
+  let trying = false;
+  let raf = 0;
+
+  // Where the handles are, in seconds: the start, and the end (the clip's end when no length is set).
+  const ends = () => {
+    const { start, length } = get();
+    const s = Math.min(Math.max(0, start), Math.max(0, duration - TRIM_MIN));
+    const e = length ? Math.min(duration, Math.max(s + TRIM_MIN, s + length)) : duration;
+    return { s, e, toEnd: !length || s + length >= duration - 0.05 };
+  };
+  const pct = (sec) => (duration ? (100 * sec) / duration : 0);
+
+  function draw() {
+    if (!duration) {
+      times.textContent = t('edTrimLoading');
+      box.classList.add('loading');
+      return;
+    }
+    box.classList.remove('loading');
+    const { s, e, toEnd } = ends();
+    range.style.left = `${pct(s)}%`;
+    range.style.width = `${pct(e) - pct(s)}%`;
+    left.style.left = `${pct(s)}%`;
+    right.style.left = `${pct(e)}%`;
+    for (const [el, v] of [
+      [left, s],
+      [right, e],
+    ]) {
+      el.setAttribute('aria-valuemin', '0');
+      el.setAttribute('aria-valuemax', String(round1(duration)));
+      el.setAttribute('aria-valuenow', String(round1(v)));
+      el.setAttribute('aria-valuetext', mss(v));
+    }
+    const whole = s === 0 && toEnd;
+    times.textContent = whole ? t('edTrimWhole', { total: mss(duration) }) : t('edTrimTimes', { from: mss(s), to: mss(e), len: lengthText(e - s) });
+    box.classList.toggle('trimmed', !whole);
+    tryBtn.disabled = false;
+  }
+
+  function store(s, e) {
+    s = round1(Math.min(Math.max(0, s), duration - TRIM_MIN));
+    e = round1(Math.min(Math.max(s + TRIM_MIN, e), duration));
+    const toEnd = e >= round1(duration) - 0.05;
+    set({ start: s, length: toEnd ? null : round1(e - s) });
+    draw();
+  }
+
+  // Dragging a handle with a finger or the mouse.
+  function drag(el, which) {
+    el.addEventListener('pointerdown', (ev) => {
+      if (disabled || !duration) return;
+      ev.preventDefault();
+      el.setPointerCapture(ev.pointerId);
+      el.focus();
+      const move = (e) => {
+        const r = track.getBoundingClientRect();
+        const at = duration * Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+        const { s, e: end } = ends();
+        if (which === 'start') store(Math.min(at, end - TRIM_MIN), end);
+        else store(s, Math.max(at, s + TRIM_MIN));
+      };
+      const up = () => {
+        el.removeEventListener('pointermove', move);
+        el.removeEventListener('pointerup', up);
+        el.removeEventListener('pointercancel', up);
+      };
+      el.addEventListener('pointermove', move);
+      el.addEventListener('pointerup', up);
+      el.addEventListener('pointercancel', up);
+      move(ev);
+    });
+    // Arrow keys move half a second, Page Up/Down five, Home/End to the ends.
+    el.addEventListener('keydown', (ev) => {
+      if (disabled || !duration) return;
+      const steps = { ArrowLeft: -TRIM_STEP, ArrowDown: -TRIM_STEP, ArrowRight: TRIM_STEP, ArrowUp: TRIM_STEP, PageDown: -TRIM_BIG_STEP, PageUp: TRIM_BIG_STEP };
+      const { s, e } = ends();
+      let next;
+      if (ev.key in steps) next = (which === 'start' ? s : e) + steps[ev.key];
+      else if (ev.key === 'Home') next = which === 'start' ? 0 : s + TRIM_MIN;
+      else if (ev.key === 'End') next = which === 'start' ? e - TRIM_MIN : duration;
+      else return;
+      ev.preventDefault();
+      if (which === 'start') store(Math.min(next, e - TRIM_MIN), e);
+      else store(s, Math.max(next, s + TRIM_MIN));
+    });
+  }
+  drag(left, 'start');
+  drag(right, 'end');
+
+  // "Try it": the chosen part only, with a playhead moving across the track. Pressed again, it stops.
+  function stopTry() {
+    trying = false;
+    cancelAnimationFrame(raf);
+    playhead.hidden = true;
+    tryBtn.textContent = t('edTrimTry');
+    box.classList.remove('trying');
+    if (!audio.paused) audio.pause();
+  }
+  function tick() {
+    if (!trying) return;
+    const { e } = ends();
+    playhead.style.left = `${pct(Math.min(audio.currentTime, e))}%`;
+    if (audio.currentTime >= e - 0.02 || audio.paused || audio.ended) return stopTry();
+    raf = requestAnimationFrame(tick);
+  }
+  tryBtn.addEventListener('click', () => {
+    if (trying) return stopTry();
+    const { s } = ends();
+    trying = true;
+    try {
+      audio.currentTime = s;
+    } catch {}
+    playhead.style.left = `${pct(s)}%`;
+    playhead.hidden = false;
+    tryBtn.textContent = t('edTrimStop');
+    box.classList.add('trying');
+    audio.play().then(() => tick()).catch(stopTry);
+  });
+  audio.addEventListener('pause', () => trying && audio.currentTime < ends().e - 0.02 && stopTry());
+
+  const ready = () => {
+    duration = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : 0;
+    draw();
+  };
+  if (!duration) audio.addEventListener('loadedmetadata', ready, { once: true });
+  audio.addEventListener('durationchange', ready);
+  draw();
+  return box;
+}
 
 // A starting point for the search from the question's text: the first words, without the question mark.
 function suggestQuery(text) {
@@ -1515,7 +2227,7 @@ function openPictureDialog({ query = '', onPick }) {
 
   fill(
     form,
-    h('h2', {}, t('picTitle')),
+    dialogHead(dialog, t('picTitle')),
     h('p', { class: 'muted pic-intro' }, t('picIntro')),
     h(
       'div',
@@ -1547,6 +2259,176 @@ function openPictureDialog({ query = '', onPick }) {
   );
   queryInput.id = 'pic-query';
   drawLicense();
+  dialog.showModal();
+  queryInput.focus();
+  queryInput.select();
+}
+
+// ----- "Find a song clip" (Deezer's 30-second previews, songs.js) -----
+
+const SONG_ERRORS = { 'no-internet': 'songErrOffline', 'rate-limited': 'songErrRate', 'song-too-big': 'songErrTooBig', 'song-bad-type': 'songErrType', 'song-missing': 'songErrMissing' };
+const songError = (err) => t(navigator.onLine === false ? 'songErrOffline' : (SONG_ERRORS[err?.code] ?? 'songErrFailed'));
+
+function openSongDialog({ query = '', onPick }) {
+  const dialog = $('#song-dialog');
+  const form = $('#song-form');
+  const st = { words: '', results: [], page: 1, more: false, token: 0 };
+  // One preview plays at a time, straight from Deezer (only while the dialog is open; nothing is kept).
+  const player = new Audio();
+  player.preload = 'none';
+  let playing = null; // the result whose preview plays
+
+  const queryInput = h('input', {
+    type: 'search',
+    name: 'songQuery',
+    maxlength: 200,
+    autocomplete: 'off',
+    placeholder: t('songQueryPlaceholder'),
+    'aria-label': t('songQueryLabel'),
+    onkeydown: (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault(); // the form is method=dialog: Enter would close it
+      search();
+    },
+  });
+  queryInput.value = query;
+  const goBtn = h('button', { class: 'btn btn-primary song-go', type: 'button', onclick: () => search() }, t('songGo'));
+  const status = h('p', { class: 'pic-status song-status', role: 'status', 'aria-live': 'polite' });
+  const body = h('div', { class: 'song-body' });
+  const moreBtn = h('button', { class: 'btn song-more', type: 'button', hidden: true, onclick: () => search({ more: true }) }, t('songMore'));
+
+  const say = (text, bad = false) => {
+    status.textContent = text;
+    status.classList.toggle('bad', bad);
+    status.setAttribute('role', bad ? 'alert' : 'status');
+  };
+
+  function stopPreview() {
+    playing = null;
+    player.pause();
+    for (const b of body.querySelectorAll('.song-play.on')) {
+      b.classList.remove('on');
+      b.setAttribute('aria-label', t('songPlay', { title: b.dataset.title }));
+      b.textContent = '▶';
+    }
+  }
+  function togglePreview(r, btn) {
+    if (playing === r.id) return stopPreview();
+    stopPreview();
+    playing = r.id;
+    btn.classList.add('on');
+    btn.setAttribute('aria-label', t('songStop'));
+    btn.textContent = '■';
+    player.src = r.preview;
+    player.currentTime = 0;
+    player.play().catch(stopPreview);
+  }
+  player.addEventListener('ended', stopPreview);
+  player.addEventListener('error', stopPreview);
+
+  async function search({ more = false } = {}) {
+    const words = queryInput.value.replace(/\s+/g, ' ').trim();
+    if (!words) return queryInput.focus();
+    const token = ++st.token;
+    if (!more) {
+      stopPreview();
+      st.words = words;
+      st.results = [];
+      st.page = 1;
+      st.more = false;
+      drawResults();
+    }
+    if (navigator.onLine === false) return say(t('songErrOffline'), true);
+    say(t('songSearching'));
+    moreBtn.disabled = true;
+    goBtn.disabled = true;
+    const page = more ? st.page + 1 : 1;
+    try {
+      const params = new URLSearchParams({ q: st.words, page: String(page) });
+      const out = await call('GET', `/api/songs/search?${params}`);
+      if (token !== st.token) return;
+      const seen = new Set(st.results.map((r) => r.id));
+      st.results.push(...out.results.filter((r) => !seen.has(r.id)));
+      st.page = out.page;
+      st.more = out.more;
+      say(st.results.length ? '' : t('songNone'));
+      drawResults();
+    } catch (err) {
+      if (token !== st.token) return;
+      say(songError(err), true);
+    } finally {
+      if (token === st.token) {
+        goBtn.disabled = false;
+        moreBtn.disabled = false;
+      }
+    }
+  }
+
+  async function use(r, row, useBtn, useStatus) {
+    stopPreview();
+    useBtn.disabled = true;
+    row.classList.add('busy');
+    useStatus.classList.remove('bad');
+    useStatus.textContent = t('songAdding');
+    try {
+      const got = await call('POST', '/api/songs/fetch', { id: r.id });
+      dialog.close();
+      onPick(got);
+    } catch (err) {
+      useStatus.classList.add('bad');
+      useStatus.textContent = songError(err);
+      useBtn.disabled = false;
+      row.classList.remove('busy');
+    }
+  }
+
+  function drawResults() {
+    moreBtn.hidden = !st.more;
+    fill(
+      body,
+      st.results.length
+        ? h(
+            'ul',
+            { class: 'song-list' },
+            st.results.map((r) => {
+              const playBtn = h('button', { class: 'song-play', type: 'button', 'data-title': r.title, 'aria-label': t('songPlay', { title: r.title }), onclick: () => togglePreview(r, playBtn) }, '▶');
+              const useBtn = h('button', { class: 'btn song-use', type: 'button' }, t('songUse'));
+              const useStatus = h('span', { class: 'song-use-status', role: 'alert' });
+              const row = h(
+                'li',
+                { class: 'song-row', 'data-id': String(r.id) },
+                r.cover ? h('img', { class: 'song-cover', src: r.cover, referrerpolicy: 'no-referrer', loading: 'lazy', decoding: 'async', alt: '' }) : h('span', { class: 'song-cover song-cover-none', 'aria-hidden': 'true' }, '♪'),
+                h(
+                  'span',
+                  { class: 'song-info' },
+                  h('b', { class: 'song-title' }, r.title),
+                  h('span', { class: 'song-artist' }, r.artist || t('songUnknownArtist'), r.album ? ` · ${r.album}` : ''),
+                  h('span', { class: 'song-facts muted' }, r.duration ? `${mss(r.duration)} · ` : '', t('songPreviewLength')),
+                  useStatus,
+                ),
+                playBtn,
+                useBtn,
+              );
+              useBtn.addEventListener('click', () => use(r, row, useBtn, useStatus));
+              return row;
+            }),
+          )
+        : null,
+    );
+  }
+
+  fill(
+    form,
+    dialogHead(dialog, t('songTitle')),
+    h('p', { class: 'muted pic-intro song-intro' }, t('songIntro')),
+    h('div', { class: 'pic-controls song-controls' }, h('label', { class: 'pic-row-label', for: 'song-query' }, t('songQueryLabel')), h('div', { class: 'pic-search' }, queryInput, goBtn)),
+    status,
+    body,
+    moreBtn,
+    h('div', { class: 'ed-dialog-actions' }, h('button', { class: 'btn btn-quiet', value: 'cancel' }, t('aiCancel'))),
+  );
+  queryInput.id = 'song-query';
+  dialog.addEventListener('close', stopPreview, { once: true });
   dialog.showModal();
   queryInput.focus();
   queryInput.select();
@@ -1585,7 +2467,7 @@ function openAiDialog() {
     const n = splitTopics(aiOpts.topics).length;
     const most = isQuickKind() ? aiOpts.sections : aiOpts.categories;
     tooMany.textContent = n > most ? t('aiTooManyTopics', { n: most }) : '';
-    topicsHint.textContent = isQuickKind() ? t('aiTopicsHintQuick') : t('aiTopicsHint');
+    topicsHint.textContent = isQuickKind() ? (aiOpts.sections === 1 ? t('aiTopicsHintQuickOne') : t('aiTopicsHintQuick', { n: aiOpts.sections })) : t('aiTopicsHint', { n: aiOpts.categories });
     makeBtn.textContent = isQuickKind() ? t('aiMakeQuick') : t('aiFill');
   }
   // A board quiz or a Quick quiz: each has its own size settings.
@@ -1658,16 +2540,17 @@ function openAiDialog() {
     }
     await saveNow();
     const { id } = await call('POST', '/api/sets', { set: made.set });
-    aiNote = { id, duplicates: made.duplicates };
+    aiNote = { id, duplicates: made.duplicates, summary: made.summary };
     reply.value = '';
     dialog.close();
     await loadList();
     await select(id);
   }
 
+  // The kind and size come first: how many categories or sections there are decides how many topics to write.
   fill(
     form,
-    h('h2', {}, t('aiTitle')),
+    dialogHead(dialog, t('aiTitle')),
     h('p', { class: 'muted' }, t('aiIntro')),
     h(
       'div',
@@ -1683,6 +2566,8 @@ function openAiDialog() {
           ].map(([value, label]) => h('option', { value, selected: aiOpts.kind === value }, label)),
         ),
       ),
+      boardPart,
+      quickPart,
     ),
     h('h3', {}, t('aiStep1')),
     h(
@@ -1691,15 +2576,13 @@ function openAiDialog() {
       h('div', { class: 'ai-topics' }, h('label', { class: 'field' }, h('span', {}, t('aiTopics')), text('topics', 4), topicsHint), tooMany),
       field(t('aiExamples'), text('examples', 4), t('aiExamplesHint')),
     ),
+    round2Box,
     h(
       'div',
       { class: 'ai-opts' },
       field(t('aiDifficulty'), choice('difficulty', DIFFICULTIES.map((d) => [d, t(`aiLevel-${d}`)]))),
       field(t('aiLang'), choice('lang', [['en', 'English'], ['no', 'Norsk']])),
-      boardPart,
-      quickPart,
     ),
-    round2Box,
     h('h3', {}, t('aiStep2')),
     request,
     h('div', { class: 'row' }, h('button', { class: 'btn btn-primary ai-copy', type: 'button', onclick: copy }, t('aiCopy')), copied),
@@ -1724,12 +2607,16 @@ $('#ai-quiz').addEventListener('click', openAiDialog);
 
 // ----- filling only the empty spots of the open quiz with AI -----
 
-const fillOpts = { difficulty: 'match', topics: '', lang: null };
+const fillOpts = { difficulty: 'match', topics: '', lang: null, target: 0 };
 
+// Works for both kinds: a board's tiles, or a Quick quiz's questions (plus "fill each section up to N questions",
+// which adds new questions at the end of the shorter sections).
 function openFillDialog() {
   const dialog = $('#ai-dialog');
   const form = $('#ai-form');
-  const gaps = gapsOf(set);
+  const isQuick = quick();
+  fillOpts.target = isQuick ? suggestedTarget(set) : 0;
+  let gaps = gapsOf(set, fillOpts);
   fillOpts.lang = guessLanguage(set) ?? fillOpts.lang ?? getLang();
   const field = (label, input, hint) => h('label', { class: 'field' }, h('span', {}, label), input, hint ? h('small', {}, hint) : null);
   const choice = (name, options) =>
@@ -1744,23 +2631,55 @@ function openFillDialog() {
   const error = h('p', { id: 'ai-error', class: 'ed-media-status bad', role: 'alert' });
   const topics = h('textarea', { name: 'topics', rows: 3, oninput: (e) => update('topics', e.target.value) });
   topics.value = fillOpts.topics;
+  const target = h('input', {
+    type: 'number',
+    name: 'target',
+    min: 1,
+    max: MAX_SECTION_QUESTIONS,
+    step: 1,
+    value: fillOpts.target,
+    oninput: (e) => {
+      const n = Math.round(Number(e.target.value));
+      update('target', Number.isFinite(n) && e.target.value.trim() !== '' ? Math.max(0, Math.min(MAX_SECTION_QUESTIONS, n)) : 0);
+    },
+  });
+  const missingBox = h('div', { class: 'ai-gaps' });
+  const goBtn = h('button', { class: 'btn btn-primary ai-fill-gaps', type: 'button', onclick: fillGaps }, t('aiFillGo'));
   function update(key, value) {
     fillOpts[key] = value;
+    renderMissing();
     request.value = buildFillRequest(set, fillOpts);
   }
 
-  // Categories with nothing at all in them: only then are topics asked for.
-  const emptyCats = [...gaps.names.map((c) => set.categories[c]), ...gaps.names2.map((c) => set.round2.categories[c])].filter((cat) =>
-    cat.questions.every(isBlank),
-  ).length;
-  const count = (need) => gaps.tiles.filter((g) => g.need === need).length;
-  const missing = [
-    count('both') && t('aiGapBoth', { n: count('both') }),
-    count('answer') && t('aiGapAnswer', { n: count('answer') }),
-    count('question') && t('aiGapQuestion', { n: count('question') }),
-    gaps.names.length + gaps.names2.length && t('aiGapName', { n: gaps.names.length + gaps.names2.length }),
-    gaps.final && t('aiGapFinal'),
-  ].filter(Boolean);
+  // Categories (or sections) with nothing at all in them: only then are topics asked for.
+  const emptyCats = isQuick
+    ? gaps.names.map((c) => set.sections[c]).filter((sec) => sec.questions.every(isBlank)).length
+    : [...gaps.names.map((c) => set.categories[c]), ...gaps.names2.map((c) => set.round2.categories[c])].filter((cat) => cat.questions.every(isBlank)).length;
+
+  function renderMissing() {
+    gaps = gapsOf(set, fillOpts);
+    const count = (need) => (isQuick ? gaps.questions.filter((g) => g.need.includes(need) && (need === 'question' || !g.need.includes('question')) && (need !== 'correct' || !g.need.includes('options'))) : gaps.tiles.filter((g) => g.need === need)).length;
+    const lines = isQuick
+      ? [
+          count('question') && t('aiGapBoth', { n: count('question') }),
+          count('options') && t('aiGapOptions', { n: count('options') }),
+          count('correct') && t('aiGapCorrect', { n: count('correct') }),
+          gaps.names.length && t('aiGapSection', { n: gaps.names.length }),
+          gaps.extra && t('aiGapAdd', { n: gaps.extra }),
+        ]
+      : [
+          count('both') && t('aiGapBoth', { n: count('both') }),
+          count('answer') && t('aiGapAnswer', { n: count('answer') }),
+          count('question') && t('aiGapQuestion', { n: count('question') }),
+          gaps.names.length + gaps.names2.length && t('aiGapName', { n: gaps.names.length + gaps.names2.length }),
+          gaps.final && t('aiGapFinal'),
+        ];
+    fill(
+      missingBox,
+      gaps.count ? [h('p', {}, t('aiFillMissing')), h('ul', {}, lines.filter(Boolean).map((line) => h('li', {}, line)))] : h('p', {}, t(isQuick ? 'aiFillNothingQuick' : 'aiFillNothing')),
+    );
+    goBtn.disabled = !gaps.count;
+  }
 
   async function copy() {
     try {
@@ -1777,27 +2696,29 @@ function openFillDialog() {
     error.textContent = '';
     let made;
     try {
-      made = parseFill(reply.value, set);
+      made = parseFill(reply.value, set, fillOpts);
     } catch (err) {
       if (!(err instanceof AiQuizError)) throw err;
       error.textContent = t(`ai-${err.code}`);
       return;
     }
     set = made.set;
-    aiNote = { id: currentId, duplicates: made.duplicates, filled: new Set(made.filled), left: made.left };
+    aiNote = { id: currentId, duplicates: made.duplicates, filled: new Set(made.filled), added: made.added ?? 0, left: made.left, summary: made.summary };
     reply.value = '';
     dialog.close();
-    changed();
+    changed({ board: true });
     renderMain();
   }
 
+  renderMissing();
   const head = [
-    h('h2', {}, t('aiFillTitle')),
+    dialogHead(dialog, t('aiFillTitle')),
     h('p', { class: 'muted' }, t('aiFillIntro')),
-    gaps.count ? h('div', { class: 'ai-gaps' }, h('p', {}, t('aiFillMissing')), h('ul', {}, missing.map((line) => h('li', {}, line)))) : h('p', { class: 'ai-gaps' }, t('aiFillNothing')),
-    gaps.skipped ? h('p', { class: 'muted' }, t('aiFillSkipped', { n: gaps.skipped })) : null,
+    missingBox,
+    gaps.skipped ? h('p', { class: 'muted' }, t(isQuick ? 'aiFillSkippedQuick' : 'aiFillSkipped', { n: gaps.skipped })) : null,
   ];
-  if (!gaps.count) {
+  // A board with nothing missing has nothing to ask for; a Quick quiz can still be topped up with new questions.
+  if (!gaps.count && !isQuick) {
     fill(form, ...head, h('div', { class: 'ed-dialog-actions' }, h('button', { class: 'btn btn-primary', value: 'cancel' }, t('aiDismiss'))));
     dialog.showModal();
     return;
@@ -1811,8 +2732,9 @@ function openFillDialog() {
       { class: 'ai-opts' },
       field(t('aiDifficulty'), choice('difficulty', FILL_DIFFICULTIES.map((d) => [d, d === 'match' ? t('aiFillLevelMatch') : t(`aiLevel-${d}`)]))),
       field(t('aiLang'), choice('lang', [['en', 'English'], ['no', 'Norsk']])),
+      isQuick ? field(t('aiFillUpTo'), target, t('aiFillUpToHint', { max: MAX_SECTION_QUESTIONS })) : null,
     ),
-    emptyCats ? field(t('aiFillTopics'), topics, t('aiFillTopicsHint')) : null,
+    emptyCats ? field(t(isQuick ? 'aiFillTopicsQuick' : 'aiFillTopics'), topics, t('aiFillTopicsHint')) : null,
     h('h3', {}, t('aiStep2')),
     request,
     h('div', { class: 'row' }, h('button', { class: 'btn btn-primary ai-copy', type: 'button', onclick: copy }, t('aiCopy')), copied),
@@ -1820,12 +2742,7 @@ function openFillDialog() {
     reply,
     h('p', { class: 'ai-warn' }, t('aiWarn')),
     error,
-    h(
-      'div',
-      { class: 'ed-dialog-actions' },
-      h('button', { class: 'btn btn-quiet', value: 'cancel' }, t('aiCancel')),
-      h('button', { class: 'btn btn-primary ai-fill-gaps', type: 'button', onclick: fillGaps }, t('aiFillGo')),
-    ),
+    h('div', { class: 'ed-dialog-actions' }, h('button', { class: 'btn btn-quiet', value: 'cancel' }, t('aiCancel')), goBtn),
   );
   request.value = buildFillRequest(set, fillOpts);
   dialog.showModal();
@@ -1842,5 +2759,22 @@ window.addEventListener('beforeunload', () => saveTimer && saveNow());
   await loadList();
   const wanted = location.hash.slice(1);
   const first = quizzes.find((q) => q.id === wanted) ?? quizzes.find((q) => !q.builtIn) ?? quizzes[0];
-  if (first) select(first.id);
+  if (first) await select(first.id);
+  // The lobby's New quiz button opens /editor?new: straight to "What kind of quiz?" (the address is tidied first,
+  // so a reload doesn't ask again).
+  if (new URLSearchParams(location.search).has('new')) {
+    history.replaceState(null, '', location.pathname + location.hash);
+    newQuiz();
+  }
 })();
+
+// The small box icon on each quiz row: a box (Archive) or a box with an arrow up (Bring back).
+function archiveIcon(back) {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.innerHTML = back
+    ? '<rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8"/><path d="M12 17v-6m-3 3 3-3 3 3"/>'
+    : '<rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8"/><path d="M10 12h4"/>';
+  return svg;
+}

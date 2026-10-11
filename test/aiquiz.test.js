@@ -1,7 +1,7 @@
 // Making a quiz with AI: the request text, and reading messy pasted answers.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildRequest, parseReply, repairJson, splitTopics, AiQuizError, AI_ERRORS, DIFFICULTIES, gapsOf, guessLanguage, buildFillRequest, parseFill } from '../lib/aiquiz.js';
+import { buildRequest, parseReply, repairJson, splitTopics, AiQuizError, AI_ERRORS, DIFFICULTIES, gapsOf, guessLanguage, buildFillRequest, parseFill, quickGapsOf, suggestedTarget, isTrueFalse, summarizeQuick, looksLikeOrder, looksLikeMulti } from '../lib/aiquiz.js';
 import { validateSet } from '../lib/validate.js';
 import { STRINGS } from '../public/js/i18n.js';
 
@@ -330,10 +330,12 @@ test('the Quick quiz request asks for sections, options, the topics, level and l
   assert.match(text, /Exactly 3 sections with exactly 8 questions each/);
   assert.match(text, /"Film", "Musikk"/);
   assert.match(text, /add 1 more section of your own/);
-  assert.match(text, /exactly 4 options, and usually exactly one of them is right/);
-  assert.match(text, /"answer" is a list of all the right options/);
-  assert.match(text, /"tick all that are right" question: "type": "multi"/);
-  assert.match(text, /"put in order" question: "type": "order"/);
+  // Every question must say its type (the owner's first AI quiz came back without, 2026-10-11).
+  assert.match(text, /EVERY question has a "type": "choice", "multi", "order" or "any"\. Never leave it out/);
+  assert.match(text, /"choice" \(most questions\): exactly 4 options and exactly one of them is right/);
+  assert.match(text, /"any" \(rare, at most 1 in 10 questions\)[^\n]*"answer" is a list of all the right options/);
+  assert.match(text, /"multi" \(at most 1 in 5 questions\): "tick all that are right"/);
+  assert.match(text, /"order" \(at most 1 in 5 questions\): "put in order"/);
   assert.match(text, /Never say in the question how many options are right/);
   assert.match(text, /\["Sant", "Usant"\]/);
   assert.match(text, /Easy: things most adults know/);
@@ -341,10 +343,14 @@ test('the Quick quiz request asks for sections, options, the topics, level and l
   assert.doesNotMatch(text, /THE BOARD|final question/);
   // The format example reads back as a valid Quick quiz in the chosen language.
   const example = text.match(/```json\n([\s\S]*?)\n```/)[1];
-  const { set, problems } = parseReply('```json\n' + example + '\n```');
+  const { set, problems, summary } = parseReply('```json\n' + example + '\n```');
   assert.deepEqual(problems, []);
   assert.equal(set.kind, 'quick');
   assert.equal(set.sections[0].name, 'Dyr');
+  // Every question in the example carries a type, and the summary counts them.
+  assert.ok(JSON.parse(example).sections.every((sec) => sec.questions.every((q) => ['choice', 'multi', 'order', 'any'].includes(q.type))));
+  assert.deepEqual(summary, { questions: 6, choice: 4, multi: 1, order: 1, any: 0, suspects: [] });
+  assert.match(example, /"type": "choice", "options": \["Hest", "Ku", "Sau", "Gris"\], "answer": "Ku" \}/);
   assert.equal(set.sections[0].questions[0].correct, 1); // "Ku"
   assert.equal(set.sections[0].questions[0].type, undefined);
   assert.deepEqual(set.sections[0].questions[2], { question: 'Hvilke av disse er pattedyr?', type: 'multi', options: ['Hval', 'Hai', 'Flaggermus', 'Frosk'], correct: [0, 2] });
@@ -456,6 +462,99 @@ test('a Quick quiz reply with "tick all" and "put in order" questions: types and
   assert.deepEqual(duplicates, []); // the items of an order question aren't answers that can repeat
 });
 
+// The owner's first real AI quiz (2026-10-11): ChatGPT left "type" out of every question, so the "tick all" questions
+// came in as pick-one with several right answers and the "put in order" question as pick-one with the first option
+// right. Without a type, the wording decides.
+test('a Quick quiz reply without types (the owner\'s case, Norwegian): "hvilke av disse" lists become "tick all", "sorter" becomes "put in order"', () => {
+  const reply = {
+    title: 'AI quiz',
+    sections: [
+      {
+        name: 'Barndommens helter',
+        questions: [
+          { question: 'Hvem skrev «Folk og røvere i Kardemomme by»?', options: ['Alf Prøysen', 'Thorbjørn Egner', 'Anne-Cath. Vestly', 'Astrid Lindgren'], answer: 'Thorbjørn Egner' },
+          { question: 'Teskjekjerringa ble skapt av Alf Prøysen.', options: ['Sant', 'Usant'], answer: 'Sant' },
+          { question: 'Sorter disse Disney-filmene fra eldst til nyest.', options: ['Snøhvit og de syv dvergene', 'Den lille havfruen', 'Løvenes konge', 'Frost'], answer: 'Snøhvit og de syv dvergene' },
+          { question: 'Hva heter hunden til Tintin?', options: ['Pluto', 'Milou', 'Snoopy', 'Terry'], answer: ['Milou', 'Terry'] }, // the AI's mistake: two right, no plural wording → any counts, as before
+        ],
+      },
+      {
+        name: 'Ut i det fri',
+        questions: [
+          { question: 'Hvilke av disse dyrene er pattedyr?', options: ['Hval', 'Pingvin', 'Flaggermus', 'Hai'], answer: ['Hval', 'Flaggermus'] },
+          { question: 'Hvilke av disse landene grenser til Brasil?', options: ['Argentina', 'Chile', 'Peru', 'Ecuador'], answer: ['Argentina', 'Peru'] },
+          { question: 'Hvilken fugl ble kåret til Norges nasjonalfugl?', options: ['Fossekall', 'Kongeørn', 'Lirype', 'Havørn'], answer: 'Fossekall' },
+          { question: 'Sett disse elvene i rekkefølge, fra lengst til kortest.', options: ['Glomma', 'Tana', 'Numedalslågen'], answer: ['Glomma', 'Tana', 'Numedalslågen'] },
+          { question: 'Ranger planetene fra minst til størst.', options: ['Jorda', 'Mars', 'Merkur'], answer: ['Merkur', 'Mars', 'Jorda'] }, // the order given: options put in it
+          { question: 'Hvilke av disse er hovedsteder?', options: ['Oslo', 'Bergen', 'Stockholm', 'Göteborg'], answer: 'Oslo' }, // plural wording but one right: stays pick one, flagged
+        ],
+      },
+    ],
+  };
+  const { set, problems, summary } = parseReply(JSON.stringify(reply), { kind: 'quick' });
+  const [a, b] = set.sections;
+  assert.deepEqual(a.questions.map((q) => [q.type, q.correct]), [[undefined, 1], [undefined, 0], ['order', undefined], [undefined, [1, 3]]]);
+  assert.deepEqual(a.questions[2].options, ['Snøhvit og de syv dvergene', 'Den lille havfruen', 'Løvenes konge', 'Frost']); // as written
+  assert.deepEqual(b.questions.map((q) => [q.type, q.correct]), [['multi', [0, 2]], ['multi', [0, 2]], [undefined, 0], ['order', undefined], ['order', undefined], [undefined, 0]]);
+  assert.deepEqual(b.questions[4].options, ['Merkur', 'Mars', 'Jorda']);
+  assert.deepEqual(problems, []);
+  assert.deepEqual(summary, { questions: 10, choice: 4, multi: 2, order: 3, any: 1, suspects: [{ c: 1, i: 5, looks: 'multi', question: 'Hvilke av disse er hovedsteder?' }] });
+});
+
+test('a Quick quiz reply without types (English): sorting words, plural lists, "any"/"either", and explicit types are never changed', () => {
+  const reply = {
+    title: 'No types',
+    sections: [
+      {
+        name: 'S',
+        questions: [
+          { question: 'Which of these are mammals?', options: ['Whale', 'Shark', 'Bat', 'Frog'], answer: ['Whale', 'Bat'] },
+          { question: 'Which animals were on the Ark?', options: ['Lions', 'Dragons', 'Doves', 'Unicorns'], answers: ['Lions', 'Doves'] },
+          { question: 'Select all the prime numbers.', options: ['2', '4', '7', '9'], answer: ['2', '7'] },
+          { question: 'Put these in order, oldest to newest.', options: ['Colosseum', 'Pyramids', 'Eiffel Tower'], answer: ['Pyramids', 'Colosseum', 'Eiffel Tower'] },
+          { question: 'Arrange the planets from smallest to largest.', options: ['Mercury', 'Mars', 'Earth'] },
+          { question: 'Rank these mountains by height, highest first.', options: ['Everest', 'K2', 'Kilimanjaro'], answer: 'Everest' }, // one answer: still order, options as written
+          { question: 'Which river flows from west to east?', options: ['Nile', 'Thames', 'Amazon', 'Rhine'], answer: 'Amazon' }, // "from … to" alone isn't sorting
+          { question: 'Which is a colour?', options: ['Red', 'Table', 'Green', 'Chair'], answer: ['Red', 'Green'] }, // a list without plural wording: any counts
+          { question: 'Either works here', type: 'any', options: ['a', 'b', 'c', 'd'], answer: ['a', 'b'] },
+          { question: 'Either works here too', type: 'either', options: ['e', 'f', 'g', 'k'], answer: ['e', 'k'] },
+          { question: 'Which of these are mammals? (but the AI said choice)', type: 'choice', options: ['Cat', 'Shark', 'Dog', 'Frog'], answer: ['Cat', 'Dog'] },
+          { question: 'Sort these, but the AI said multi', type: 'multi', options: ['x', 'y', 'z', 'w'], answer: ['x', 'y'] },
+          { question: 'Just a normal question?', type: 'single choice', options: ['p', 'q', 'r', 's'], answer: 'q' },
+        ],
+      },
+    ],
+  };
+  const { set, summary } = parseReply(JSON.stringify(reply), { kind: 'quick' });
+  const qs = set.sections[0].questions;
+  assert.deepEqual(qs.map((q) => [q.type, q.correct]), [
+    ['multi', [0, 2]],
+    ['multi', [0, 2]],
+    ['multi', [0, 2]],
+    ['order', undefined],
+    ['order', undefined],
+    ['order', undefined],
+    [undefined, 2],
+    [undefined, [0, 2]],
+    [undefined, [0, 1]],
+    [undefined, [0, 3]],
+    [undefined, [0, 2]], // explicit "choice" is kept (and flagged below)
+    ['multi', [0, 1]], // explicit "multi" is kept
+    [undefined, 1],
+  ]);
+  assert.deepEqual(qs[3].options, ['Pyramids', 'Colosseum', 'Eiffel Tower']);
+  assert.deepEqual(qs[5].options, ['Everest', 'K2', 'Kilimanjaro']);
+  assert.deepEqual(summary.suspects, [{ c: 0, i: 10, looks: 'multi', question: 'Which of these are mammals? (but the AI said choice)' }]);
+  assert.deepEqual([summary.questions, summary.choice, summary.multi, summary.order, summary.any], [13, 2, 4, 3, 4]);
+  // The wording checks on their own.
+  assert.ok(looksLikeOrder('Sorter disse fra eldst til nyest.') && looksLikeOrder('Put these in chronological order') && looksLikeOrder('From first to last:') && looksLikeOrder('Sett dem i riktig rekkefølge'));
+  assert.ok(!looksLikeOrder('Which river flows from west to east?') && !looksLikeOrder('What is the border of Spain?') && !looksLikeOrder('Hvem var den første på månen?'));
+  assert.ok(looksLikeMulti('Hvilke av disse er frukt?') && looksLikeMulti('Which of these are fruits?') && looksLikeMulti('Tick all that apply') && looksLikeMulti('Kryss av alle som er riktige'));
+  assert.ok(!looksLikeMulti('Which of these is a fruit?') && !looksLikeMulti('Hvilken av disse er en frukt?') && !looksLikeMulti('What is the capital of Peru?'));
+  // A summary of a quiz straight from the editor's own shape.
+  assert.deepEqual(summarizeQuick({ sections: [{ name: 'A', questions: [{ question: 'Order these', type: 'order', options: ['a', 'b', 'c'] }, { question: 'Q?', options: ['a', 'b'], correct: [0, 1] }] }] }), { questions: 2, choice: 0, multi: 0, order: 1, any: 1, suspects: [] });
+});
+
 test('Quick quiz replies: kind, duplicates, and what is not a Quick quiz', () => {
   const sections = [{ name: 'A', questions: [{ question: 'Q1?', options: ['x', 'Oslo', 'y', 'z'], answer: 'Oslo' }, { question: 'Q2?', options: ['Oslo', 'b', 'c', 'd'], answer: 'Oslo' }, { question: 'Q3?', options: ['True', 'False'], answer: 'True' }, { question: 'Q4?', options: ['True', 'False'], answer: 'True' }] }];
   // A reply with both a board and sections is read as what was asked for.
@@ -469,4 +568,361 @@ test('Quick quiz replies: kind, duplicates, and what is not a Quick quiz', () =>
   fails('{"title": "x", "sections": []}', 'not-a-quiz');
   // A board reply in the Quick quiz dialog stays a board (the editor shows it as one).
   assert.ok(parseReply(JSON.stringify(quiz()), { kind: 'quick' }).set.categories);
+});
+
+// ----- filling the empty spots of a Quick quiz -----
+
+// A Quick quiz someone has started on: a full section, one with holes, and an empty one.
+function startedQuick() {
+  return {
+    v: 1,
+    kind: 'quick',
+    title: 'Fredagens lynquiz',
+    sections: [
+      {
+        name: 'Dyr',
+        seconds: 15,
+        questions: [
+          { question: 'Hvilket dyr sier mø?', options: ['Hest', 'Ku', 'Sau', 'Gris'], correct: 1 },
+          { question: 'Hvor mange bein har en edderkopp?', options: ['Seks', 'Åtte'], correct: 1 }, // 2 options, not true or false
+          { question: 'Hvilke av disse er pattedyr?', type: 'multi', options: ['Hval', 'Hai', 'Flaggermus', 'Frosk'] }, // nothing marked
+          { question: 'Sant eller usant: Sola er en stjerne.', options: ['Sant', 'Usant'], correct: 0 }, // complete
+          { question: '', options: [] },
+        ],
+      },
+      {
+        name: '',
+        questions: [
+          { question: '', options: [], image: 'abc.png' }, // the AI can't see it
+          { question: 'Sett disse i rekkefølge, fra eldst til nyest.', type: 'order', options: ['Colosseum', 'Eiffeltårnet'] },
+          { question: 'Hva heter Norges hovedstad?', options: ['Bergen', 'Oslo', 'Trondheim', 'Tromsø'], points: 2000 }, // no right answer marked
+        ],
+      },
+      { name: '', questions: [{ question: '', options: [] }] },
+    ],
+  };
+}
+
+test('quick fill: finds every kind of gap, keeps true-or-false questions, and tops sections up to the target', () => {
+  const set = startedQuick();
+  const gaps = gapsOf(set);
+  assert.deepEqual(gaps.questions, [
+    { c: 0, i: 1, need: ['options'] },
+    { c: 0, i: 2, need: ['correct'] },
+    { c: 0, i: 4, need: ['question', 'options', 'correct'] },
+    { c: 1, i: 1, need: ['options'] },
+    { c: 1, i: 2, need: ['correct'] },
+    { c: 2, i: 0, need: ['question', 'options', 'correct'] },
+  ]);
+  assert.deepEqual(gaps.names, [1, 2]);
+  assert.deepEqual(gaps.toAdd, []);
+  assert.equal(gaps.skipped, 1);
+  assert.equal(gaps.count, 8);
+  assert.equal(guessLanguage(set), 'no');
+  // The target adds questions at the end of the shorter sections (never past 30).
+  assert.equal(suggestedTarget(set), 5);
+  assert.equal(suggestedTarget({ kind: 'quick', sections: [{ name: '', questions: Array(12).fill({ question: '', options: [] }) }] }), 12);
+  const topped = quickGapsOf(set, { target: 6 });
+  assert.deepEqual(topped.toAdd, [{ c: 0, n: 1 }, { c: 1, n: 3 }, { c: 2, n: 5 }]);
+  assert.equal(topped.extra, 9);
+  assert.equal(topped.count, 17);
+  assert.equal(quickGapsOf(set, { target: 99 }).toAdd[2].n, 29);
+  // True or false by the words, or by the question; "Seks"/"Åtte" is not.
+  assert.equal(isTrueFalse({ question: 'Is it?', options: ['Yes', 'No'] }), true);
+  assert.equal(isTrueFalse({ question: 'True or false: cats purr.', options: ['Purr', 'Hiss'] }), true);
+  assert.equal(isTrueFalse(set.sections[0].questions[1]), false);
+  assert.equal(isTrueFalse({ question: 'x', options: ['True', 'False', 'Maybe'] }), false);
+  // A marked option that is empty doesn't count as a right answer.
+  assert.deepEqual(quickGapsOf({ kind: 'quick', sections: [{ name: 'A', questions: [{ question: 'Q', options: ['a', 'b', 'c', ''], correct: 3 }] }] }).questions, [{ c: 0, i: 0, need: ['options', 'correct'] }]);
+});
+
+test('quick fill: the request shows the quiz so far with "" for the gaps, and says what to fill', () => {
+  const set = startedQuick();
+  const text = buildFillRequest(set, { target: 5, topics: 'Fotball' });
+  assert.match(text, /multiple-choice quiz for ProQuiz/);
+  const sketch = JSON.parse(text.match(/```json\n([\s\S]*?)\n```/)[1]);
+  // Every question shows its type (a blank one an empty type to fill in, a pick-one with several right options "any").
+  assert.deepEqual(sketch.sections[0].questions[0], { question: 'Hvilket dyr sier mø?', type: 'choice', options: ['Hest', 'Ku', 'Sau', 'Gris'], answer: 'Ku' });
+  assert.deepEqual(sketch.sections[0].questions[1], { question: 'Hvor mange bein har en edderkopp?', type: 'choice', options: ['Seks', 'Åtte', '', ''], answer: 'Åtte' });
+  assert.deepEqual(sketch.sections[0].questions[2], { question: 'Hvilke av disse er pattedyr?', type: 'multi', options: ['Hval', 'Hai', 'Flaggermus', 'Frosk'], answer: '' });
+  assert.deepEqual(sketch.sections[0].questions[3].options, ['Sant', 'Usant']); // true or false is complete with 2
+  assert.deepEqual(sketch.sections[0].questions[4], { question: '', type: '', options: ['', '', '', ''], answer: '' });
+  assert.deepEqual(sketch.sections[1].questions[0], { question: '[picture]', type: 'choice', options: [], answer: '[keep]' });
+  const anyQ = { ...set, sections: [{ name: 'A', questions: [{ question: 'Q?', options: ['a', 'b', 'c', 'd'], correct: [0, 2] }] }] };
+  assert.deepEqual(JSON.parse(buildFillRequest(anyQ).match(/```json\n([\s\S]*?)\n```/)[1]).sections[0].questions[0], { question: 'Q?', type: 'any', options: ['a', 'b', 'c', 'd'], answer: ['a', 'c'] });
+  assert.match(text, /\{ "question": "", "type": "", "options": \["", "", "", ""\], "answer": "" \}/); // still one line each
+  assert.deepEqual(sketch.sections[1].questions[1], { question: 'Sett disse i rekkefølge, fra eldst til nyest.', type: 'order', options: ['Colosseum', 'Eiffeltårnet', '', ''] });
+  assert.equal(sketch.sections[1].questions.length, 5); // topped up to 5 with empty questions
+  assert.equal(sketch.sections[2].questions.length, 5);
+  assert.ok(!JSON.stringify(sketch).includes('seconds') && !JSON.stringify(sketch).includes('points')); // times and points are not the AI's business
+  assert.match(text, /8 empty questions need a question, its "type", its options and the "answer"/);
+  assert.match(text, /6 of them are new questions at the end of their sections/);
+  assert.match(text, /2 questions need the missing options/);
+  assert.match(text, /"put in order" question with empty places/);
+  assert.match(text, /2 questions need their "answer"/);
+  assert.match(text, /1 section has questions but no name/);
+  assert.match(text, /1 section is completely empty. Use these topics for them, in order: "Fotball"/);
+  assert.match(text, /"\[keep\]" is an answer to leave alone/);
+  assert.match(text, /Norwegian \(bokmål\), like the rest/);
+  assert.match(text, /match the questions that are already there/);
+  assert.match(text, /\["Sant", "Usant"\]/);
+  assert.match(text, /Never say in the question how many options are right/);
+  assert.match(text, /EVERY question has a "type"/);
+  assert.doesNotMatch(text, /THE BOARD|final|"value"/);
+  // No target: nothing is added, and a chosen level and language win.
+  const plain = buildFillRequest(set, { difficulty: 'kids', lang: 'en' });
+  assert.doesNotMatch(plain, /new questions at the end/);
+  assert.match(plain, /2 empty questions need/);
+  assert.match(plain, /children aged 5 to 9[\s\S]*in English[\s\S]*\["True", "False"\]/);
+  // Only a top-up, nothing else missing.
+  const full = { kind: 'quick', title: 'T', sections: [{ name: 'A', questions: [{ question: 'Q?', options: ['a', 'b', 'c', 'd'], correct: 0 }] }] };
+  assert.match(buildFillRequest(full, { target: 3 }), /2 empty questions need[\s\S]*2 of them are new questions at the end of a section/);
+  assert.match(buildFillRequest({ ...full, title: '' }), /needs a short, fun "title"/);
+});
+
+test('quick fill: only the gaps are filled, new questions are added, and nothing that was there changes', () => {
+  const set = startedQuick();
+  const q = (question, options, answer, more = {}) => ({ question, options, answer, ...more });
+  const reply = {
+    title: 'Ny tittel',
+    sections: [
+      // Moved to the front, and with changes it shouldn't have made: those are ignored.
+      {
+        name: 'Hovedsteder',
+        questions: [
+          q('[picture]', [], '[keep]'),
+          q('Sett disse i rekkefølge, fra eldst til nyest.', ['Pyramidene i Giza', 'Colosseum', 'Eiffeltårnet', 'Operaen i Oslo'], undefined, { type: 'order' }),
+          q('Hva heter Norges hovedstad?', ['Bergen', 'Oslo', 'Trondheim', 'Tromsø'], 'Oslo'),
+          q('Hva heter Sveriges hovedstad?', ['Göteborg', 'Malmö', 'Stockholm', 'Uppsala'], 'Stockholm'),
+          q('Hvilke av disse er hovedsteder?', ['Helsinki', 'Hamburg', 'Dublin', 'Milano'], ['Helsinki', 'Dublin'], { type: 'multi' }),
+        ],
+      },
+      {
+        name: 'Dyr',
+        questions: [
+          q('Endret spørsmål', ['Hund', 'Ku', 'Sau', 'Gris'], 'Gris'),
+          q('Hvor mange bein har en edderkopp?', ['Seks', 'Åtte', 'Ti', 'Tolv'], 'Seks'), // the wrong "answer" is ignored: one was marked
+          q('Hvilke av disse er pattedyr?', ['Hval', 'Hai', 'Flaggermus', 'Frosk'], ['Hval', 'Flaggermus'], { type: 'multi' }),
+          q('Sant eller usant: Sola er en stjerne.', ['Sant', 'Usant'], 'Usant'),
+          q('Hvilket dyr har snabel?', ['Elefant', 'Sjiraff', 'Neshorn', 'Flodhest'], 'Elefant'),
+          q('For mange', ['a', 'b', 'c', 'd'], 'a'), // past the target: not added
+        ],
+      },
+      {
+        name: 'Fotball',
+        questions: [
+          q('Hvor mange spillere har et lag på banen?', ['Ni', 'Ti', 'Elleve', 'Tolv'], 'Elleve'),
+          q('Sant eller usant: Et VM spilles hvert fjerde år.', ['Sant', 'Usant'], 'Sant'),
+          q('Sett disse i rekkefølge, fra færrest til flest VM-titler.', ['England', 'Tyskland', 'Brasil'], undefined, { type: 'order' }),
+          q('', ['x', 'y', 'z', 'w'], 'x'), // no question: not added
+          q('Etter en tom', ['x', 'y', 'z', 'w'], 'x'), // after a gap: not added either
+        ],
+      },
+    ],
+  };
+  const made = parseFill('Her er den:\n```json\n' + JSON.stringify(reply) + '\n```', set, { target: 5 });
+  const out = made.set;
+  assert.equal(out.title, 'Fredagens lynquiz');
+  assert.equal(out.sections[0].seconds, 15);
+  assert.deepEqual(out.sections[0].questions[0], set.sections[0].questions[0]); // untouched
+  assert.deepEqual(out.sections[0].questions[1], { question: 'Hvor mange bein har en edderkopp?', options: ['Seks', 'Åtte', 'Ti', 'Tolv'], correct: 1 }); // options added, the mark kept
+  assert.deepEqual(out.sections[0].questions[2].correct, [0, 2]); // the "tick all" marks, as a list
+  assert.deepEqual(out.sections[0].questions[3], set.sections[0].questions[3]); // "Usant" ignored: it was marked
+  assert.deepEqual(out.sections[0].questions[4], { question: 'Hvilket dyr har snabel?', options: ['Elefant', 'Sjiraff', 'Neshorn', 'Flodhest'], correct: 0 });
+  assert.equal(out.sections[0].questions.length, 5); // "For mange" was past the target
+  assert.deepEqual(out.sections[1].questions[0], set.sections[1].questions[0]); // the picture question is left alone
+  assert.deepEqual(out.sections[1].questions[1], { question: 'Sett disse i rekkefølge, fra eldst til nyest.', type: 'order', options: ['Pyramidene i Giza', 'Colosseum', 'Eiffeltårnet', 'Operaen i Oslo'] }); // the whole order from the reply, no correct
+  assert.deepEqual(out.sections[1].questions[2], { ...set.sections[1].questions[2], correct: 1 }); // the mark, points kept
+  assert.equal(out.sections[1].questions[3].correct, 2);
+  assert.deepEqual(out.sections[1].questions[4], { question: 'Hvilke av disse er hovedsteder?', type: 'multi', options: ['Helsinki', 'Hamburg', 'Dublin', 'Milano'], correct: [0, 2] });
+  assert.equal(out.sections[1].name, 'Hovedsteder'); // found by the question they share, though the AI moved it
+  assert.equal(out.sections[2].name, 'Fotball');
+  assert.deepEqual(out.sections[2].questions[0], { question: 'Hvor mange spillere har et lag på banen?', options: ['Ni', 'Ti', 'Elleve', 'Tolv'], correct: 2 });
+  assert.deepEqual(out.sections[2].questions[1], { question: 'Sant eller usant: Et VM spilles hvert fjerde år.', options: ['Sant', 'Usant'], correct: 0 });
+  assert.deepEqual(out.sections[2].questions[2], { question: 'Sett disse i rekkefølge, fra færrest til flest VM-titler.', type: 'order', options: ['England', 'Tyskland', 'Brasil'] });
+  assert.equal(out.sections[2].questions.length, 3); // the empty one stopped the adding
+  assert.deepEqual(made.filled, ['0-1', '0-2', '0-4', '1-1', '1-2', '2-0', '1-3', '1-4', '2-1', '2-2']);
+  assert.equal(made.added, 4);
+  assert.equal(made.names, 2);
+  assert.equal(made.left, 2); // section 3 still wants 2 more
+  assert.deepEqual(made.duplicates, []);
+  assert.deepEqual(validateSet(out).map((p) => `${p.c}-${p.i}`), ['1-0', '1-0']); // only the picture question is still unfinished
+  assert.deepEqual(startedQuick(), set); // the quiz passed in is not changed
+});
+
+test('quick fill: added questions without a type get it from their wording, and the summary covers only what was touched', () => {
+  const set = { v: 1, kind: 'quick', title: 'T', sections: [{ name: 'A', questions: [{ question: 'Q1?', options: ['a', 'b', 'c', 'd'], correct: 0 }] }] };
+  const reply = {
+    sections: [
+      {
+        name: 'A',
+        questions: [
+          { question: 'Q1?', options: ['a', 'b', 'c', 'd'], answer: 'a' },
+          { question: 'Hvilke av disse er pattedyr?', options: ['Hval', 'Hai', 'Flaggermus', 'Frosk'], answer: ['Hval', 'Flaggermus'] },
+          { question: 'Sorter disse fra eldst til nyest.', options: ['Pyramidene', 'Colosseum', 'Eiffeltårnet'] },
+          { question: 'Hvilke av disse er hovedsteder?', options: ['Oslo', 'Bergen', 'Stockholm', 'Göteborg'], answer: 'Oslo' },
+        ],
+      },
+    ],
+  };
+  const out = parseFill(JSON.stringify(reply), set, { target: 4 });
+  assert.deepEqual(out.set.sections[0].questions.slice(1), [
+    { question: 'Hvilke av disse er pattedyr?', type: 'multi', options: ['Hval', 'Hai', 'Flaggermus', 'Frosk'], correct: [0, 2] },
+    { question: 'Sorter disse fra eldst til nyest.', type: 'order', options: ['Pyramidene', 'Colosseum', 'Eiffeltårnet'] },
+    { question: 'Hvilke av disse er hovedsteder?', options: ['Oslo', 'Bergen', 'Stockholm', 'Göteborg'], correct: 0 },
+  ]);
+  assert.deepEqual(out.summary, { questions: 3, choice: 1, multi: 1, order: 1, any: 0, suspects: [{ c: 0, i: 3, looks: 'multi', question: 'Hvilke av disse er hovedsteder?' }] });
+});
+
+test('quick fill: options go only into the empty places, the kind never changes, and limits hold', () => {
+  const set = {
+    kind: 'quick',
+    title: 'T',
+    sections: [
+      {
+        name: 'A',
+        questions: [
+          { question: 'Gap in the middle', options: ['Red', '', 'Blue'], correct: 2 },
+          { question: 'Everything marked right?', options: ['x', 'y', 'z', 'w'] },
+          { question: 'Keep my kind', type: 'multi', options: ['p', 'q', 'r', 's'] },
+          { question: 'Order, too few from the AI', type: 'order', options: ['b', 'c'] },
+        ],
+      },
+    ],
+  };
+  const reply = {
+    sections: [
+      {
+        name: 'A',
+        questions: [
+          { question: 'Gap in the middle', options: ['Red', 'blue', 'Green', 'Yellow', 'Pink'], answer: 'Red' }, // "blue" is already there: skipped
+          { question: 'Everything marked right?', options: ['x', 'y', 'z', 'w'], answer: ['x', 'y', 'z', 'w'] }, // every option right on a pick-one: refused
+          { question: 'Keep my kind', type: 'order', options: ['p', 'q', 'r', 's'], answer: 'q' },
+          { question: 'Order, too few from the AI', type: 'order', options: ['a', 'b'] },
+          ...Array.from({ length: 40 }, (_, k) => ({ question: `Extra ${k}`, options: ['1', '2', '3', '4'], answer: '2' })),
+        ],
+      },
+    ],
+  };
+  const made = parseFill(JSON.stringify(reply), set, { target: 30 });
+  const qs = made.set.sections[0].questions;
+  assert.deepEqual(qs[0], { question: 'Gap in the middle', options: ['Red', 'Green', 'Blue', 'Yellow'], correct: 2 });
+  assert.deepEqual(qs[1], set.sections[0].questions[1]); // still unmarked
+  assert.deepEqual(qs[2], { question: 'Keep my kind', type: 'multi', options: ['p', 'q', 'r', 's'], correct: [1] }); // a list, as "tick all" wants
+  assert.deepEqual(qs[3], { question: 'Order, too few from the AI', type: 'order', options: ['b', 'c', 'a'] }); // "a" into the empty place, no correct
+  assert.equal(qs.length, 30); // never past the 30 a section may have
+  assert.deepEqual(qs[29], { question: 'Extra 25', options: ['1', '2', '3', '4'], correct: 1 });
+  assert.deepEqual(made.filled.slice(0, 3), ['0-0', '0-2', '0-3']);
+  assert.equal(made.added, 26);
+  assert.equal(made.left, 1); // "Everything marked right?" still has no right answer
+  assert.ok(made.duplicates.includes('2'));
+  assert.deepEqual(validateSet(made.set), [{ code: 'bad-correct', c: 0, i: 1 }]);
+});
+
+test('quick fill: a messy reply still works, and one with nothing usable is refused', () => {
+  const set = { kind: 'quick', title: 'T', sections: [{ name: '', questions: [{ question: 'Who directed Jaws?', options: ['Lucas', 'Spielberg'], correct: 1 }] }] };
+  const messy = 'Sure! Here it is:\n```\n{\n  “title”: “T”,\n  "sections": [ // one\n    { "name": "Films", "questions": [\n      { "question": "Who directed Jaws?", "options": ["Lucas", "Spielberg", "Scorsese", "Coppola",], "answer": "Spielberg", },\n    ], },\n  ],\n}\n```\nEnjoy!';
+  const made = parseFill(messy, set);
+  assert.deepEqual(made.set.sections[0], { name: 'Films', questions: [{ question: 'Who directed Jaws?', options: ['Lucas', 'Spielberg', 'Scorsese', 'Coppola'], correct: 1 }] });
+  assert.equal(made.left, 0);
+  // A reply that changes only what was already there, or has no sections, can't be used.
+  assert.throws(() => parseFill(JSON.stringify({ sections: [{ name: '', questions: [{ question: 'Changed', options: ['Lucas', 'Spielberg'], answer: 'Lucas' }] }] }), set), { code: 'nothing-filled' });
+  assert.throws(() => parseFill(JSON.stringify(quiz()), set), { code: 'not-a-quiz' });
+  assert.throws(() => parseFill('', set), { code: 'empty' });
+  // A board quiz pasted into a Quick quiz's fill is not a quiz for it; a full Quick quiz has nothing to fill.
+  const full = { kind: 'quick', title: 'T', sections: [{ name: 'A', questions: [{ question: 'Q?', options: ['a', 'b', 'c', 'd'], correct: 0 }] }] };
+  assert.equal(gapsOf(full).count, 0);
+  assert.throws(() => parseFill(JSON.stringify({ sections: [{ name: 'A', questions: [{ question: 'Q?', options: ['a', 'b', 'c', 'd'], answer: 'b' }] }] }), full), { code: 'nothing-filled' });
+});
+
+// ----- translating a quiz into one of its extra languages -----
+
+import { buildTranslateRequest, parseTranslation } from '../lib/aiquiz.js';
+import { missingTranslations, getTranslation } from '../lib/languages.js';
+
+const forTranslation = () => ({
+  v: 1,
+  title: 'Friday quiz',
+  lang: 'en',
+  languages: ['no'],
+  translations: { no: { title: 'Fredagsquiz' } },
+  categories: [
+    {
+      name: 'Capitals',
+      questions: [
+        { value: 100, question: 'Capital of Norway?', answer: 'Oslo', translations: { no: { question: 'Hovedstaden i Norge?' } } },
+        { value: 200, question: 'Capital of Italy?', answer: 'Rome' },
+      ],
+    },
+  ],
+  final: { category: 'Rivers', question: 'Which river flows through Cairo?', answer: 'The Nile' },
+});
+
+test('translate: the request lists only the texts still missing, with their ids, and says how to translate', () => {
+  const text = buildTranslateRequest(forTranslation(), 'no');
+  assert.match(text, /written in English/);
+  assert.match(text, /translated into Norsk/);
+  const asked = JSON.parse(text.match(/```json\n([\s\S]*?)\n```/)[1]).translations;
+  assert.deepEqual(asked, [
+    { id: 'c0', text: 'Capitals' },
+    { id: 'a0-0', text: 'Oslo' },
+    { id: 'q0-1', text: 'Capital of Italy?' },
+    { id: 'a0-1', text: 'Rome' },
+    { id: 'f-c', text: 'Rivers' },
+    { id: 'f-q', text: 'Which river flows through Cairo?' },
+    { id: 'f-a', text: 'The Nile' },
+  ]);
+  assert.doesNotMatch(text, /Fredagsquiz|Hovedstaden/, 'what is translated already is not sent');
+  assert.match(text, /Keep every "id" exactly as it is/);
+  assert.match(text, /still have the same answer/);
+  assert.match(text, /start with "a" \(and "f-a"\) are answers/);
+  assert.doesNotMatch(text, /answer options shown on buttons/, 'no options in a board quiz');
+  // A Quick quiz: options are mentioned, the ids are the quick ones.
+  const quick = { v: 1, kind: 'quick', title: 'Q', lang: 'no', languages: ['en'], sections: [{ name: 'Dyr', questions: [{ question: 'Hvilket dyr sier mø?', options: ['Hest', 'Ku'], correct: 1 }] }] };
+  const qt = buildTranslateRequest(quick, 'en');
+  assert.match(qt, /written in Norsk/);
+  assert.match(qt, /answer options shown on buttons/);
+  assert.deepEqual(JSON.parse(qt.match(/```json\n([\s\S]*?)\n```/)[1]).translations.map((x) => x.id), ['t', 's0', 'sq0-0', 'o0-0-0', 'o0-0-1']);
+});
+
+test('translate: the reply fills only the empty slots by id, never overwrites, and ignores unknown ids', () => {
+  const set = forTranslation();
+  const reply = `Here you go:
+\`\`\`json
+{ "translations": [
+  { "id": "t", "text": "SKAL IKKE BRUKES" },
+  { "id": "c0", "text": "Hovedsteder" },
+  { "id": "a0-0", "text": "Oslo" },
+  { "id": "q0-1", "text": "Hovedstaden i Italia?" },
+  { "id": "a0-1", "text": "Roma" },
+  { "id": "nope", "text": "x" },
+  { "id": "f-q", "text": "" },
+  { "id": "f-a", "text": "Nilen" }
+] }
+\`\`\``;
+  const out = parseTranslation(reply, set, 'no');
+  assert.equal(out.filled, 5);
+  assert.equal(getTranslation(out.set, 't', 'no'), 'Fredagsquiz', 'the title was translated already and stays');
+  assert.equal(getTranslation(out.set, 'c0', 'no'), 'Hovedsteder');
+  assert.equal(getTranslation(out.set, 'a0-0', 'no'), 'Oslo', 'the same word counts as translated');
+  assert.equal(getTranslation(out.set, 'a0-1', 'no'), 'Roma');
+  assert.equal(getTranslation(out.set, 'f-a', 'no'), 'Nilen');
+  assert.deepEqual(missingTranslations(out.set, 'no').map((x) => x.id), ['f-c', 'f-q']);
+  assert.equal(out.left, 2);
+  assert.equal(getTranslation(set, 'c0', 'no'), '', 'the quiz given is not changed');
+  // Other shapes: a bare list, and an object of id → text; curly quotes and a trailing comma are repaired.
+  const bare = parseTranslation('[{"id": "f-c", "text": "Elver"}]', set, 'no');
+  assert.equal(getTranslation(bare.set, 'f-c', 'no'), 'Elver');
+  const map = parseTranslation('{ “f-q”: “Hvilken elv renner gjennom Kairo?”, }', set, 'no');
+  assert.equal(getTranslation(map.set, 'f-q', 'no'), 'Hvilken elv renner gjennom Kairo?');
+  // Quick options by id, cut to the option length.
+  const quick = { v: 1, kind: 'quick', title: 'Q', lang: 'no', languages: ['en'], sections: [{ name: 'Dyr', questions: [{ question: 'Hvilket dyr sier mø?', options: ['Hest', 'Ku'], correct: 1 }] }] };
+  const q = parseTranslation('{"translations":[{"id":"o0-0-1","text":"Cow"},{"id":"sq0-0","text":"Which animal says moo?"}]}', quick, 'en');
+  assert.deepEqual(q.set.sections[0].questions[0].translations.en, { question: 'Which animal says moo?', options: ['', 'Cow'] });
+  // Nothing usable.
+  assert.throws(() => parseTranslation('{"translations":[{"id":"t","text":"X"}]}', set, 'no'), (e) => e instanceof AiQuizError && e.code === 'nothing-filled');
+  assert.throws(() => parseTranslation('', set, 'no'), (e) => e.code === 'empty');
+  assert.throws(() => parseTranslation('no json here', set, 'no'), (e) => e.code === 'no-json');
+  assert.throws(() => parseTranslation('{"translations": [}', set, 'no'), (e) => e.code === 'broken-json');
+  assert.throws(() => parseTranslation('[1, 2]', set, 'no'), (e) => e.code === 'nothing-filled');
 });
