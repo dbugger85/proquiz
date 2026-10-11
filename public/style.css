@@ -4982,6 +4982,10 @@ body[data-rankanim='move'] .top-list li {
   border-radius: var(--pill);
   background: rgb(0 0 0 / 0.18);
 }
+/* The score keeps the last column even when this question gave nothing (no delta pill), so the scores line up. */
+.rank-plate .rank-score {
+  grid-column: 4;
+}
 .rank-score {
   font-weight: 800;
   font-size: 1.15em;
