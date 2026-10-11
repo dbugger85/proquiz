@@ -17,6 +17,7 @@ import { WebSocketServer } from 'ws';
 import { apply, newGame, hostView, displayView, phoneView, GameError, DEFAULT_SETTINGS, nextTimerAt, MAX_SLACK_MS, MAX_REMOTE_SLACK_MS, COLORS, MAX_TEAMS, MAX_PLAYERS, newColor, resumeFix } from './lib/game.js';
 import { createTunnel } from './lib/tunnel.js';
 import { createBrand, logoHeaders } from './brand.js';
+import { createPictures } from './pictures.js';
 
 const ROOT = new URL('./', import.meta.url);
 const START_PORT = Number(process.env.PORT) || 3000;
@@ -691,8 +692,9 @@ export function createHub({ set, info, saved = null, save = () => {}, store = nu
   };
 }
 
-// `tunnelOptions` is for tests (e.g. a pretend DNS check for a pretend cloudflared).
-export async function startServer({ port = START_PORT, quiet = false, dataDir = DATA_DIR, tunnelOptions = {} } = {}) {
+// `tunnelOptions` is for tests (e.g. a pretend DNS check for a pretend cloudflared), and `pictureOptions` too
+// (a pretend `fetchImpl` instead of Openverse and Wikimedia Commons, see pictures.js).
+export async function startServer({ port = START_PORT, quiet = false, dataDir = DATA_DIR, tunnelOptions = {}, pictureOptions = {} } = {}) {
   const sets = createStore(dataDir);
   const brand = createBrand(dataDir);
   await brand.load();
@@ -700,10 +702,14 @@ export async function startServer({ port = START_PORT, quiet = false, dataDir = 
   const store = autosaver(dataDir);
   const saved = await store.load();
   let hub = null;
+  const getLang = () => hub?.getState().settings.lang ?? 'en';
+  // The editor's "Find a free picture": the only thing that goes on the internet, and only from the editor.
+  const pictures = createPictures({ store: sets, lang: getLang, ...pictureOptions });
   const api = apiHandler(sets, {
     onSetSaved: (...a) => hub?.setSaved(...a),
-    getLang: () => hub?.getState().settings.lang ?? 'en',
+    getLang,
     brand,
+    pictures,
     onBrand: () => hub?.broadcast(), // every screen shows the new logo, name or colour at once
   });
   const server = http.createServer((req, res) => serveFile(req, res, { store: sets, api, brand }));

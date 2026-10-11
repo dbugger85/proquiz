@@ -1,7 +1,7 @@
 // The TV screen. Shows the game to the room; never gets an answer before the host reveals it.
 import { ranking, COLORS, unveilProgress, SHAPES, OPTION_COLORS } from '/lib/game.js';
 import { connect } from './net.js';
-import { t, pts, setLang, translatePage, fastestTitle, secondsText } from './i18n.js';
+import { t, pts, setLang, translatePage, fastestTitle, secondsText, licenseName } from './i18n.js';
 import { $, h, qrSvg, shortUrl, urlNodes, countdown, runCountdowns, teamStyle, setGlass, shapeSvg, optionStyle, timerTotal, setBrand, brandLogo } from './ui.js';
 import { unlockAudio, audioReady, playEvent, playSound, startTicks, sounds } from './sounds.js';
 import { animateRanks, cancelRanks, countTo, shownCount, setTickSound, reducedMotion } from './rankanim.js';
@@ -188,6 +188,18 @@ function band() {
 }
 
 const img = (name, cls) => (name ? h('img', { class: cls, src: `/files/${encodeURIComponent(name)}`, alt: '' }) : null);
+// Who made a picture found with "Find a free picture": the view only has it once the answer is out, and only
+// while the lobby setting `showCredits` is on.
+const creditLine = (c) =>
+  c
+    ? h(
+        'p',
+        { class: 'pic-credit' },
+        c.author
+          ? t('picCreditLine', { author: c.author, license: licenseName(c.license), source: t(c.source === 'wikimedia' ? 'picSourceWikimedia' : 'picSourceOpenverse') })
+          : t('picCreditNoAuthor', { license: licenseName(c.license), source: t(c.source === 'wikimedia' ? 'picSourceWikimedia' : 'picSourceOpenverse') }),
+      )
+    : null;
 
 // Load every question picture while the board is showing, so a picture never pops in late.
 const images = new Map(); // file → Image, kept for drawing slowly appearing pictures
@@ -330,6 +342,7 @@ function renderQuestion() {
     { class: `tv-q${picture ? ' has-image' : ''}`, style: zoom ? '' : 'animation: none' },
     h('div', { class: 'where' }, h('span', {}, view.set.categories[q.c].name), q.special ? h('span', { class: `special-badge k-${q.special}` }, badgeFor(view)) : null, h('b', {}, pts(q.value))),
     blocks ? unveilCanvas(q) : img(picture, `q-img${q.answerImage ? ' reveal-img' : ''}`),
+    picture ? creditLine(q.credit) : null,
     picture ? null : clipViz(),
     q.question ? h('p', { class: 'question' }, q.question) : h('div', { class: 'spacer' }),
     picture ? clipViz() : null,
@@ -443,6 +456,7 @@ function quickQuestion(fresh) {
           fastestBadge(q.fastest),
         )
       : null,
+    settled ? creditLine(q.credit) : null,
     optionTiles(q),
   );
 }
@@ -655,6 +669,7 @@ function renderFinal() {
       }),
     ),
     f.answer ? h('p', { class: 'judge-answer' }, img(f.answerImage, 'judge-img'), h('span', {}, t('theAnswer')), h('b', {}, f.answer)) : null,
+    f.answer ? creditLine(f.credit) : null,
   );
 }
 

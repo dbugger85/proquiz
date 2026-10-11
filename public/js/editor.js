@@ -1,8 +1,8 @@
 // The question editor (laptop only). Quizzes save themselves a moment after each change.
-import { validateSet, modeOf, MAX_CATEGORIES, MAX_QUESTIONS, MAX_SECTIONS, MAX_SECTION_QUESTIONS, MAX_OPTION, MIN_SECONDS, MAX_SECONDS, DEFAULT_SECONDS, rightSet } from '/lib/validate.js';
+import { validateSet, usedFiles, cleanCredits, modeOf, MAX_CATEGORIES, MAX_QUESTIONS, MAX_SECTIONS, MAX_SECTION_QUESTIONS, MAX_OPTION, MIN_SECONDS, MAX_SECONDS, DEFAULT_SECONDS, rightSet } from '/lib/validate.js';
 import { buildRequest, parseReply, splitTopics, AiQuizError, DIFFICULTIES, FILL_DIFFICULTIES, MIN_SIZE, QUICK_SECTIONS, QUICK_PER_SECTION, gapsOf, guessLanguage, buildFillRequest, parseFill } from '/lib/aiquiz.js';
 import { SHAPES, OPTION_COLORS } from '/lib/quick.js';
-import { t, pts, setLang, getLang, translatePage } from './i18n.js';
+import { t, pts, setLang, getLang, translatePage, licenseName } from './i18n.js';
 import { $, h, fill, setGlass, savedGlass, shapeSvg, optionStyle, setBrand, ask, tell } from './ui.js';
 import { KINDS } from '/lib/crazy.js';
 import { ICONS } from './specials.js';
@@ -74,6 +74,7 @@ function saveNow() {
 
 // Anything changed: check the quiz again and save soon.
 function changed({ board = false } = {}) {
+  pruneCredits();
   problems = validateSet(set);
   if (board) renderBoard();
   else markTiles();
@@ -231,6 +232,7 @@ function renderMain() {
     ),
     quick() ? h('div', { id: 'ed-sections', class: 'ed-sections' }) : [h('div', { id: 'ed-board' }), h('div', { id: 'ed-round2' }), h('div', { id: 'ed-final' })],
     h('div', { id: 'ed-problems' }),
+    h('div', { id: 'ed-credits' }),
   );
   renderBoard();
   renderProblems();
@@ -649,6 +651,7 @@ function problemText(p) {
 }
 
 function renderProblems() {
+  renderCredits();
   const box = $('#ed-problems');
   if (!box) return;
   const blanks = [...catsOf(1), ...catsOf(2)].reduce((n, c) => n + c.questions.filter(isBlank).length, 0);
@@ -659,6 +662,58 @@ function renderProblems() {
     lines.length
       ? h('div', { class: 'ed-problems bad' }, h('p', {}, t('edFixList')), h('ul', {}, lines.map((line) => h('li', {}, line))))
       : h('p', { class: 'ed-problems good' }, t('edAllGood')),
+  );
+}
+
+// ----- picture credits (pictures found with "Find a free picture") -----
+
+// Credits only for pictures the quiz still uses (the server does the same when it saves).
+function pruneCredits() {
+  if (!set?.credits) return;
+  const kept = cleanCredits(set.credits, usedFiles(set));
+  if (Object.keys(kept).length) set.credits = kept;
+  else delete set.credits;
+}
+
+const sourceName = (source) => t(source === 'wikimedia' ? 'picSourceWikimedia' : 'picSourceOpenverse');
+const outLink = (href, text) => (href ? h('a', { href, target: '_blank', rel: 'noopener noreferrer' }, text) : text);
+
+// "Picture: Ann · CC BY 2.0 · Openverse", with the source as a link to the picture's own page.
+function creditNodes(c) {
+  const mark = '\u0000';
+  const line = c.author ? t('picCreditLine', { author: c.author, license: licenseName(c.license), source: mark }) : t('picCreditNoAuthor', { license: licenseName(c.license), source: mark });
+  const [before, after] = line.split(mark);
+  return [before, outLink(c.sourceUrl, sourceName(c.source)), after];
+}
+
+// The list under the quiz: every credited picture, so they can be given at the event (or in a program).
+function renderCredits() {
+  const box = $('#ed-credits');
+  if (!box) return;
+  const list = Object.entries(set.credits ?? {});
+  const wasOpen = box.querySelector('details')?.open ?? false;
+  fill(
+    box,
+    list.length
+      ? h(
+          'details',
+          { class: 'ed-credits', open: wasOpen },
+          h('summary', {}, t('edCredits', { n: list.length })),
+          h('p', { class: 'muted' }, t('edCreditsHint')),
+          h(
+            'ul',
+            {},
+            list.map(([name, c]) =>
+              h(
+                'li',
+                {},
+                h('img', { src: `/files/${encodeURIComponent(name)}`, alt: '', loading: 'lazy' }),
+                h('span', {}, c.title ? h('b', {}, c.title) : null, h('span', {}, creditNodes(c), c.licenseUrl ? [' · ', outLink(c.licenseUrl, t('picAboutLicense'))] : null)),
+              ),
+            ),
+          ),
+        )
+      : null,
   );
 }
 
@@ -715,16 +770,37 @@ function openQuestion(c, i, r = 1) {
           }
         },
       });
+      const credit = name && kind === 'image' ? set.credits?.[name] : null;
       fill(box, 
         h('span', { class: 'ed-media-label' }, label),
         hint ? h('small', {}, hint) : null,
         preview,
+        credit ? h('small', { class: 'ed-credit' }, creditNodes(credit)) : null,
         builtIn
           ? null
           : h(
               'span',
               { class: 'row' },
               h('label', { class: 'btn' }, t('edChooseFile'), input),
+              kind === 'image'
+                ? h(
+                    'button',
+                    {
+                      class: 'btn ed-pic-search',
+                      type: 'button',
+                      onclick: () =>
+                        openPictureDialog({
+                          query: suggestQuery(key === 'answerImage' ? q.answer : q.question || q.answer),
+                          onPick: ({ name: picked, credit: found }) => {
+                            set.credits = { ...(set.credits ?? {}), [picked]: found };
+                            upd(key, picked);
+                            draw();
+                          },
+                        }),
+                    },
+                    t('picSearch'),
+                  )
+                : null,
               name
                 ? h(
                     'button',
@@ -1008,6 +1084,291 @@ function quickFields(c, i, q, question, field, upd) {
       ),
     ),
   ];
+}
+
+// ----- "Find a free picture": search Openverse or Wikimedia Commons through ProQuiz's own server (pictures.js) -----
+// The only part of ProQuiz that uses the internet, and only here in the editor. The chosen picture is copied into
+// the files folder like an upload, so the game itself stays offline. Thumbnails load straight from the sources
+// (without telling them which page asked: referrerpolicy no-referrer).
+
+const PIC_SOURCE_KEY = 'proquiz.picSource';
+const PIC_LICENSE_KEY = 'proquiz.picLicense';
+const remembered = (key, allowed) => {
+  try {
+    const v = localStorage.getItem(key);
+    return allowed.includes(v) ? v : allowed[0];
+  } catch {
+    return allowed[0];
+  }
+};
+const remember = (key, value) => {
+  try {
+    localStorage.setItem(key, value);
+  } catch {}
+};
+
+// A starting point for the search from the question's text: the first words, without the question mark.
+function suggestQuery(text) {
+  const s = String(text ?? '').replace(/[?¿!.:;«»"“”]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (s.length <= 60) return s;
+  return s.slice(0, 60).replace(/\s+\S*$/, '');
+}
+
+const PIC_ERRORS = { 'no-internet': 'picErrOffline', 'rate-limited': 'picErrRate', 'picture-too-big': 'picErrTooBig', 'picture-bad-type': 'picErrType', 'picture-missing': 'picErrMissing' };
+const picError = (err) => t(navigator.onLine === false ? 'picErrOffline' : (PIC_ERRORS[err?.code] ?? 'picErrFailed'));
+
+function openPictureDialog({ query = '', onPick }) {
+  const dialog = $('#pic-dialog');
+  const form = $('#pic-form');
+  const st = {
+    source: remembered(PIC_SOURCE_KEY, ['openverse', 'wikimedia']),
+    license: remembered(PIC_LICENSE_KEY, ['any', 'nc']),
+    words: '', // what the results are for
+    results: [],
+    page: 1,
+    more: false,
+    chosen: null,
+    lastId: null,
+    token: 0, // a newer search makes the answers of older ones useless
+    scroll: 0,
+  };
+
+  const queryInput = h('input', {
+    type: 'search',
+    name: 'picQuery',
+    maxlength: 200,
+    autocomplete: 'off',
+    placeholder: t('picQueryPlaceholder'),
+    'aria-label': t('picQueryLabel'),
+    onkeydown: (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault(); // the form is method=dialog: Enter would close it
+      search();
+    },
+  });
+  queryInput.value = query;
+  const goBtn = h('button', { class: 'btn btn-primary pic-go', type: 'button', onclick: () => search() }, t('picGo'));
+  const status = h('p', { class: 'pic-status', role: 'status', 'aria-live': 'polite' });
+  const body = h('div', { class: 'pic-body' });
+  const moreBtn = h('button', { class: 'btn pic-more', type: 'button', hidden: true, onclick: () => search({ more: true }) }, t('picMore'));
+  const licenseBox = h('div', { class: 'pic-license' });
+
+  // A choice of a few, as pills (like the lobby's settings). `hint` gives a pill a second, smaller line.
+  const pills = (name, options, value, onPickPill) =>
+    h(
+      'div',
+      { class: `pills pic-pills pic-${name}`, role: 'radiogroup' },
+      options.map(([v, label, hint]) =>
+        h(
+          'label',
+          {},
+          h('input', { type: 'radio', name, value: v, checked: v === value, onchange: () => onPickPill(v) }),
+          h('span', {}, hint ? [h('b', {}, label), h('small', {}, hint)] : label),
+        ),
+      ),
+    );
+
+  function drawLicense() {
+    const label = h('span', { class: 'pic-row-label' }, t('picLicenseLabel'));
+    if (st.source === 'wikimedia') return fill(licenseBox, label, h('p', { class: 'pic-wiki-note' }, h('span', { class: 'pic-badge free' }, '✓'), h('span', {}, t('picWikiNote'))));
+    fill(
+      licenseBox,
+      label,
+      pills(
+        'picLicense',
+        [
+          ['any', t('picLicenseAny')],
+          ['nc', t('picLicenseNc')],
+        ],
+        st.license,
+        (v) => {
+          st.license = v;
+          remember(PIC_LICENSE_KEY, v);
+          drawLicense();
+          if (st.words) search();
+        },
+      ),
+      h('small', { class: 'pic-license-hint' }, t(st.license === 'nc' ? 'picLicenseNcHint' : 'picLicenseAnyHint')),
+    );
+  }
+
+  const say = (text, bad = false) => {
+    status.textContent = text;
+    status.classList.toggle('bad', bad);
+    status.setAttribute('role', bad ? 'alert' : 'status');
+  };
+
+  async function search({ more = false } = {}) {
+    const words = queryInput.value.replace(/\s+/g, ' ').trim();
+    if (!words) return queryInput.focus();
+    const token = ++st.token;
+    st.chosen = null;
+    if (!more) {
+      st.words = words;
+      st.results = [];
+      st.page = 1;
+      st.more = false;
+      drawResults();
+    }
+    if (navigator.onLine === false) return say(t('picErrOffline'), true);
+    say(t('picSearching'));
+    moreBtn.disabled = true;
+    goBtn.disabled = true;
+    const page = more ? st.page + 1 : 1;
+    try {
+      const params = new URLSearchParams({ q: st.words, source: st.source, page: String(page), license: st.license, lang: getLang() });
+      const out = await call('GET', `/api/pictures/search?${params}`);
+      if (token !== st.token) return;
+      const seen = new Set(st.results.map((r) => r.id));
+      st.results.push(...out.results.filter((r) => !seen.has(r.id)));
+      st.page = out.page;
+      st.more = out.more;
+      say(st.results.length ? '' : t('picNone'));
+      drawResults();
+    } catch (err) {
+      if (token !== st.token) return;
+      say(picError(err), true);
+    } finally {
+      if (token === st.token) {
+        goBtn.disabled = false;
+        moreBtn.disabled = false;
+      }
+    }
+  }
+
+  // The thumbnail of a result. Openverse's thumbnail service has its own daily limit: then the original is used.
+  const thumb = (r, cls) =>
+    h('img', {
+      class: cls,
+      referrerpolicy: 'no-referrer',
+      loading: 'lazy',
+      decoding: 'async',
+      alt: r.title || '',
+      src: r.thumb,
+      onerror: (e) => {
+        const im = e.currentTarget;
+        if (r.fallback && im.src !== r.fallback) im.src = r.fallback;
+        else im.classList.add('broken');
+      },
+    });
+  const badge = (r) => h('span', { class: `pic-badge${r.nc ? ' nc' : ''}` }, licenseName(r.license));
+
+  function drawResults() {
+    moreBtn.hidden = !st.more;
+    fill(
+      body,
+      st.results.length
+        ? h(
+            'div',
+            { class: 'pic-grid' },
+            st.results.map((r) =>
+              h(
+                'button',
+                { class: 'pic-tile', type: 'button', 'data-id': r.id, title: r.title || '', onclick: () => choose(r) },
+                h('span', { class: 'pic-thumb' }, thumb(r), badge(r)),
+                h('span', { class: 'pic-cap' }, r.author || t('picUnknownAuthor')),
+              ),
+            ),
+          )
+        : null,
+    );
+  }
+
+  function choose(r) {
+    st.chosen = r;
+    st.lastId = r.id;
+    st.scroll = form.scrollTop;
+    moreBtn.hidden = true;
+    say('');
+    const useStatus = h('p', { class: 'pic-use-status', role: 'alert' });
+    const useBtn = h('button', { class: 'btn btn-primary pic-use', type: 'button' }, t('picUse'));
+    const backBtn = h('button', { class: 'btn pic-back', type: 'button', onclick: back }, t('picBack'));
+    useBtn.addEventListener('click', async () => {
+      useBtn.disabled = true;
+      backBtn.disabled = true;
+      useStatus.classList.remove('bad');
+      useStatus.textContent = t('picAdding');
+      try {
+        const got = await call('POST', '/api/pictures/fetch', { source: r.source, id: r.id });
+        dialog.close();
+        onPick(got);
+      } catch (err) {
+        useStatus.classList.add('bad');
+        useStatus.textContent = picError(err);
+        useBtn.disabled = false;
+        backBtn.disabled = false;
+      }
+    });
+    const facts = [r.width && r.height ? t('picSize', { w: r.width, h: r.height }) : null, r.provider ? t('picVia', { provider: r.provider }) : null].filter(Boolean).join(' · ');
+    fill(
+      body,
+      h(
+        'div',
+        { class: 'pic-preview' },
+        h('div', { class: 'pic-preview-img' }, thumb(r)),
+        h(
+          'div',
+          { class: 'pic-preview-info' },
+          h('h3', {}, r.title || t('picTitle')),
+          h('p', { class: 'pic-by' }, r.author ? t('picBy', { author: r.author }) : t('picUnknownAuthor')),
+          h('p', { class: 'pic-license-line' }, badge(r), r.licenseUrl ? outLink(r.licenseUrl, t('picAboutLicense')) : null),
+          r.nc ? h('p', { class: 'pic-nc-note' }, t('picNcNote')) : null,
+          facts ? h('p', { class: 'muted' }, facts) : null,
+          r.sourceUrl ? h('p', {}, outLink(r.sourceUrl, t('picOpenSource', { source: sourceName(r.source) }))) : null,
+          h('div', { class: 'row pic-preview-actions' }, backBtn, useBtn),
+          useStatus,
+        ),
+      ),
+    );
+    form.scrollTop = 0;
+    useBtn.focus();
+  }
+
+  // Back to the same results, where they were (nothing is asked again).
+  function back() {
+    st.chosen = null;
+    drawResults();
+    form.scrollTop = st.scroll;
+    body.querySelector(`.pic-tile[data-id="${CSS.escape(st.lastId ?? '')}"]`)?.focus({ preventScroll: true });
+  }
+
+  fill(
+    form,
+    h('h2', {}, t('picTitle')),
+    h('p', { class: 'muted pic-intro' }, t('picIntro')),
+    h(
+      'div',
+      { class: 'pic-controls' },
+      h('span', { class: 'pic-row-label' }, t('picSourceLabel')),
+      pills(
+        'picSource',
+        [
+          ['openverse', t('picSourceOpenverse'), t('picSourceOpenverseHint')],
+          ['wikimedia', t('picSourceWikimedia'), t('picSourceWikimediaHint')],
+        ],
+        st.source,
+        (v) => {
+          st.source = v;
+          remember(PIC_SOURCE_KEY, v);
+          drawLicense();
+          if (st.words) search();
+        },
+      ),
+      h('label', { class: 'pic-row-label', for: 'pic-query' }, t('picQueryLabel')),
+      h('div', { class: 'pic-search' }, queryInput, goBtn),
+      licenseBox,
+      getLang() === 'no' ? h('p', { class: 'pic-tip' }, t('picEnglishTip')) : null,
+    ),
+    status,
+    body,
+    moreBtn,
+    h('div', { class: 'ed-dialog-actions' }, h('button', { class: 'btn btn-quiet', value: 'cancel' }, t('aiCancel'))),
+  );
+  queryInput.id = 'pic-query';
+  drawLicense();
+  dialog.showModal();
+  queryInput.focus();
+  queryInput.select();
 }
 
 // ----- making a quiz with AI (copy and paste, ProQuiz itself stays offline) -----

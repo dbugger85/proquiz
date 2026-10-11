@@ -4,7 +4,7 @@
 // Esc = put the question back, U = undo.
 import { ranking, COLORS, KINDS, unveilProgress, MUSIC_MOODS, maxBet, SHAPES, OPTION_COLORS, MAX_PLAYERS, MAX_TEAMS } from '/lib/game.js';
 import { connect } from './net.js';
-import { t, pts, setLang, translatePage, fastestTitle, secondsText } from './i18n.js';
+import { t, pts, setLang, translatePage, fastestTitle, secondsText, licenseName } from './i18n.js';
 import { $, h, fill, qrSvg, shortUrl, urlNodes, countdown, runCountdowns, teamStyle, setGlass, shapeSvg, optionStyle, setBrand, brandLogo, ACCENTS, ask, askNumber, askColor, modalOpen } from './ui.js';
 import { unlockAudio, audioReady, playEvent, playSound, startTicks } from './sounds.js';
 import { syncClip, stopClip } from './clip.js';
@@ -299,6 +299,7 @@ function renderSummaries() {
   const accent = accentOf(brand?.accent);
   $('#look-status').textContent = [
     t('lookSummary', { state: t(st.glass ? 'stateOn' : 'stateOff') }),
+    st.showCredits ? null : t('lookCreditsOff'),
     brand?.logo ? t('brandHasLogo') : null,
     accent === 'violet' ? null : t(`accent-${accent}`),
   ]
@@ -869,8 +870,15 @@ function buzzOrder() {
   );
 }
 
-const img = (name, cls, label) =>
-  name ? h('figure', { class: cls }, h('img', { src: `/files/${encodeURIComponent(name)}`, alt: '' }), label ? h('figcaption', {}, label) : null) : null;
+// A picture with what it is for, and, when it was found with "Find a free picture", who made it (the host always
+// sees this; the TV only after the answer, see creditFor() in game.js).
+const img = (name, cls, label) => {
+  if (!name) return null;
+  const c = view.set.credits?.[name];
+  const source = c && t(c.source === 'wikimedia' ? 'picSourceWikimedia' : 'picSourceOpenverse');
+  const credit = c ? h('span', { class: 'host-credit' }, c.author ? t('picCreditLine', { author: c.author, license: licenseName(c.license), source }) : t('picCreditNoAuthor', { license: licenseName(c.license), source })) : null;
+  return h('figure', { class: cls }, h('img', { src: `/files/${encodeURIComponent(name)}`, alt: '' }), label || credit ? h('figcaption', {}, label, credit) : null);
+};
 
 function renderQuestion() {
   const q = view.q;

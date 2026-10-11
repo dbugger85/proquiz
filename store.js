@@ -8,7 +8,7 @@ import { readFile, writeFile, readdir, mkdir, rename, unlink, stat } from 'node:
 import { createHash, randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { validateSet, modeOf, FILE_NAME, IMAGE_NAME, AUDIO_NAME, MAX_OPTION, rightSet } from './lib/validate.js';
+import { validateSet, modeOf, FILE_NAME, IMAGE_NAME, AUDIO_NAME, MAX_OPTION, rightSet, usedFiles, cleanCredits } from './lib/validate.js';
 import { KINDS } from './lib/crazy.js';
 import { MAX_LOGO } from './brand.js';
 
@@ -133,7 +133,7 @@ export function createStore(dataDir) {
 
 // ----- the editor's HTTP API (only for the laptop itself) -----
 
-export function apiHandler(store, { onSetSaved = () => {}, getLang = () => 'en', brand = null, onBrand = () => {} } = {}) {
+export function apiHandler(store, { onSetSaved = () => {}, getLang = () => 'en', brand = null, onBrand = () => {}, pictures = null } = {}) {
   return async function api(req, res, url) {
     const parts = url.pathname.split('/').filter(Boolean); // ['api', 'sets', id]
     const [, what, id] = parts;
@@ -157,6 +157,16 @@ export function apiHandler(store, { onSetSaved = () => {}, getLang = () => 'en',
           onBrand();
           return json(res, 200, brand.view());
         }
+      }
+      // Finding free pictures on the internet (pictures.js). Only from the editor itself: a search costs the
+      // laptop's share of Openverse's and Wikimedia's limits, so another website may not start one either.
+      if (what === 'pictures' && pictures) {
+        if (!['same-origin', 'none', undefined].includes(req.headers['sec-fetch-site'])) return json(res, 403, { error: 'forbidden' });
+        if (id === 'search' && req.method === 'GET') {
+          const p = url.searchParams;
+          return json(res, 200, await pictures.search({ q: p.get('q'), source: p.get('source'), page: p.get('page'), license: p.get('license'), lang: p.get('lang') }));
+        }
+        if (id === 'fetch' && req.method === 'POST') return json(res, 201, await pictures.fetch(await readJson(req)));
       }
       if (what === 'sets' && !id && req.method === 'GET') return json(res, 200, await store.list());
       if (what === 'sets' && !id && req.method === 'POST') {
@@ -195,7 +205,7 @@ export function apiHandler(store, { onSetSaved = () => {}, getLang = () => 'en',
       }
       json(res, 404, { error: 'not-found' });
     } catch (err) {
-      if (err.status) return json(res, err.status, { error: err.code });
+      if (err.status) return json(res, err.status, { error: err.code, ...(err.retryAfter && { retryAfter: err.retryAfter }) });
       if (err instanceof SyntaxError) return json(res, 400, { error: 'not-a-quiz' });
       console.error(err);
       json(res, 500, { error: 'server' });
@@ -211,20 +221,18 @@ function summary(id, set, builtIn, updated) {
   return { id, title: set.title || '', kind: modeOf(set), builtIn, updated, questions, problems: validateSet(set).length };
 }
 
-// Every picture and clip a set uses.
-export function filesOf(set) {
-  const names = new Set();
-  const add = (q) => {
-    for (const k of ['image', 'answerImage', 'audio']) if (q?.[k]) names.add(q[k]);
-  };
-  for (const c of [...(set.categories ?? []), ...(set.round2?.categories ?? []), ...(set.sections ?? [])]) for (const q of c.questions ?? []) add(q);
-  add(set.final);
-  return [...names];
+// Every picture and clip a set uses (shared with the editor, which prunes picture credits with it).
+export const filesOf = usedFiles;
+
+// Only the fields ProQuiz knows, so a saved file stays tidy. Picture credits are kept only for pictures still in use.
+function clean(set) {
+  const out = modeOf(set) === 'quick' ? cleanQuick(set) : cleanBoard(set);
+  const credits = cleanCredits(set?.credits, filesOf(out));
+  if (Object.keys(credits).length) out.credits = credits;
+  return out;
 }
 
-// Only the fields ProQuiz knows, so a saved file stays tidy.
-function clean(set) {
-  if (modeOf(set) === 'quick') return cleanQuick(set);
+function cleanBoard(set) {
   const q = (x = {}) => {
     const out = { value: Number(x.value) || 0, question: String(x.question ?? ''), answer: String(x.answer ?? '') };
     if (x.image) out.image = x.image;

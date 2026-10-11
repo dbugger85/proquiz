@@ -82,6 +82,8 @@ Download the zip for your computer from the [latest release](https://github.com/
    - **A multiple-choice quiz instead?** Click **New quick quiz**. See [Quick quiz](#quick-quiz-multiple-choice) below.
 3. Try it once with two phones, so you know how it feels.
 
+**Find a free picture:** in a question, click **Find a free picture** next to **Choose a file**. Type what you want to see (English words work best on Openverse; Wikimedia Commons also knows Norwegian names, and is good for flags, maps, places and famous people), click a picture to see it bigger, and click **Use this picture**. Keep **Free for any use** for company events; **Also non-commercial** adds more pictures that are only fine for a quiz with friends. The picture is copied into your quiz, so the game doesn't need the internet; only the search does. Who made it and its licence are kept with the quiz (listed under **Picture credits**), and the TV shows them in small text after the answer (turn that off under **Look and branding** in the lobby).
+
 **Make a quiz with AI:** in the editor, click **Make questions with AI**. Type a few topics (one per line, each becomes a category), add example questions if you like, and choose the difficulty (kids 5–9, easy, medium, hard or expert), the board size, the final question, a round 2 (with its own topics if you like) and the language. Click **Copy the request**, paste it into Claude or ChatGPT, then copy the AI's whole answer back into the box and click **Fill the board**. Your new quiz opens in the editor. **Check every answer: AI can get facts wrong.** ProQuiz itself never contacts an AI.
 
 **Fill the empty spots with AI:** started a quiz but ran out of ideas? Open it in the editor and click **Fill empty spots with AI** under the board. ProQuiz shows what is missing (empty questions, questions without an answer, answers without a question, category names, the final), on both boards if the quiz has a round 2. The request includes everything you have already written, so the AI matches its topics, difficulty and language and avoids repeating your answers. You can choose a difficulty yourself, and give topics for categories that are completely empty. Paste the answer back and only the empty spots are filled: nothing you wrote changes, and the new tiles get a dashed edge so you can check them. Picture and sound questions without an answer are left for you, because the AI can't see them.
@@ -246,7 +248,7 @@ Your quizzes, their pictures and clips, your logo and colours, and the autosave 
 npm install
 npm start        # starts the server and opens the host page (PROQUIZ_NO_OPEN=1 to skip)
 npm test         # unit and server tests
-npm run e2e      # browser tests with a host, a TV and three phones (four in the Quick quiz test), and branding
+npm run e2e      # browser tests with a host, a TV and three phones (four in the Quick quiz test), branding, and the picture search
 npm run build    # the zips in dist/ (needs Deno and zip)
 ```
 
