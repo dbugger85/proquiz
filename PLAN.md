@@ -55,3 +55,5 @@ This file holds the owner's decisions, the status and the open items. What was b
 
 ## Later
 Showing the board quiz's questions on the phones for players elsewhere, a time limit for picking, sound files instead of synthesized sounds.
+
+Ideas for connecting an AI directly (talked about 2026-10-14, nothing decided; the Copy button in all three AI dialogs stays the main way): an **Open in ChatGPT / Claude** button that opens the chat with the request already typed in (works with a normal subscription, no key; very long requests may not fit in a link); an optional API key in settings for one-click filling (needs internet, goes against the 2026-10-04 "no API key, no internet" choice, so only as an extra); a local AI through Ollama (comes almost free with the API key option); ProQuiz as a connector (MCP) for Claude Desktop. A ChatGPT Plus or Claude Pro subscription can't be used by another program, only an API key can.
