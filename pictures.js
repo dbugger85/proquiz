@@ -1,9 +1,11 @@
 // "Find a free picture" in the editor: searching Openverse and Wikimedia Commons for freely licensed pictures, and
 // downloading the chosen one into the files folder (like an upload), with who made it and its licence.
 //
-// This is the one place where ProQuiz goes on the internet itself, and only for the editor on the laptop (the routes
-// live under /api/, which the tunnel's listener and other devices never reach). The game never needs it: a picture
-// found here is a normal file from then on.
+// This is the one place where ProQuiz goes on the internet itself, and only for the editor (on the laptop the routes
+// live under /api/, which the tunnel's listener and other devices never reach; on the website the room's Durable
+// Object runs the same code, web/room.js). The game never needs it: a picture found here is a normal file from then
+// on. No Node modules here, so the same file runs in a Cloudflare Worker: with `store: null`, `fetch()` hands back
+// the bytes instead of keeping them (the browser stores them).
 //
 // The browser never gives the server an address to fetch. It sends words to search for, or "picture <id> from
 // <source>", and the server asks the source itself where that picture is. The bytes must really be a PNG, JPG, GIF
@@ -15,8 +17,8 @@
 //   Commons    GET https://commons.wikimedia.org/w/api.php (generator=search in the File namespace, imageinfo with
 //              extmetadata). Thumbnails come from thumb.wikimedia.org, small originals from upload.wikimedia.org.
 
-import { isIP } from 'node:net';
-import { logoKind } from './brand.js';
+import { safeUrl } from './lib/safeurl.js';
+import { imageKind } from './lib/mime.js';
 import { PICTURE_SOURCES } from './lib/validate.js';
 
 export const USER_AGENT = 'ProQuiz/2 (https://github.com/dbugger85/proquiz; quiz editor picture search)';
@@ -45,10 +47,32 @@ const NO_INTERNET = ['ENOTFOUND', 'EAI_AGAIN', 'ENETUNREACH', 'EHOSTUNREACH', 'E
 
 // ----- small pure helpers (exported for the tests) -----
 
-// What a downloaded file really is: the logo check (PNG, JPG, WebP, SVG) plus GIF.
-export function imageKind(bytes) {
-  if (bytes.length >= 6 && ['GIF87a', 'GIF89a'].includes(bytes.toString('latin1', 0, 6))) return 'gif';
-  return logoKind(bytes);
+// What a downloaded file really is: PNG, JPG, GIF, WebP or SVG (`imageKind` in lib/mime.js).
+export { imageKind };
+
+// A response's whole body as one Uint8Array, at most `max` bytes (else the error `code`, and the rest is left unread).
+export async function readBody(res, max, code) {
+  const reader = res.body?.getReader?.();
+  if (!reader) return new Uint8Array(0);
+  const chunks = [];
+  let size = 0;
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    size += value.length;
+    if (size > max) {
+      reader.cancel().catch(() => {});
+      throw httpError(413, code);
+    }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(size);
+  let at = 0;
+  for (const c of chunks) {
+    out.set(c, at);
+    at += c.length;
+  }
+  return out;
 }
 
 // Openverse's licence codes as people write them: "CC BY-SA 4.0", "CC0", "Public domain".
@@ -134,21 +158,8 @@ function httpError(status, code, extra = {}) {
   return Object.assign(new Error(code), { status, code, ...extra });
 }
 
-// An address the server may download from: https, a real name (no IP address, no local names), and for Wikimedia
-// only its own picture servers.
-export function safeUrl(u, hosts = null) {
-  let url;
-  try {
-    url = new URL(u);
-  } catch {
-    return null;
-  }
-  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
-  if (url.protocol !== 'https:' || url.username || url.password) return null;
-  if (isIP(host) || host === 'localhost' || !host.includes('.') || /\.(local|localhost|internal|lan|home|arpa)$/.test(host)) return null;
-  if (hosts && !hosts.includes(host)) return null;
-  return url.href;
-}
+// safeUrl() (lib/safeurl.js): https, a real name (no IP address, no local names) and only the given hosts.
+export { safeUrl };
 
 // A failed request as one of our error codes: no internet, too many searches, or "didn't work".
 function upstream(err) {
@@ -269,25 +280,16 @@ export function createPictures({ store, fetchImpl = globalThis.fetch, now = Date
         res.body?.cancel().catch(() => {});
         throw httpError(413, 'picture-too-big');
       }
-      const chunks = [];
-      let size = 0;
       try {
-        for await (const chunk of res.body ?? []) {
-          size += chunk.length;
-          if (size > MAX_PICTURE) {
-            await res.body.cancel().catch(() => {});
-            throw httpError(413, 'picture-too-big');
-          }
-          chunks.push(Buffer.from(chunk));
-        }
+        return await readBody(res, MAX_PICTURE, 'picture-too-big');
       } catch (err) {
         throw upstream(err);
       }
-      return Buffer.concat(chunks);
     }
   }
 
-  // Download, check and store. Several addresses are tried in turn (Openverse: the original, then its own copy).
+  // Download, check and store (or, without a store, hand the bytes back). Several addresses are tried in turn
+  // (Openverse: the original, then its own copy).
   async function keep(addresses, hosts, credit) {
     let last = httpError(502, 'picture-failed');
     for (const address of addresses.filter(Boolean)) {
@@ -295,6 +297,7 @@ export function createPictures({ store, fetchImpl = globalThis.fetch, now = Date
         const bytes = await download(address, hosts);
         const kind = imageKind(bytes);
         if (!kind || kind === 'svg') throw httpError(415, 'picture-bad-type');
+        if (!store) return { bytes, kind, credit };
         const saved = await store.addFile(`picture.${kind}`, bytes);
         return { ...saved, credit };
       } catch (err) {
@@ -305,8 +308,10 @@ export function createPictures({ store, fetchImpl = globalThis.fetch, now = Date
     throw last;
   }
 
-  async function fetchPicture({ source, id } = {}) {
+  // `lang` (en/no) is for Wikimedia's credit texts; the website's editor sends it, the laptop uses the lobby's.
+  async function fetchPicture({ source, id, lang: wanted } = {}) {
     if (!PICTURE_SOURCES.includes(source)) throw httpError(400, 'bad-source');
+    const lg = ['en', 'no'].includes(wanted) ? wanted : lang() === 'no' ? 'no' : 'en';
     if (source === 'openverse') {
       if (typeof id !== 'string' || !OPENVERSE_ID.test(id)) throw httpError(400, 'bad-id');
       const d = await getJson(`${OPENVERSE}${id}/`, FETCH_TIMEOUT_MS);
@@ -332,7 +337,7 @@ export function createPictures({ store, fetchImpl = globalThis.fetch, now = Date
       iiprop: 'url|extmetadata|size|mime',
       iiurlwidth: '1920', // a picture at most 1920 wide (a drawing comes as a PNG), so files stay small
       iiextmetadatafilter: COMMONS_META,
-      iiextmetadatalanguage: lang() === 'no' ? 'nb' : 'en',
+      iiextmetadatalanguage: lg === 'no' ? 'nb' : 'en',
     }).toString();
     const data = await getJson(url.href, FETCH_TIMEOUT_MS);
     const page = data?.query?.pages?.[0];

@@ -4,6 +4,7 @@ import { connect } from './net.js';
 import { t, pts, setLang, guessLang, translatePage, secondsText } from './i18n.js';
 import { $, h, fill, inkFor, countdown, runCountdowns, setGlass, shapeSvg, optionStyle, setBrand, longWord } from './ui.js';
 import { keepAwake } from './wake.js';
+import { wsPath } from './env.js';
 import { countTo, shownCount } from './rankanim.js';
 import { AVATAR_PARTS, AVATAR_KEYS, isValidAvatar, randomAvatar } from '/lib/avatar.js';
 import { avatarEl, avatarHtml, HAIR_COLORS } from './avatar.js';
@@ -91,6 +92,7 @@ translatePage();
 
 const net = connect({
   role: 'phone',
+  path: wsPath(), // the room's socket on the website, /ws on the laptop
   teamId: () => saved.id ?? null,
   onStatus: (up) => ($('#offline').hidden = up),
   onMessage(msg) {
@@ -110,9 +112,15 @@ const net = connect({
       needPin = Boolean(msg.needPin);
       brand = msg.brand ?? null;
     } else if (msg.type === 'bye') {
-      // The host quit ProQuiz: one plain message, and net.js never connects again.
-      $('#stopped').hidden = false;
-      translatePage();
+      // The host quit ProQuiz (or, on the website, the room closed): one plain message, and net.js never connects
+      // again; the website's one has a way back to the front page.
+      $('#no-host').hidden = true;
+      stopped(msg.reason === 'closed');
+      return;
+    } else if (msg.type === 'hostHere') {
+      // The website: no host has opened this room (a wrong code, or the host is reconnecting after a restart); the
+      // page waits on the same connection and clears this by itself when the host arrives.
+      $('#no-host').hidden = msg.here;
       return;
     }
     render();
@@ -120,6 +128,14 @@ const net = connect({
 });
 
 runCountdowns(net.now);
+
+function stopped(closed) {
+  $('#stopped-title').dataset.t = closed ? 'roomClosedTitle' : 'endedTitle';
+  $('#stopped-text').dataset.t = closed ? 'roomClosedText' : 'endedText';
+  $('#stopped-home').hidden = !closed;
+  $('#stopped').hidden = false;
+  translatePage();
+}
 
 // Any tap keeps the screen on from then on (browsers need a tap before they allow it).
 document.addEventListener('pointerdown', keepAwake);

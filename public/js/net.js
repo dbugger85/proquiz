@@ -1,7 +1,8 @@
 // A WebSocket to the server that reconnects by itself (phones sleep, Wi-Fi drops).
 // Every (re)connect starts with a hello, so the server knows who this is again.
 
-export function connect({ role, teamId = () => null, onMessage, onStatus = () => {}, extra = {} }) {
+// `path` is the WebSocket's path on the server (`/ws` on the laptop; the website gives a room's path, see env.js).
+export function connect({ role, teamId = () => null, onMessage, onStatus = () => {}, extra = {}, path = '/ws' }) {
   let ws = null;
   let delay = 500;
   let retry = null;
@@ -11,7 +12,7 @@ export function connect({ role, teamId = () => null, onMessage, onStatus = () =>
   function open() {
     clearTimeout(retry);
     if (stopped) return;
-    ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
+    ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${path}`);
     ws.onopen = () => {
       delay = 500;
       ws.send(JSON.stringify({ type: 'hello', role, teamId: teamId(), ...extra }));
@@ -19,6 +20,8 @@ export function connect({ role, teamId = () => null, onMessage, onStatus = () =>
     };
     ws.onmessage = (e) => {
       const msg = JSON.parse(e.data);
+      // The website's server has no built-in ping, so it asks in a message; the laptop server never sends this.
+      if (msg.type === 'ping') return ws.send('{"type":"pong"}');
       // Fair buzzing: the server measures our clock. Answer at once with a stopwatch that never jumps.
       if (msg.type === 'clock') return ws.send(JSON.stringify({ type: 'clock', id: msg.id, t: performance.now() }));
       if (msg.serverNow) clockOffset = msg.serverNow - Date.now();

@@ -5,6 +5,7 @@
 // reloads picks up the right tune by itself. The TV plays it (the host laptop only when no TV is open).
 
 import { audioGraph } from './sounds.js';
+import { fileUrl } from './env.js';
 
 // ----- which music plays when (a pure function, tested headless) -----
 
@@ -329,7 +330,7 @@ function ramp(param, value, seconds, at = ctx.currentTime) {
 
 function filePlayer(name) {
   if (!files.has(name)) {
-    const el = new Audio(`/files/${encodeURIComponent(name)}`);
+    const el = new Audio(fileUrl(name));
     el.loop = true;
     el.preload = 'auto';
     el.addEventListener('error', () => bad.add(name));

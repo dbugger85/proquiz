@@ -66,10 +66,17 @@
   </main>
 
   <div id="offline" class="offline-banner" data-t="reconnecting" hidden>Reconnecting…</div>
-  <!-- The host quit ProQuiz: the server said goodbye, and this page never connects again -->
+  <!-- The host quit ProQuiz (or, on the website, the room closed): the server said goodbye, and this page never connects again -->
   <div id="stopped" class="stopped" hidden>
-    <h1 data-t="endedTitle"></h1>
-    <p data-t="endedText"></p>
+    <h1 id="stopped-title" data-t="endedTitle"></h1>
+    <p id="stopped-text" data-t="endedText"></p>
+    <a id="stopped-home" class="btn btn-primary" href="/" data-t="roomClosedHome" hidden></a>
+  </div>
+  <!-- The website: nobody is hosting this room (yet): a wrong code, or the host is on the way back after a restart -->
+  <div id="no-host" class="stopped" hidden>
+    <h1 data-t="noHostTitle"></h1>
+    <p data-t="noHostText"></p>
+    <a class="btn" href="/" data-t="roomClosedHome"></a>
   </div>
 
   <script type="module" src="/js/phone.js"></script>

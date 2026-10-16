@@ -16,12 +16,18 @@
     "e2e:brand": "node test/e2e-brand.mjs",
     "e2e:pictures": "node test/e2e-pictures.mjs",
     "e2e:songs": "node test/e2e-songs.mjs",
-    "build": "node scripts/build.mjs"
+    "build": "node scripts/build.mjs",
+    "web:build": "node scripts/web-build.mjs",
+    "web:dev": "node scripts/web-build.mjs && wrangler dev --port 8787",
+    "web:deploy": "node scripts/web-build.mjs && wrangler deploy",
+    "test:web": "node --test test/web.test.mjs",
+    "e2e:web": "node test/e2e-web.mjs"
   },
   "dependencies": {
     "ws": "^8.18.0"
   },
   "devDependencies": {
-    "playwright-core": "^1.63.0"
+    "playwright-core": "^1.63.0",
+    "wrangler": "^4.151.0"
   }
 }

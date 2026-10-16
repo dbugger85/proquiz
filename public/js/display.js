@@ -9,6 +9,7 @@ import { syncClip, preloadClips, stopClip } from './clip.js';
 import { syncMusic, stopMusic } from './music.js';
 import { ICONS, ruleFor, badgeFor } from './specials.js';
 import { avatarEl } from './avatar.js';
+import { fileUrl, wsPath } from './env.js';
 
 let view = null;
 let connected = new Set();
@@ -27,12 +28,14 @@ const toHost = (msg) => window.parent.postMessage({ proquiz: true, ...msg }, loc
 
 const net = connect({
   role: 'display',
+  path: wsPath(), // the room's socket on the website, /ws on the laptop
   extra: { embedded },
   onMessage(msg) {
     if (msg.type === 'welcome') info = msg.info;
     if (msg.type === 'sound') playSound(view, msg, COLORS);
     if (msg.type === 'reaction') showReaction(msg);
-    if (msg.type === 'bye') return stopped(); // the host quit ProQuiz
+    if (msg.type === 'bye') return stopped(msg.reason === 'closed'); // the host quit ProQuiz, or (the website) the room closed
+    if (msg.type === 'hostHere') return ($('#no-host').hidden = msg.here); // the website: nobody is hosting this room (yet)
     if (msg.type === 'state') {
       view = msg.view;
       connected = new Set(msg.connected);
@@ -52,12 +55,17 @@ runCountdowns(net.now);
 startTicks(() => view, net.now);
 setTickSound((p) => view?.settings.sound && sounds.countTick(p)); // points counting up
 
-// The host quit ProQuiz: one plain message, no sound or music, and net.js never connects again.
-function stopped() {
+// The host quit ProQuiz (or, on the website, the room closed: then with a way back to the front page): one plain
+// message, no sound or music, and net.js never connects again.
+function stopped(closed = false) {
   stopMusic();
   stopClip();
   view = null; // so the music and tick timers stay quiet
   $('#sound-unlock').hidden = true;
+  $('#no-host').hidden = true;
+  $('#stopped-title').dataset.t = closed ? 'roomClosedTitle' : 'endedTitle';
+  $('#stopped-text').dataset.t = closed ? 'roomClosedText' : 'endedText';
+  $('#stopped-home').hidden = !closed;
   $('#stopped').hidden = false;
   translatePage();
 }
@@ -158,6 +166,9 @@ function renderLobby() {
     $('#url').textContent = t('noNetwork');
   }
   $('#url').classList.toggle('long', Boolean(ready));
+  // The website: the room code, big, so a phone can type it instead of scanning.
+  $('#tv-code-line').hidden = !info?.hosted;
+  $('#tv-code').textContent = info?.code ?? '';
   $('#qrs').classList.toggle('waiting', waiting);
   $('#qr-label').hidden = !internet;
   $('#qr-label').textContent = ready ? t('fromAnywhere') : waiting ? t('wifiForNow') : '';
@@ -242,7 +253,7 @@ function band() {
   return [];
 }
 
-const img = (name, cls) => (name ? h('img', { class: cls, src: `/files/${encodeURIComponent(name)}`, alt: '' }) : null);
+const img = (name, cls) => (name ? h('img', { class: cls, src: fileUrl(name), alt: '' }) : null);
 // Who made a picture found with "Find a free picture": the view only has it once the answer is out, and only
 // while the lobby setting `showCredits` is on.
 const creditLine = (c) =>
@@ -265,7 +276,7 @@ const images = new Map(); // file → Image, kept for drawing slowly appearing p
 function imageFor(file) {
   if (!images.has(file)) {
     const im = new Image();
-    im.src = `/files/${encodeURIComponent(file)}`;
+    im.src = fileUrl(file);
     images.set(file, im);
   }
   return images.get(file);

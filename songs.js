@@ -2,8 +2,10 @@
 // the files folder (like an uploaded clip), with the song's title and artist as its credit.
 //
 // Like the picture search (pictures.js), this is a place where ProQuiz goes on the internet itself, and only for the
-// editor on the laptop (the routes live under /api/, which the tunnel's listener and other devices never reach).
-// The game never needs it: a clip found here is a normal file from then on, and the editor's trim bar cuts it.
+// editor (on the laptop the routes live under /api/, which the tunnel's listener and other devices never reach; on
+// the website the room's Durable Object runs the same code with `store: null`, so `fetch()` hands the bytes back
+// and the browser stores them). The game never needs it: a clip found here is a normal file from then on, and the
+// editor's trim bar cuts it. No Node modules here.
 //
 // The browser never gives the server an address to fetch. It sends words to search for, or a song's number, and
 // the server asks Deezer itself where that song's preview is. The preview address is signed and expires, so it is
@@ -18,7 +20,8 @@
 //   800 "no data" (a track that doesn't exist), 500 a bad parameter.
 //   The previews are 30 s MP3s of about 0.5 MB, for private, non-commercial use (Deezer's terms).
 
-import { isIP } from 'node:net';
+import { safeUrl } from './lib/safeurl.js';
+import { readBody } from './pictures.js';
 
 export const USER_AGENT = 'ProQuiz/2 (https://github.com/dbugger85/proquiz; quiz editor song search)';
 export const MAX_SONG = 2 * 1024 * 1024;
@@ -56,20 +59,8 @@ const clean = (s, max) =>
     .trim()
     .slice(0, max);
 
-// An address the server may use: https, a real name (no IP address, no local names), and only the given hosts.
-export function safeUrl(u, hosts = null) {
-  let url;
-  try {
-    url = new URL(u);
-  } catch {
-    return null;
-  }
-  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
-  if (url.protocol !== 'https:' || url.username || url.password) return null;
-  if (isIP(host) || host === 'localhost' || !host.includes('.') || /\.(local|localhost|internal|lan|home|arpa)$/.test(host)) return null;
-  if (hosts && !hosts.includes(host)) return null;
-  return url.href;
-}
+// safeUrl() (lib/safeurl.js): https, a real name (no IP address, no local names) and only the given hosts.
+export { safeUrl };
 
 const trackLink = (track) => safeUrl(track.link) ?? (Number.isInteger(track.id) ? `https://www.deezer.com/track/${track.id}` : '');
 
@@ -196,21 +187,11 @@ export function createSongs({ store, fetchImpl = globalThis.fetch, now = Date.no
         res.body?.cancel().catch(() => {});
         throw httpError(413, 'song-too-big');
       }
-      const chunks = [];
-      let size = 0;
       try {
-        for await (const chunk of res.body ?? []) {
-          size += chunk.length;
-          if (size > MAX_SONG) {
-            await res.body.cancel().catch(() => {});
-            throw httpError(413, 'song-too-big');
-          }
-          chunks.push(Buffer.from(chunk));
-        }
+        return await readBody(res, MAX_SONG, 'song-too-big');
       } catch (err) {
         throw upstream(err);
       }
-      return Buffer.concat(chunks);
     }
   }
 
@@ -223,8 +204,9 @@ export function createSongs({ store, fetchImpl = globalThis.fetch, now = Date.no
     if (!track) throw httpError(404, 'song-missing');
     const bytes = await download(track.preview);
     if (!isMp3(bytes)) throw httpError(415, 'song-bad-type');
-    const saved = await store.addFile('song.mp3', bytes);
     const credit = { title: track.title, author: track.artist, source: 'deezer', ...(track.link && { sourceUrl: track.link }) };
+    if (!store) return { bytes, kind: 'audio', credit };
+    const saved = await store.addFile('song.mp3', bytes);
     return { ...saved, credit };
   }
 

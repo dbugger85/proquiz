@@ -5,13 +5,15 @@
 // bar), pauses by itself at `start + length`. Key 0 (a new `seq`) or a new question plays the trimmed part again,
 // and pressing play after the end starts it over from `start`.
 
+import { fileUrl } from './env.js';
+
 const players = new Map(); // file → <audio>, so clips loaded early start at once
 const wired = new WeakSet(); // <audio> elements that already watch for the end of the trimmed part
 let current = null; // { key, audio, clip, ended, playing }
 let lastSeq = null;
 let endTimer = null;
 
-const urlFor = (file) => `/files/${encodeURIComponent(file)}`;
+const urlFor = fileUrl;
 const endOf = (clip) => (clip.length > 0 ? clip.start + clip.length : Infinity);
 
 function player(file) {

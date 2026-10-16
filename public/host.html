@@ -15,7 +15,7 @@
       <span class="spacer"></span>
       <button id="menu-btn" class="btn" type="button" data-t="mainMenuBtn" hidden></button>
       <button id="help-btn" class="btn" type="button"><span data-t="helpBtn"></span> <kbd>?</kbd></button>
-      <a class="btn" href="/display" target="proquiz-display" data-t="openDisplay">Open TV screen</a>
+      <a id="open-display" class="btn" href="/display" target="proquiz-display" data-t="openDisplay">Open TV screen</a>
     </header>
 
     <p id="host-error" class="error" role="alert" hidden></p>
@@ -36,6 +36,16 @@
         <button id="update-now" class="btn btn-primary btn-small" type="button" data-t="updateNow" hidden></button>
         <a id="update-link" class="btn btn-small" href="https://github.com/dbugger85/proquiz/releases/latest" target="_blank" rel="noopener" data-t="updateDownload"></a>
         <button id="update-close" class="btn btn-small btn-quiet update-close" type="button" data-t-aria-label="updateDismiss" data-t-title="updateDismiss">×</button>
+      </div>
+      <!-- The website only (backup.js): the quizzes live in this browser, so save a copy now and then -->
+      <div id="backup" class="update-banner backup-banner" role="status" hidden>
+        <span class="update-icon backup-icon" aria-hidden="true">⬇</span>
+        <div class="update-text">
+          <b id="backup-title"></b>
+          <small id="backup-note"></small>
+        </div>
+        <button id="backup-export" class="btn btn-primary btn-small" type="button" data-t="backupNow"></button>
+        <button id="backup-close" class="btn btn-small btn-quiet update-close" type="button" data-t-aria-label="backupDismiss" data-t-title="backupDismiss">×</button>
       </div>
       <div id="resume" class="resume" hidden>
         <div>
@@ -62,12 +72,17 @@
         </div>
         <!-- One QR code: the Wi-Fi one, or the internet one when players join over the internet -->
         <p id="join-label" class="join-label"></p>
+        <!-- The website version: the room code, big (the QR code below opens the same room) -->
+        <p id="room-code" class="room-code" hidden></p>
         <div id="qr" class="qr"></div>
         <p id="url" class="url"></p>
         <p id="remote-pin" class="pin-line" hidden></p>
         <p id="remote-tv" class="hint" hidden></p>
-        <p class="hint" data-t="hostOnLaptopHint"></p>
+        <p id="join-hint" class="hint" data-t="hostOnLaptopHint"></p>
         <p id="tv-url" class="hint" hidden></p>
+        <p id="hosted-hint" class="hint" data-t="hostedHint" hidden></p>
+        <!-- The website version: the quiz's pictures and clips going into the room -->
+        <p id="media-progress" class="hint media-progress" role="status" hidden></p>
       </div>
 
       <div>
@@ -186,9 +201,10 @@
           <summary><span class="group-title" data-t="groupLook"></span> <span class="group-status" id="look-status"></span></summary>
           <label class="check with-hint"><input type="checkbox" name="glass"> <span><span data-t="glassLook"></span><br><small data-t="glassHint"></small></span></label>
           <label class="check with-hint"><input type="checkbox" name="showCredits"> <span><span data-t="showCreditsSetting"></span><br><small data-t="showCreditsHint"></small></span></label>
-          <label class="check with-hint"><input type="checkbox" name="updateCheck"> <span><span data-t="updateCheckSetting"></span><br><small data-t="updateCheckHint"></small></span></label>
+          <label class="check with-hint" id="update-check-setting"><input type="checkbox" name="updateCheck"> <span><span data-t="updateCheckSetting"></span><br><small data-t="updateCheckHint"></small></span></label>
           <!-- Branding (brand.js): kept in the ProQuiz folder for every quiz, not a game setting, so nothing here has a
-               `name` the settings form would send. Changed through /api/brand. -->
+               `name` the settings form would send. Changed through /api/brand (on the website: kept in this browser's
+               store and sent to the room, see sendBrand() in host.js). -->
           <div id="brand" class="brand-settings">
             <div class="field">
               <span data-t="brandLogo"></span>
@@ -218,7 +234,7 @@
         <!-- How players join: on this Wi-Fi, or over the internet (a Cloudflare quick tunnel, see lib/tunnel.js) -->
         <details class="settings-group" id="group-remote">
           <summary><span class="group-title" data-t="groupRemote"></span> <span class="group-status" id="remote-status"></span></summary>
-          <fieldset class="field pill-field">
+          <fieldset class="field pill-field" id="join-mode-field">
             <legend data-t="joinModeLabel"></legend>
             <div class="pills">
               <label><input type="radio" name="joinMode" value="wifi"><span data-t="joinWifi"></span></label>
@@ -233,7 +249,7 @@
               <small data-t="remoteInstallHint"></small>
             </div>
             <button id="remote-retry" class="btn btn-small" type="button" data-t="remoteRetry" hidden></button>
-            <label class="check with-hint"><input type="checkbox" id="remote-pin-on"> <span><span data-t="remotePinSetting"></span><br><small data-t="remotePinHint"></small></span></label>
+            <label class="check with-hint"><input type="checkbox" id="remote-pin-on"> <span><span id="remote-pin-label" data-t="remotePinSetting"></span><br><small id="remote-pin-hint" data-t="remotePinHint"></small></span></label>
             <div id="remote-pin-row" class="row remote-pin-row" hidden>
               <b id="remote-pin-show"></b>
               <button id="remote-pin-new" class="btn btn-small" type="button" data-t="remotePinNew"></button>
@@ -244,16 +260,17 @@
         <!-- Which ProQuiz this is (from the server's welcome) -->
         <p id="about-line" class="about-line" hidden></p>
         <!-- Stops the program on this laptop (after ProQuiz's own question). Down here so it isn't hit by accident. -->
-        <p class="quit-row"><button id="quit-btn" class="btn btn-small btn-quiet" type="button" data-t="quitBtn"></button></p>
+        <p class="quit-row" id="quit-row"><button id="quit-btn" class="btn btn-small btn-quiet" type="button" data-t="quitBtn"></button></p>
       </form>
     </section>
 
     <section id="game" hidden></section>
   </div>
-  <!-- After Quit ProQuiz: the server said goodbye, and this page never connects again -->
+  <!-- After Quit ProQuiz: the server said goodbye, and this page never connects again. On the website: the room closed. -->
   <div id="stopped" class="stopped" hidden>
-    <h1 data-t="stoppedTitle"></h1>
-    <p data-t="stoppedText"></p>
+    <h1 id="stopped-title" data-t="stoppedTitle"></h1>
+    <p id="stopped-text" data-t="stoppedText"></p>
+    <button id="stopped-again" class="btn btn-primary" type="button" data-t="roomClosedAgain" hidden></button>
   </div>
   <div id="help" class="help" hidden></div>
   <button id="sound-unlock" class="sound-unlock" type="button" data-t="tapForSound" hidden></button>

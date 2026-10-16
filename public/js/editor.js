@@ -7,6 +7,9 @@ import { t, pts, setLang, getLang, translatePage, licenseName, lengthText, mss }
 import { $, h, fill, setGlass, savedGlass, shapeSvg, optionStyle, setBrand, ask, tell } from './ui.js';
 import { KINDS } from '/lib/crazy.js';
 import { ICONS } from './specials.js';
+import { api } from './quizapi.js';
+import { HOSTED } from './env.js';
+import { refreshBackup } from './backup.js';
 
 let quizzes = []; // the list on the left
 let currentId = null;
@@ -16,6 +19,13 @@ let problems = [];
 let saveTimer = null;
 let savePromise = Promise.resolve();
 let aiNote = null; // { id, duplicates, filled?, left?, summary? } for a quiz just made or filled with AI (shown until another quiz is opened)
+// The website (docs/dev/web-plan.md §2–§4): the quizzes live in this browser, the picture and song search go
+// through this browser's room (quizapi.js), a picture or clip is at most 8 MB, and a quiz's files must fit a room
+// (48 MB): the "About the quiz" fold says how much they add up to, and the problems box says when it is too much.
+const canSearch = true; // both the laptop and the website have the picture and song search
+const uploadFailedText = () => t(HOSTED ? 'edUploadFailedWeb' : 'edUploadFailed');
+let mediaSize = null; // { bytes, biggest, ok, maxBytes, maxFile } of the quiz on show (website only)
+let mediaSizeKey = null; // which quiz and files it was measured for
 
 // A Quick quiz read from a pasted AI answer: how many questions of each kind were read ("Read 19 questions: 14 pick one,
 // 3 tick all that are right, 2 put in order"), and a line for each pick-one question whose wording sounds like
@@ -47,24 +57,18 @@ const closeButton = (dialog, value) => h('button', { class: 'ed-dialog-close', t
 const dialogHead = (dialog, ...title) => h('div', { class: 'ed-dialog-head' }, h('h2', {}, ...title), closeButton(dialog));
 
 setGlass(savedGlass()); // the look the host chose last (the editor has no game state of its own)
-// The host's branding (logo and accent colour), fetched once (the editor is on the laptop, so /api/ answers).
-fetch('/api/brand')
-  .then((r) => (r.ok ? r.json() : null))
+// The host's branding (logo and accent colour), fetched once.
+api
+  .brand()
   .then(setBrand)
   .catch(() => {});
 
-// ----- talking to the server -----
-
-async function call(method, url, body, raw) {
-  const r = await fetch(url, { method, body: raw ?? (body === undefined ? undefined : JSON.stringify(body)) });
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw Object.assign(new Error(data.error || 'failed'), { code: data.error });
-  return data;
-}
+// ----- the quizzes: everything goes through `api` (quizapi.js) -----
 
 async function loadList() {
-  quizzes = await call('GET', '/api/sets');
+  quizzes = await api.list();
   renderList();
+  refreshBackup(); // the website's backup reminder follows the list
 }
 
 function setStatus(key) {
@@ -88,7 +92,7 @@ function saveNow() {
   const id = currentId;
   const body = { set: structuredClone(set) };
   savePromise = savePromise
-    .then(() => call('PUT', `/api/sets/${id}`, body))
+    .then(() => api.save(id, body.set))
     .then(() => {
       if (id === currentId && !saveTimer) setStatus('edSaved');
       const item = quizzes.find((q) => q.id === id);
@@ -112,6 +116,40 @@ function changed({ board = false } = {}) {
   renderProblems();
   if (document.querySelector('.ed-languages') && languagesOf(set).length) redrawLanguages(); // the "n missing" counts
   scheduleSave();
+  refreshMediaSize();
+}
+
+// The website: measures the quiz's pictures and clips again when they changed, then redraws the size line, the
+// fold's status and the problems box.
+const mbText = (bytes) => new Intl.NumberFormat(getLang() === 'no' ? 'nb' : 'en', { maximumFractionDigits: 1 }).format(bytes / (1024 * 1024));
+async function refreshMediaSize() {
+  if (!HOSTED || !set || builtIn) return; // a built-in quiz's files stay on the server, so there is nothing to measure
+  const key = `${currentId}|${usedFiles(set).join(',')}`;
+  if (key === mediaSizeKey) return;
+  mediaSizeKey = key;
+  const size = await api.sizeOf(set).catch(() => null);
+  if (key !== mediaSizeKey) return; // measured again meanwhile
+  mediaSize = size;
+  redrawAboutStatus();
+  renderMediaSize();
+  renderProblems();
+}
+function mediaSizeLine() {
+  return mediaSize ? t('edMediaSize', { used: mbText(mediaSize.bytes), max: mbText(mediaSize.maxBytes) }) : '';
+}
+function renderMediaSize() {
+  const el = document.querySelector('.ed-media-size');
+  if (!el) return;
+  el.textContent = mediaSizeLine();
+  el.classList.toggle('bad', Boolean(mediaSize && !mediaSize.ok));
+}
+// The lines for the problems box when the quiz's files don't fit a room (nothing on the laptop).
+function mediaProblems() {
+  if (!mediaSize || mediaSize.ok) return [];
+  const out = [];
+  if (mediaSize.biggest > mediaSize.maxFile) out.push(t('edMediaFileOver', { max: mbText(mediaSize.maxFile) }));
+  if (mediaSize.bytes > mediaSize.maxBytes) out.push(t('edMediaOver', { used: mbText(mediaSize.bytes), max: mbText(mediaSize.maxBytes) }));
+  return out;
 }
 
 // ----- the list of quizzes -----
@@ -126,7 +164,7 @@ function renderList() {
       h(
         'button',
         { class: `ed-item${q.id === currentId ? ' on' : ''}${q.cover ? ' with-cover' : ''}`, type: 'button', onclick: () => select(q.id).then(foldList) },
-        q.cover ? h('img', { class: 'ed-item-thumb', src: `/files/${encodeURIComponent(q.cover)}`, alt: '' }) : null,
+        q.cover ? h('img', { class: 'ed-item-thumb', src: api.fileUrl(q.cover), alt: '' }) : null,
         h(
           'span',
           { class: 'ed-item-text' },
@@ -161,7 +199,7 @@ function renderList() {
 
 async function setArchived(q, on) {
   try {
-    const { archived } = await call('PUT', `/api/sets/${q.id}/archived`, { archived: on });
+    const { archived } = await api.setArchived(q.id, on);
     q.archived = archived;
   } catch {}
   renderList();
@@ -178,13 +216,15 @@ $('#ed-side-toggle').addEventListener('click', () => narrow() && $('.ed-side').c
 
 async function select(id) {
   await saveNow();
-  const found = await call('GET', `/api/sets/${id}`).catch(() => null);
+  const found = await api.get(id).catch(() => null);
   if (!found) return;
   if (aiNote && aiNote.id !== id) aiNote = null;
   currentId = id;
   set = found.set;
   builtIn = found.builtIn;
   problems = validateSet(set);
+  mediaSize = null; // measured again for this quiz (the website)
+  mediaSizeKey = null;
   history.replaceState(null, '', `#${id}`);
   renderList();
   renderMain();
@@ -211,7 +251,7 @@ function blankQuickSet() {
 }
 
 async function createQuiz(newSet) {
-  const { id } = await call('POST', '/api/sets', { set: newSet });
+  const { id } = await api.create(newSet);
   await loadList();
   await select(id);
 }
@@ -321,12 +361,17 @@ async function newQuiz() {
 
 $('#new-quiz').addEventListener('click', newQuiz);
 
+$('#export-all').addEventListener('click', async () => {
+  await api.exportDownload(null); // every quiz the host made, in one file
+  refreshBackup(); // on the website an export counts as a backup
+});
+
 $('#import-file').addEventListener('change', async (e) => {
   const file = e.target.files[0];
   e.target.value = '';
   if (!file) return;
   try {
-    const { id, count } = await call('POST', '/api/import', undefined, await file.text());
+    const { id, count } = await api.importFile(await file.text());
     await loadList();
     await select(id);
     if (count > 1) tell({ title: t('dlgImportedTitle'), text: t('edImportedMany', { n: count }) }); // an "Export all quizzes" file
@@ -385,7 +430,7 @@ function renderMain() {
       ),
       h('span', { id: 'ed-status', class: 'ed-status' }),
       h('span', { class: 'spacer' }),
-      h('a', { class: 'btn', href: `/api/export/${currentId}`, download: '' }, t('edExport')),
+      h('button', { class: 'btn', type: 'button', onclick: async () => (await api.exportDownload(currentId), refreshBackup()) }, t('edExport')),
       builtIn
         ? null
         : h(
@@ -397,7 +442,7 @@ function renderMain() {
                 if (!(await ask({ title: t('dlgDeleteQuizTitle'), text: t('edConfirmDelete', { title: set.title }), ok: t('edDelete'), danger: true }))) return;
                 clearTimeout(saveTimer);
                 saveTimer = null;
-                await call('DELETE', `/api/sets/${currentId}`);
+                await api.remove(currentId);
                 currentId = null;
                 set = null;
                 await loadList();
@@ -414,6 +459,7 @@ function renderMain() {
   );
   renderBoard();
   renderProblems();
+  refreshMediaSize();
 }
 
 // The description, the cover picture and the languages are used once per quiz, so they sit folded under the name
@@ -427,7 +473,10 @@ function aboutStatus() {
     set.description?.trim() ? t('edDescription') : t('edNoDescription'),
     set.cover ? t('edCover') : t('edNoCover'),
     [languageName(guessedMain()), ...langs.map(languageName)].join(' + '),
-  ].join(' · ');
+    HOSTED && !builtIn ? mediaSizeLine() : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
 }
 function aboutFold() {
   const status = h('small', { class: 'ed-fold-status muted' });
@@ -449,7 +498,7 @@ function aboutFold() {
       },
     },
     h('summary', {}, h('b', {}, t('edAbout')), status),
-    h('div', { class: 'ed-fold-body' }, aboutBlock(), languagesBlock()),
+    h('div', { class: 'ed-fold-body' }, aboutBlock(), languagesBlock(), HOSTED && !builtIn ? h('p', { class: `ed-media-size${mediaSize && !mediaSize.ok ? ' bad' : ''}` }, mediaSizeLine()) : null),
   );
 }
 
@@ -476,11 +525,11 @@ function aboutBlock() {
         if (!file) return;
         draw(t('edUploading'));
         try {
-          const up = await call('POST', `/api/files?name=${encodeURIComponent(file.name)}`, undefined, file);
+          const up = await api.upload(file);
           if (up.kind !== 'image') throw new Error('wrong kind');
           setCover(up.name);
         } catch {
-          draw(t('edUploadFailed'));
+          draw(uploadFailedText());
         }
       },
     });
@@ -512,7 +561,7 @@ function aboutBlock() {
         { class: 'ed-media ed-cover' },
         h('span', { class: 'ed-media-label' }, t('edCover')),
         h('small', {}, t('edCoverHint')),
-        cover ? h('img', { src: `/files/${encodeURIComponent(cover)}`, alt: '' }) : null,
+        cover ? h('img', { src: api.fileUrl(cover), alt: '' }) : null,
         credit ? h('small', { class: 'ed-credit' }, creditNodes(credit)) : null,
         builtIn
           ? null
@@ -520,7 +569,9 @@ function aboutBlock() {
               'span',
               { class: 'row' },
               h('label', { class: 'btn' }, t('edChooseFile'), input),
-              h(
+              !canSearch
+                ? null
+                : h(
                 'button',
                 {
                   class: 'btn ed-pic-search',
@@ -538,7 +589,7 @@ function aboutBlock() {
               ),
               cover ? h('button', { class: 'btn btn-quiet', type: 'button', onclick: () => setCover(null) }, t('edRemove')) : null,
             ),
-        status ? h('p', { class: `ed-media-status${status === t('edUploadFailed') ? ' bad' : ''}` }, status) : null,
+        status ? h('p', { class: `ed-media-status${status === uploadFailedText() ? ' bad' : ''}` }, status) : null,
       ),
     );
   };
@@ -1227,7 +1278,7 @@ function renderProblems() {
   const box = $('#ed-problems');
   if (!box) return;
   const blanks = [...catsOf(1), ...catsOf(2)].reduce((n, c) => n + c.questions.filter(isBlank).length, 0);
-  const lines = problems.filter((p) => !blankProblem(p)).map(problemText);
+  const lines = [...problems.filter((p) => !blankProblem(p)).map(problemText), ...mediaProblems()];
   if (blanks) lines.unshift(t('edBlanks', { n: blanks }));
   fill(
     box,
@@ -1285,7 +1336,7 @@ function renderCredits() {
               h(
                 'li',
                 {},
-                isSong(c) ? h('span', { class: 'ed-credit-note', 'aria-hidden': 'true' }, '♪') : h('img', { src: `/files/${encodeURIComponent(name)}`, alt: '', loading: 'lazy' }),
+                isSong(c) ? h('span', { class: 'ed-credit-note', 'aria-hidden': 'true' }, '♪') : h('img', { src: api.fileUrl(name), alt: '', loading: 'lazy' }),
                 h('span', {}, c.title && !isSong(c) ? h('b', {}, c.title) : null, h('span', {}, creditNodes(c), c.licenseUrl ? [' · ', outLink(c.licenseUrl, t('picAboutLicense'))] : null)),
               ),
             ),
@@ -1328,8 +1379,8 @@ function openQuestion(c, i, r = 1) {
       const name = q[key];
       const preview = name
         ? kind === 'image'
-          ? h('img', { src: `/files/${encodeURIComponent(name)}`, alt: '' })
-          : h('audio', { src: `/files/${encodeURIComponent(name)}`, controls: true, preload: 'metadata' })
+          ? h('img', { src: api.fileUrl(name), alt: '' })
+          : h('audio', { src: api.fileUrl(name), controls: true, preload: 'metadata' })
         : null;
       const input = h('input', {
         type: 'file',
@@ -1340,12 +1391,12 @@ function openQuestion(c, i, r = 1) {
           if (!file) return;
           draw(t('edUploading'));
           try {
-            const up = await call('POST', `/api/files?name=${encodeURIComponent(file.name)}`, undefined, file);
+            const up = await api.upload(file);
             if (up.kind !== kind) throw new Error('wrong kind');
             upd(key, up.name);
             draw();
           } catch {
-            draw(t('edUploadFailed'));
+            draw(uploadFailedText());
           }
         },
       });
@@ -1361,7 +1412,9 @@ function openQuestion(c, i, r = 1) {
               'span',
               { class: 'row' },
               h('label', { class: 'btn' }, t('edChooseFile'), input),
-              kind === 'image'
+              !canSearch
+                ? null
+                : kind === 'image'
                 ? h(
                     'button',
                     {
@@ -1418,7 +1471,7 @@ function openQuestion(c, i, r = 1) {
                   )
                 : null,
             ),
-        status ? h('p', { class: `ed-media-status${status === t('edUploadFailed') ? ' bad' : ''}` }, status) : null,
+        status ? h('p', { class: `ed-media-status${status === uploadFailedText() ? ' bad' : ''}` }, status) : null,
       );
       if (key === 'audio') drawTrim(preview);
       if (key === 'image') drawUnveil();
@@ -2007,7 +2060,7 @@ function suggestQuery(text) {
   return s.slice(0, 60).replace(/\s+\S*$/, '');
 }
 
-const PIC_ERRORS = { 'no-internet': 'picErrOffline', 'rate-limited': 'picErrRate', 'picture-too-big': 'picErrTooBig', 'picture-bad-type': 'picErrType', 'picture-missing': 'picErrMissing' };
+const PIC_ERRORS = { 'no-internet': 'picErrOffline', 'rate-limited': 'picErrRate', 'picture-too-big': 'picErrTooBig', 'too-big-for-web': 'picErrTooBigWeb', 'picture-bad-type': 'picErrType', 'picture-missing': 'picErrMissing' };
 const picError = (err) => t(navigator.onLine === false ? 'picErrOffline' : (PIC_ERRORS[err?.code] ?? 'picErrFailed'));
 
 function openPictureDialog({ query = '', onPick }) {
@@ -2109,8 +2162,7 @@ function openPictureDialog({ query = '', onPick }) {
     goBtn.disabled = true;
     const page = more ? st.page + 1 : 1;
     try {
-      const params = new URLSearchParams({ q: st.words, source: st.source, page: String(page), license: st.license, lang: getLang() });
-      const out = await call('GET', `/api/pictures/search?${params}`);
+      const out = await api.searchPictures({ q: st.words, source: st.source, page: String(page), license: st.license, lang: getLang() });
       if (token !== st.token) return;
       const seen = new Set(st.results.map((r) => r.id));
       st.results.push(...out.results.filter((r) => !seen.has(r.id)));
@@ -2182,7 +2234,7 @@ function openPictureDialog({ query = '', onPick }) {
       useStatus.classList.remove('bad');
       useStatus.textContent = t('picAdding');
       try {
-        const got = await call('POST', '/api/pictures/fetch', { source: r.source, id: r.id });
+        const got = await api.fetchPicture({ source: r.source, id: r.id });
         dialog.close();
         onPick(got);
       } catch (err) {
@@ -2344,8 +2396,7 @@ function openSongDialog({ query = '', onPick }) {
     goBtn.disabled = true;
     const page = more ? st.page + 1 : 1;
     try {
-      const params = new URLSearchParams({ q: st.words, page: String(page) });
-      const out = await call('GET', `/api/songs/search?${params}`);
+      const out = await api.searchSongs({ q: st.words, page: String(page) });
       if (token !== st.token) return;
       const seen = new Set(st.results.map((r) => r.id));
       st.results.push(...out.results.filter((r) => !seen.has(r.id)));
@@ -2371,7 +2422,7 @@ function openSongDialog({ query = '', onPick }) {
     useStatus.classList.remove('bad');
     useStatus.textContent = t('songAdding');
     try {
-      const got = await call('POST', '/api/songs/fetch', { id: r.id });
+      const got = await api.fetchSong({ id: r.id });
       dialog.close();
       onPick(got);
     } catch (err) {
@@ -2539,7 +2590,7 @@ function openAiDialog() {
       return;
     }
     await saveNow();
-    const { id } = await call('POST', '/api/sets', { set: made.set });
+    const { id } = await api.create(made.set);
     aiNote = { id, duplicates: made.duplicates, summary: made.summary };
     reply.value = '';
     dialog.close();
@@ -2753,7 +2804,7 @@ function openFillDialog() {
 window.addEventListener('beforeunload', () => saveTimer && saveNow());
 
 (async () => {
-  const { lang } = await call('GET', '/api/lang').catch(() => ({ lang: 'en' }));
+  const lang = await api.lang().catch(() => 'en');
   setLang(lang);
   translatePage();
   await loadList();

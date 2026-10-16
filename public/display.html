@@ -16,6 +16,8 @@
       <div id="tv-brand" class="tv-brand" hidden></div>
       <h1 class="call" data-t="scanToJoin">Scan to join</h1>
       <p class="call-url"><span data-t="orOpen">or open</span> <b id="url"></b></p>
+      <!-- The website version: the room code, big enough to read from the sofa -->
+      <p id="tv-code-line" class="call-url" hidden><span data-t="roomCodeTitle"></span><br><b id="tv-code" class="tv-code"></b></p>
       <!-- Players join over the internet, but the address isn't ready yet -->
       <p id="tv-wait" class="tv-wait" hidden></p>
     </div>
@@ -34,10 +36,17 @@
   <!-- Players' emoji reactions (Quick quiz) float up over everything -->
   <div id="reactions" class="tv-reactions" aria-hidden="true"></div>
   <div id="sound-unlock" class="sound-unlock" data-t="tapForSound" hidden></div>
-  <!-- The host quit ProQuiz: the server said goodbye, and this page never connects again -->
+  <!-- The host quit ProQuiz (or, on the website, the room closed): the server said goodbye, and this page never connects again -->
   <div id="stopped" class="stopped" hidden>
-    <h1 data-t="endedTitle"></h1>
-    <p data-t="endedText"></p>
+    <h1 id="stopped-title" data-t="endedTitle"></h1>
+    <p id="stopped-text" data-t="endedText"></p>
+    <a id="stopped-home" class="btn btn-primary" href="/" data-t="roomClosedHome" hidden></a>
+  </div>
+  <!-- The website: nobody is hosting this room (yet): a wrong code, or the host is on the way back after a restart -->
+  <div id="no-host" class="stopped" hidden>
+    <h1 data-t="noHostTitle"></h1>
+    <p data-t="noHostText"></p>
+    <a class="btn" href="/" data-t="roomClosedHome"></a>
   </div>
 
   <script type="module" src="/js/display.js"></script>

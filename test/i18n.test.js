@@ -27,7 +27,7 @@ test('every text used in the pages and scripts exists', () => {
   const missing = [...used].filter((k) => !(k in STRINGS.en));
   assert.deepEqual(missing, []);
   // Error codes the server can send are all translated.
-  const server = readFileSync(new URL('../server.js', import.meta.url), 'utf8') + readFileSync(new URL('../lib/game.js', import.meta.url), 'utf8');
+  const server = ['../server.js', '../lib/hub.js', '../lib/game.js', '../web/room.js', '../web/worker.js'].map((f) => readFileSync(new URL(f, import.meta.url), 'utf8')).join('\n');
   const codes = new Set([...server.matchAll(/(?:code: |GameError\()'([\w-]+)'/g)].map((m) => m[1]));
   const untranslated = [...codes].filter((c) => c !== 'unknown-action' && !(`err-${c}` in STRINGS.en));
   assert.deepEqual(untranslated, []);

@@ -31,3 +31,5 @@ the Linux build is tested here. Windows and Mac builds can't be run on this lapt
 ## How to release
 
 Only when the owner asks. Bump with `npm version X.Y.Z --no-git-tag-version`, commit, push, `npm run build`, then `gh release create vX.Y.Z dist/* --title "ProQuiz X.Y.Z" --notes-file <notes> --latest`. Upload **everything in dist/**, including `SHA256SUMS.txt`, or Update now refuses the release. Start the notes with one friendly summary sentence: the lobby's update banner shows the first paragraph. Never put a claude.ai session link in a commit, PR or release.
+
+**Then the website** (web.md): `npm run web:deploy` (builds `dist/web` and runs `wrangler deploy`; `npx wrangler login` once per machine). The website serves the same pages and rules as the release, so it is deployed after every release that touches them (the room's `welcome.info.version` comes from `package.json` at deploy time). **Never deploy while a game is on:** a deploy restarts every room, the pages reconnect and the host has to press Continue. The website has no "Update now": the next page load is the new version.

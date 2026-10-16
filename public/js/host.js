@@ -13,6 +13,14 @@ import { syncMusic, stopMusic } from './music.js';
 import { ICONS, ruleFor, badgeFor } from './specials.js';
 import { ownSpecials } from '/lib/crazy.js';
 import { avatarEl } from './avatar.js';
+import { fileUrl, HOSTED, setRoom, wsPath, pagePath } from './env.js';
+import { MAX_ROOM_FILE } from '/lib/room.js';
+import { logoKind } from '/lib/mime.js';
+import { MAX_LOGO, NO_BRAND } from '/lib/brand-core.js';
+import { myRoom, makeRoom } from './myroom.js';
+import { usedFiles, validateSet } from '/lib/validate.js';
+import { api, store } from './quizapi.js';
+import { refreshBackup } from './backup.js';
 
 // A team's avatar (mascot or player face) in a list, or nothing for a team without one.
 const face = (team) => avatarEl(team?.avatar);
@@ -48,16 +56,44 @@ let soundSeq = null;
 let resume = null; // a saved game the host can continue
 let latency = {}; // fair buzzing: teamId → the phone's measured delay (ms)
 let remote = { status: 'off', url: null, reason: null, progress: null, remoteTeams: [] }; // players elsewhere (the internet tunnel)
-let brand = null; // the host's logo, event name and accent colour (brand.js, changed through /api/brand)
+let brand = null; // the host's logo, event name and accent colour (brand.js, changed through /api/brand; on the website sent by this page, see sendBrand())
 let remoteQuickDone = false; // turned on the question text on the phones for this tunnel (once, so the host can turn it off again)
 let update = null; // a newer ProQuiz is out: {version, url, notes} from the server (lib/update.js), or null
 
+// ----- the website version: this browser's room (docs/dev/web-plan.md §1.4) -----
+// The host's browser makes a secret key and keeps it (public/js/myroom.js); the room code is made from the key, so
+// the room knows its host by the key alone. The same key reopens the same room after a refresh (or a restart of
+// the room).
+const LAST_SET = 'proquiz.lastSet'; // the quiz chosen last time (the room starts with the sample)
+const room = HOSTED ? await myRoom() : null;
+if (room) {
+  setRoom(room.code); // wsPath(), fileUrl() and pagePath() point into the room from here on
+  $('#open-display').href = pagePath('/display');
+}
+// The website: the branding as kept in this browser (store-browser.js `meta.brand`, the logo as a file name there).
+let myBrand = store ? await store.brand().catch(() => ({ ...NO_BRAND })) : null;
+// Another host already has a room with this code (as good as impossible): a new key, a new room, once.
+async function roomTaken() {
+  if (sessionStorage.getItem('proquiz.roomRetry')) return showError(t('err-room-taken'));
+  sessionStorage.setItem('proquiz.roomRetry', '1');
+  await makeRoom();
+  location.reload();
+}
+
 const net = connect({
   role: 'host',
+  path: wsPath(),
+  extra: room ? { key: room.key } : {},
   onMessage(msg) {
     if (msg.type === 'welcome') {
       info = msg.info;
+      restoreTried = false; // a new connection: the room may be a fresh one (web-plan.md §5)
+      lastSetDone = false; // (a fresh room starts with the sample quiz)
       renderQr();
+      if (store) sendBrand(); // the website: the room keeps the branding only in memory, so it gets it on every connection
+    } else if (msg.type === 'save') {
+      // The website: the room's autosave, kept in this browser (store-browser.js) for a room that comes up fresh.
+      store?.setAutosave(msg.saved).catch(() => {});
     } else if (msg.type === 'state') {
       view = msg.view;
       connected = new Set(msg.connected);
@@ -83,9 +119,10 @@ const net = connect({
     } else if (msg.type === 'sound') {
       playSound(view, msg, COLORS);
     } else if (msg.type === 'error') {
+      if (msg.code === 'room-taken') return roomTaken();
       showError(t(`err-${msg.code}`));
     } else if (msg.type === 'bye') {
-      stopped(); // Quit ProQuiz: the server has saved and is closing
+      stopped(msg.reason); // Quit ProQuiz: the server has saved and is closing (or, on the website, the room closed)
     }
   },
 });
@@ -93,14 +130,21 @@ runCountdowns(net.now);
 startTicks(() => (displays === 0 ? view : null), net.now);
 
 // After Quit ProQuiz: one plain message over everything, no sound or music, no keys, and net.js never connects again.
-function stopped() {
+// On the website the room closed while this page was away (`reason: 'closed'`): the same block says so, with a
+// button that opens the room again (the same key, a fresh room; the game is offered from this browser's autosave).
+function stopped(reason = null) {
   stopMusic();
   stopClip();
   view = null; // the music and tick timers stay quiet, and handleKey() does nothing
   $('#sound-unlock').hidden = true;
+  const closed = reason === 'closed';
+  $('#stopped-title').dataset.t = closed ? 'roomClosedTitle' : 'stoppedTitle';
+  $('#stopped-text').dataset.t = closed ? 'roomClosedHostText' : 'stoppedText';
+  $('#stopped-again').hidden = !closed;
   $('#stopped').hidden = false;
   translatePage();
 }
+$('#stopped-again').addEventListener('click', () => location.reload());
 
 function showUnlock() {
   $('#sound-unlock').hidden = !(view?.settings.sound || view?.settings.music) || displays > 0 || audioReady();
@@ -206,6 +250,7 @@ function renderAbout() {
 // address, and until that is ready the card says what is happening, with the Wi-Fi code below as a stand-in.
 function renderQr() {
   if (!info) return;
+  if (info.hosted) return renderRoomCard();
   const internet = view?.settings.joinMode === 'internet';
   const ready = internet && remoteOn();
   const waiting = internet && !ready;
@@ -242,6 +287,32 @@ function renderQr() {
   }
 }
 
+// The website version's join card: the room code big, the QR code to the room, and where the TV page is.
+function renderRoomCard() {
+  $('.join-card').classList.remove('waiting');
+  $('#join-label').textContent = t('roomCodeTitle');
+  $('#room-code').hidden = false;
+  $('#room-code').textContent = info.code ?? '';
+  const url = info.phoneUrl;
+  if ($('#qr').dataset.url !== url) {
+    $('#qr').replaceChildren(qrSvg(url));
+    $('#qr').dataset.url = url;
+  }
+  $('#url').replaceChildren(...urlNodes(url));
+  const hint = $('#join-hint');
+  hint.removeAttribute('data-t'); // its text has the site in it, so translatePage() must leave it alone
+  hint.textContent = t('joinWithCode', { site: shortUrl(location.origin) });
+  $('#tv-url').textContent = t('tvHostedHint', { url: shortUrl(info.tvUrl ?? '') });
+  $('#tv-url').hidden = !info.tvUrl;
+  $('#hosted-hint').hidden = false;
+  // Anyone with the code can open the phone page, so the PIN (if set) counts here; the TV page never shows it.
+  const pin = view?.settings.remotePin;
+  $('#remote-pin').hidden = !pin;
+  $('#remote-pin').textContent = pin ? t('remotePinShow', { pin }) : '';
+  $('#remote-tv').hidden = true;
+  $('#join-wait').hidden = true;
+}
+
 // ----- how players join: on this Wi-Fi, or over the internet -----
 
 const remoteOn = () => remote.status === 'on' && Boolean(remote.url);
@@ -262,6 +333,7 @@ function remoteStateText() {
 // The "How players join" settings group: the Wi-Fi / internet pills (a normal setting), and over the internet
 // what is happening, the download, trying again, and the PIN.
 function renderRemote() {
+  if (HOSTED) return renderRemoteHosted();
   const st = remote.status;
   const internet = view.settings.joinMode === 'internet';
   const busy = st === 'starting' || st === 'downloading';
@@ -296,11 +368,22 @@ function renderRemote() {
   if (!quick()) $('#remote-note').hidden = true;
 }
 
+// The website: there is no tunnel (everyone joins with the code), so the group only has the PIN tick.
+function renderRemoteHosted() {
+  const pin = view.settings.remotePin;
+  $('#remote-more').hidden = false;
+  $('#remote-status').textContent = pin ? t('remotePinShow', { pin }) : t('stateOff');
+  if (document.activeElement !== $('#remote-pin-on')) $('#remote-pin-on').checked = Boolean(pin);
+  $('#remote-pin-row').hidden = !pin;
+  $('#remote-pin-show').textContent = pin ? t('remotePinShow', { pin }) : '';
+}
+
 // During a game: a small warning when players join over the internet and that has stopped working (or came
 // back on a new address, which players elsewhere must open again).
 let gameUrl; // the internet address when the game started
 function renderRemoteWarn() {
   const el = $('#remote-warn');
+  if (HOSTED) return (el.hidden = true);
   const inGame = view.phase !== 'lobby';
   if (!inGame) gameUrl = remoteOn() ? remote.url : null;
   const internet = view.settings.joinMode === 'internet';
@@ -349,7 +432,7 @@ function renderTeams() {
           { class: 'conn' },
           h('span', { class: `dot${on ? ' on' : ''}` }),
           on ? t('online') : t('offline'),
-          remote.remoteTeams?.includes(team.id) ? h('span', { class: 'elsewhere', title: t('remoteTagHint') }, t('remoteTag')) : null,
+          !HOSTED && remote.remoteTeams?.includes(team.id) ? h('span', { class: 'elsewhere', title: t('remoteTagHint') }, t('remoteTag')) : null,
           ms !== undefined ? h('span', { class: 'ping', title: t('pingHint') }, t('pingMs', { ms })) : null,
         ),
         h(
@@ -369,7 +452,7 @@ function renderTeams() {
       );
     }),
   );
-  $('#start').disabled = teams.length === 0;
+  $('#start').disabled = teams.length === 0 || mediaBusy;
   $('#start-why').hidden = teams.length > 0;
 }
 
@@ -423,7 +506,7 @@ function renderSummaries() {
   $('#look-status').textContent = [
     t('lookSummary', { state: t(st.glass ? 'stateOn' : 'stateOff') }),
     st.showCredits ? null : t('lookCreditsOff'),
-    st.updateCheck ? null : t('lookUpdateOff'),
+    st.updateCheck || HOSTED ? null : t('lookUpdateOff'),
     brand?.logo ? t('brandHasLogo') : null,
     accent === 'violet' ? null : t(`accent-${accent}`),
   ]
@@ -440,7 +523,7 @@ function renderSummaries() {
 // Your own music: a file per moment, or the built-in tune.
 function renderMusicFiles() {
   const box = $('#music-files');
-  box.hidden = !view.settings.music;
+  box.hidden = !view.settings.music || HOSTED; // the website plays the built-in music only
   const chosen = view.settings.musicFiles;
   const key = JSON.stringify(chosen) + view.settings.lang;
   if (box.dataset.key === key) return; // don't redraw (and stop a preview) on every update
@@ -478,7 +561,7 @@ function renderMusicFiles() {
         'div',
         { class: 'music-row' },
         h('span', { class: 'music-mood' }, t(`mood-${mood}`)),
-        name ? h('audio', { src: `/files/${encodeURIComponent(name)}`, controls: true, preload: 'metadata', onerror: () => (status.textContent = t('musicMissing')) }) : h('span', { class: 'music-builtin' }, t('musicBuiltIn')),
+        name ? h('audio', { src: fileUrl(name), controls: true, preload: 'metadata', onerror: () => (status.textContent = t('musicMissing')) }) : h('span', { class: 'music-builtin' }, t('musicBuiltIn')),
         h(
           'span',
           { class: 'row' },
@@ -492,12 +575,20 @@ function renderMusicFiles() {
 }
 
 // ----- branding: the logo, the event name and the accent colour (brand.js; saved through /api/brand) -----
+// On the website (docs/dev/web-plan.md Phase 6) the same block works on top of this browser's store instead: the
+// change is kept in IndexedDB (`store.setBrand()`, `setLogo()`, `removeLogo()`), then sendBrand() puts the logo
+// into the room's file store and sends `brand` to the room, whose state message brings it back to every screen.
 
 // Which accent choice a saved colour is: one of ACCENTS, or 'custom'.
 const accentOf = (color) => ACCENTS.find((a) => a.color === (color ?? null))?.id ?? 'custom';
+const LOGO_ERRORS = { 'logo-too-big': 'brandLogoTooBig', 'logo-bad-type': 'brandLogoBadType' };
 
 async function saveBrand(patch) {
   try {
+    if (store) {
+      await store.setBrand(patch);
+      return sendBrand();
+    }
     const r = await fetch('/api/brand', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) });
     if (!r.ok) throw new Error('bad');
   } catch {
@@ -513,19 +604,33 @@ $('#brand-file').addEventListener('change', async (e) => {
   const file = e.target.files[0];
   e.target.value = ''; // the same file can be chosen again
   if (!file) return;
-  if (file.size > 2 * 1024 * 1024) return brandMsg(t('brandLogoTooBig'), true);
+  if (file.size > MAX_LOGO) return brandMsg(t('brandLogoTooBig'), true);
   brandMsg(t('brandUploading'));
   try {
+    if (store) {
+      // The website: checked and kept in this browser (named after its content), then into the room.
+      if (!logoKind(new Uint8Array(await file.arrayBuffer()))) return brandMsg(t('brandLogoBadType'), true);
+      const { old } = await store.setLogo(file);
+      if (await sendBrand()) brandMsg('');
+      if (old) dropFromRoom(old);
+      return;
+    }
     const r = await fetch('/api/brand/logo', { method: 'POST', body: file });
     const out = await r.json().catch(() => ({}));
-    if (!r.ok) return brandMsg(t({ 'logo-too-big': 'brandLogoTooBig', 'logo-bad-type': 'brandLogoBadType' }[out.error] ?? 'brandFailed'), true);
+    if (!r.ok) return brandMsg(t(LOGO_ERRORS[out.error] ?? 'brandFailed'), true);
     brandMsg('');
-  } catch {
-    brandMsg(t('brandFailed'), true);
+  } catch (err) {
+    brandMsg(t(LOGO_ERRORS[err?.code] ?? 'brandFailed'), true);
   }
 });
 $('#brand-remove').addEventListener('click', async () => {
   try {
+    if (store) {
+      const { old } = await store.removeLogo();
+      if (await sendBrand()) brandMsg('');
+      if (old) dropFromRoom(old);
+      return;
+    }
     const r = await fetch('/api/brand/logo', { method: 'DELETE' });
     if (!r.ok) throw new Error('bad');
     brandMsg('');
@@ -533,6 +638,51 @@ $('#brand-remove').addEventListener('click', async () => {
     brandMsg(t('brandFailed'), true);
   }
 });
+
+// The website: the branding from this browser to the room. The room keeps it only in memory, so it goes on every
+// connection (a fresh room after a restart or a closed room has none), and the logo goes into the room's file store
+// first, under its `logo-<hash>.<ext>` name, unless the room has it already; the hub then points every screen at it.
+// One at a time, in order, so a quick run of changes ends with the last one. True when the room took it.
+let brandSending = Promise.resolve(true);
+function sendBrand() {
+  brandSending = brandSending.catch(() => false).then(doSendBrand);
+  return brandSending;
+}
+async function doSendBrand() {
+  if (!store || !room) return true;
+  try {
+    myBrand = await store.brand();
+    let logo = myBrand.logo;
+    if (logo) {
+      const sent = await logoToRoom(logo);
+      if (sent === false) return false; // refused, the reason is shown
+      if (sent === null) logo = null; // the file is gone from this browser: the screens show the wordmark
+    }
+    net.send({ type: 'brand', ...myBrand, logo });
+    return true;
+  } catch {
+    brandMsg(t('brandFailed'), true);
+    return false;
+  }
+}
+// True when the logo is in the room (already, or now), null when this browser no longer has the file, false (with
+// the reason shown) when the room refused it.
+async function logoToRoom(name) {
+  const res = await fetch(pagePath('/files'), { headers: roomHeaders() });
+  if (!res.ok) throw new Error(String(res.status));
+  const have = await res.json();
+  if (have.files.some((f) => f.name === name)) return true;
+  const blob = await store.fileBlob(name);
+  if (!blob) return null;
+  const put = await fetch(fileUrl(name), { method: 'PUT', headers: roomHeaders(), body: blob });
+  if (put.ok) return true;
+  const why = await put.json().catch(() => ({}));
+  if (why.error === 'media-full') brandMsg(t('mediaTotalTooBig', { max: mb(why.max ?? have.maxTotal) }), true);
+  else brandMsg(t(LOGO_ERRORS[why.error] ?? 'brandFailed'), true);
+  return false;
+}
+// An old logo is dropped from the room (the browser store dropped its copy already).
+const dropFromRoom = (name) => fetch(fileUrl(name), { method: 'DELETE', headers: roomHeaders() }).catch(() => {});
 $('#brand-plate').addEventListener('change', (e) => saveBrand({ plate: e.target.checked }));
 // The event name is saved a moment after typing stops (and at once when leaving the field).
 let nameTimer = null;
@@ -650,17 +800,179 @@ $('#settings').addEventListener('change', (e) => {
   cmd({ type: 'settings', settings: { [el.name]: value } });
 });
 
-$('#start').addEventListener('click', () => cmd({ type: 'start' }));
+// Start: on the website the quiz's pictures and clips go into the room first (they may be gone after a restart).
+$('#start').addEventListener('click', async () => {
+  if (HOSTED && !(await syncRoom(view.set))) return;
+  cmd({ type: 'start' });
+});
+
+// ----- the website version: the quiz's pictures and clips into the room (docs/dev/web-plan.md §3) -----
+// The TV and host pages fetch a quiz's files from the room, so before a quiz is played its files are uploaded
+// from this browser: list what the room has, upload what is missing (a progress line in the join card), and drop
+// files of another quiz when the room's cap would be passed. Phones never get file names.
+const MB = 1024 * 1024;
+const mb = (n) => Math.round(n / MB);
+// A file's bytes, as a Blob, or null when there is no such file: the host's own pictures and clips from the
+// browser store (store-browser.js), else the built-in quizzes' files from the server.
+async function fileBlob(name) {
+  try {
+    const own = await store?.fileBlob(name);
+    if (own) return own;
+    const res = await fetch(`/sets/files/${encodeURIComponent(name)}`);
+    return res.ok ? await res.blob() : null;
+  } catch {
+    return null;
+  }
+}
+const roomHeaders = () => ({ 'x-proquiz-key': room.key });
+let mediaBusy = false;
+function mediaProgress(text) {
+  mediaBusy = Boolean(text);
+  const line = $('#media-progress');
+  line.hidden = !text;
+  line.textContent = text ?? '';
+  if (view) renderTeams(); // Start waits while files go up
+}
+// True when every file the quiz uses is in the room; false (with the reason shown) when it can't be played there.
+let syncing = Promise.resolve(true);
+function syncRoom(set) {
+  syncing = syncing.catch(() => false).then(() => doSyncRoom(set));
+  return syncing;
+}
+async function doSyncRoom(set) {
+  if (!room) return true;
+  const names = usedFiles(set);
+  if (!names.length) return true;
+  try {
+    const res = await fetch(pagePath('/files'), { headers: roomHeaders() });
+    if (!res.ok) throw new Error(String(res.status));
+    const have = await res.json();
+    const there = new Map(have.files.map((f) => [f.name, f.size]));
+    const missing = names.filter((n) => !there.has(n));
+    if (!missing.length) return true;
+    mediaProgress(t('uploadingMedia', { n: 0, total: missing.length }));
+    // Find the files first, so the caps are checked before anything goes up.
+    const blobs = [];
+    let need = 0;
+    for (const name of missing) {
+      const blob = await fileBlob(name);
+      if (!blob) continue; // a missing file shows as missing on the TV, as on the laptop
+      if (blob.size > MAX_ROOM_FILE) return mediaFail(t('mediaTooBig', { max: mb(MAX_ROOM_FILE) }));
+      blobs.push([name, blob]);
+      need += blob.size;
+    }
+    // Over the room's cap: drop another quiz's files first.
+    let bytes = have.bytes;
+    if (bytes + need > have.maxTotal) {
+      const keep = new Set([...names, myBrand?.logo].filter(Boolean)); // the host's logo stays (sendBrand above)
+      for (const [name, size] of there) {
+        if (keep.has(name)) continue;
+        await fetch(fileUrl(name), { method: 'DELETE', headers: roomHeaders() });
+        bytes -= size;
+      }
+      if (bytes + need > have.maxTotal) return mediaFail(t('mediaTotalTooBig', { max: mb(have.maxTotal) }));
+    }
+    let n = 0;
+    for (const [name, blob] of blobs) {
+      mediaProgress(t('uploadingMedia', { n: n + 1, total: blobs.length }));
+      const put = await fetch(fileUrl(name), { method: 'PUT', headers: roomHeaders(), body: blob });
+      if (put.status === 413) {
+        const why = await put.json().catch(() => ({}));
+        return mediaFail(t(why.error === 'media-full' ? 'mediaTotalTooBig' : 'mediaTooBig', { max: mb(why.max ?? MAX_ROOM_FILE) }));
+      }
+      if (!put.ok) throw new Error(String(put.status));
+      n += 1;
+    }
+    mediaProgress(null);
+    return true;
+  } catch {
+    return mediaFail(t('mediaUploadFailed'));
+  }
+}
+function mediaFail(text) {
+  mediaProgress(null);
+  showError(text);
+  return false;
+}
 
 // The list of quizzes to choose from (fetched when the lobby shows, and when the window gets focus again).
+// On the website there is no list on the server: the browser store (store-browser.js, through quizapi.js) lists
+// the built-in quizzes and the host's own, each with whether its files fit a room (`ok`).
 let quizList = [];
 async function loadQuizzes() {
   try {
-    quizList = await (await fetch('/api/sets')).json();
+    quizList = HOSTED ? await api.list() : await (await fetch('/api/sets')).json();
   } catch {
     return;
   }
   renderSetPicker();
+  if (HOSTED) refreshBackup(); // the website's backup reminder follows the list
+}
+// The website: the host's browser sends the quiz itself to the room (its files first, web-plan.md §3).
+async function chooseQuiz(id, { quiet = false } = {}) {
+  let found;
+  try {
+    found = await api.get(id);
+  } catch {
+    return quiet ? undefined : showError(t('err-set-missing'));
+  }
+  if (!(await syncRoom(found.set))) return;
+  cmd({ type: 'loadSet', set: found.set, setId: id });
+  try {
+    localStorage.setItem(LAST_SET, id);
+  } catch {
+    // no storage
+  }
+}
+// The editor (another tab) saved or changed a quiz: the list is fetched again, and the quiz on show in the lobby is
+// reloaded when it was the one saved (like `setSaved` on the laptop), as long as it has no problems.
+if (store) {
+  new BroadcastChannel('proquiz-store').addEventListener('message', async (e) => {
+    const msg = e.data ?? {};
+    loadQuizzes();
+    if (msg.type !== 'saved' || !view || view.phase !== 'lobby' || msg.id !== view.setId) return;
+    const found = await api.get(msg.id).catch(() => null);
+    if (found && validateSet(found.set).length === 0) chooseQuiz(msg.id);
+  });
+}
+// ----- the website version: the game comes back from this browser (web-plan.md §5) -----
+// The room sends the game after every change (`save`, kept in IndexedDB above). When this page connects to a room
+// that is a fresh lobby (no teams, nothing to continue) and the browser holds a save, the quiz's pictures and clips
+// go into the room and the save goes back with `restore`, exactly as the laptop reads its autosave file after a
+// restart: a game with teams is offered as "Continue the last game?" (phones that reconnected are put back in their
+// teams by Continue), a finished game or a plain lobby just brings its quiz and settings back. Once per connection;
+// without a save, the quiz chosen last time is put back instead.
+let restoreTried = true;
+async function offerAutosave() {
+  if (!store) return restoreLastSet();
+  if (restoreTried || !view || view.phase !== 'lobby' || view.teams.length || resume) return;
+  restoreTried = true;
+  let saved = null;
+  try {
+    saved = await store.autosave();
+  } catch {
+    saved = null;
+  }
+  const usable = saved?.v === 1 && saved.state?.set && Array.isArray(saved.state.teams) && validateSet(saved.state.set).length === 0;
+  if (!usable || !view || view.phase !== 'lobby' || view.teams.length || resume) return restoreLastSet();
+  lastSetDone = true; // the save's quiz is the one to show
+  await syncRoom(saved.state.set); // its files first (a problem is shown; the game is still offered, as on the laptop)
+  net.send({ type: 'restore', saved });
+}
+
+// A new room starts with the sample quiz: put the quiz chosen last time back, once per connection, while the lobby
+// is empty. Quietly, since the quiz may have been deleted in the editor since.
+let lastSetDone = false;
+function restoreLastSet() {
+  if (!HOSTED || lastSetDone || !view || view.phase !== 'lobby' || view.teams.length) return;
+  lastSetDone = true;
+  let last = null;
+  try {
+    last = localStorage.getItem(LAST_SET);
+  } catch {
+    last = null;
+  }
+  if (last && last !== view.setId) chooseQuiz(last, { quiet: true });
 }
 function renderSetPicker() {
   const sel = $('#set-picker');
@@ -671,7 +983,9 @@ function renderSetPicker() {
   // Quizzes put away in the editor (archived) are left out, unless one of them is the quiz chosen right now.
   const opts = quizList.filter((q) => !q.archived || q.id === view.setId).map((q) => {
     const title = q.kind === 'quick' ? `${q.title} · ${t('quickTag')}` : q.title; // a Quick quiz gets a small tag
-    return h('option', { value: q.id, disabled: q.problems > 0 }, q.problems ? `${title} (${t('needsFixing')})` : title);
+    // A quiz with problems can't be played; on the website neither can one whose files don't fit a room.
+    const why = q.problems ? t('needsFixing') : q.ok === false ? t('quizTooBig') : null;
+    return h('option', { value: q.id, disabled: Boolean(why) }, why ? `${title} (${why})` : title);
   });
   if (!quizList.some((q) => q.id === view.setId)) opts.unshift(h('option', { value: view.setId ?? '' }, view.set.title));
   sel.replaceChildren(...opts);
@@ -689,7 +1003,7 @@ function renderQuizAbout() {
   box.dataset.key = key;
   fill(
     box,
-    cover ? h('img', { class: 'quiz-cover', src: `/files/${encodeURIComponent(cover)}`, alt: '' }) : null,
+    cover ? h('img', { class: 'quiz-cover', src: fileUrl(cover), alt: '' }) : null,
     h(
       'div',
       { class: 'quiz-about-text' },
@@ -699,12 +1013,25 @@ function renderQuizAbout() {
     ),
   );
 }
-$('#set-picker').addEventListener('change', (e) => net.send({ type: 'chooseSet', id: e.target.value }));
+$('#set-picker').addEventListener('change', (e) => (HOSTED ? chooseQuiz(e.target.value) : net.send({ type: 'chooseSet', id: e.target.value })));
 window.addEventListener('focus', loadQuizzes);
 loadQuizzes();
 $('#test-sound').addEventListener('click', () => net.send({ type: 'testSound' }));
+// The website version has no program to quit, no tunnel (everyone joins with the code), no new-version check and no
+// own music files (the branding block stays: it works on top of this browser's store, see sendBrand()).
+if (HOSTED) {
+  for (const id of ['#quit-row', '#join-mode-field', '#join-mode-hint', '#remote-state', '#remote-missing', '#remote-retry', '#remote-note', '#update-check-setting', '#update']) {
+    $(id).hidden = true;
+  }
+  // The PIN is for everyone who joins (anyone with the room code can open the join page), not "players elsewhere".
+  $('#remote-pin-label').dataset.t = 'pinSettingHosted';
+  $('#remote-pin-hint').dataset.t = 'pinHintHosted';
+}
 $('#resume-yes').addEventListener('click', () => net.send({ type: 'resume' }));
-$('#resume-no').addEventListener('click', () => net.send({ type: 'discardSave' }));
+$('#resume-no').addEventListener('click', () => {
+  net.send({ type: 'discardSave' });
+  store?.clearAutosave().catch(() => {}); // or the next fresh room would offer it again
+});
 // Leave the game for the main menu. It is kept, and the lobby offers to continue it.
 // Quit ProQuiz (under the lobby's settings): stops the program on this laptop. The game is saved first.
 $('#quit-btn').addEventListener('click', async () => {
@@ -1039,7 +1366,7 @@ const img = (name, cls, label) => {
   const c = view.set.credits?.[name];
   const source = c && t(c.source === 'wikimedia' ? 'picSourceWikimedia' : 'picSourceOpenverse');
   const credit = c ? h('span', { class: 'host-credit' }, c.author ? t('picCreditLine', { author: c.author, license: licenseName(c.license), source }) : t('picCreditNoAuthor', { license: licenseName(c.license), source })) : null;
-  return h('figure', { class: cls }, h('img', { src: `/files/${encodeURIComponent(name)}`, alt: '' }), label || credit ? h('figcaption', {}, label, credit) : null);
+  return h('figure', { class: cls }, h('img', { src: fileUrl(name), alt: '' }), label || credit ? h('figcaption', {}, label, credit) : null);
 };
 
 function renderQuestion() {
@@ -1344,7 +1671,7 @@ let stage = null; // the TV view, kept between updates (moving an iframe would r
 
 function renderStage() {
   if (!stage) {
-    stage = h('div', { class: 'stage-area' }, h('iframe', { src: '/display?embedded', title: t('openDisplay'), allow: 'autoplay; fullscreen' }), h('div', { class: 'stage-controls' }));
+    stage = h('div', { class: 'stage-area' }, h('iframe', { src: `${pagePath('/display')}?embedded`, title: t('openDisplay'), allow: 'autoplay; fullscreen' }), h('div', { class: 'stage-controls' }));
     $('#game').append(stage);
   }
   fill(stage.querySelector('.stage-controls'), renderControls());
@@ -1390,6 +1717,13 @@ function render() {
   setGlass(view.settings.glass, { remember: true }); // the editor follows this choice
   setBrand(brand);
   setLang(view.settings.lang);
+  if (HOSTED) {
+    try {
+      localStorage.setItem('proquiz.lang', view.settings.lang); // the editor and the front page follow the lobby's language
+    } catch {
+      // no storage
+    }
+  }
   translatePage();
   renderQr();
   renderRemoteWarn();
@@ -1406,6 +1740,7 @@ function render() {
     renderSettings();
     renderAbout();
     renderSetPicker();
+    offerAutosave(); // then the quiz chosen last time, when there is no game to bring back
   } else {
     renderGame();
   }

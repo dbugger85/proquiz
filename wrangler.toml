@@ -1,0 +1,25 @@
+# The website version of ProQuiz on Cloudflare Workers (docs/dev/web-plan.md §8). Build the pages first:
+#   npm run web:dev      builds dist/web and runs it here (wrangler dev)
+#   npm run web:deploy   builds and deploys (after `npx wrangler login`, once)
+name = "proquiz"
+main = "web/worker.js"
+compatibility_date = "2026-10-01"
+
+[assets]
+directory = "dist/web"
+binding = "ASSETS"
+html_handling = "auto-trailing-slash" # /host serves host.html (and /host.html sends you to /host)
+# Only these paths run the Worker; every other address is a static file (free, and no Worker request counted).
+run_worker_first = ["/r/*", "/api/*"]
+
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "Room"
+
+# One Durable Object per room. SQLite-backed classes are the ones the free plan allows (nothing is stored in it).
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Room"]
+
+[observability]
+enabled = false

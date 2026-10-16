@@ -12,49 +12,16 @@
 import { readFile, writeFile, mkdir, rename, unlink, readdir } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
+import { logoHeaders, logoKind } from './lib/mime.js';
+import { MAX_LOGO, MAX_BRAND_NAME, LOGO_FILE, NO_BRAND, cleanBrand } from './lib/brand-core.js';
 
-export const MAX_LOGO = 2 * 1024 * 1024;
-export const MAX_BRAND_NAME = 60;
-export const LOGO_FILE = /^logo-[0-9a-f]{16}\.(png|jpg|webp|svg)$/;
-const LOGO_TYPES = { png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp', svg: 'image/svg+xml' };
-const ACCENT = /^#[0-9a-f]{6}$/;
-export const NO_BRAND = { name: '', accent: null, plate: false, logo: null };
+export { logoHeaders }; // the logo's headers live in lib/mime.js (shared with the website version)
+// The rules (the logo's size and name, the name's length, cleanBrand()) live in lib/brand-core.js, shared with the
+// hub and the website's browser store.
+export { MAX_LOGO, MAX_BRAND_NAME, LOGO_FILE, NO_BRAND, cleanBrand };
 
-// Headers for the logo. The CSP and `nosniff` matter for SVG: opened directly, it can't run scripts or load anything.
-export function logoHeaders(file) {
-  return {
-    'Content-Type': LOGO_TYPES[file.slice(file.lastIndexOf('.') + 1)],
-    'X-Content-Type-Options': 'nosniff',
-    'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; img-src data:; sandbox",
-    'Cache-Control': 'max-age=31536000, immutable', // the name changes with the content
-  };
-}
-
-// What kind of picture these bytes really are (the file name's extension alone isn't trusted).
-export function logoKind(bytes) {
-  const b = bytes;
-  if (b.length >= 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return 'png';
-  if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'jpg';
-  if (b.length >= 12 && b.toString('latin1', 0, 4) === 'RIFF' && b.toString('latin1', 8, 12) === 'WEBP') return 'webp';
-  // SVG is text: an optional BOM, XML declaration, comments and doctype, then an <svg> element.
-  const head = b.toString('utf8', 0, Math.min(b.length, 4096)).replace(/^﻿/, '');
-  const rest = head.replace(/^\s*(<\?xml[^>]*\?>\s*)?((<!--[\s\S]*?-->|<!DOCTYPE[^>]*>)\s*)*/i, '');
-  if (/^<svg[\s>]/i.test(rest)) return 'svg';
-  return null;
-}
-
-// Settings as they may be saved: unknown fields dropped, the name tidied, a bad colour means the default.
-export function cleanBrand(input = {}, base = NO_BRAND) {
-  const out = { ...base };
-  if (!input || typeof input !== 'object') return out;
-  if ('name' in input) out.name = String(input.name ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, MAX_BRAND_NAME);
-  if ('accent' in input) {
-    const a = String(input.accent ?? '').toLowerCase();
-    out.accent = ACCENT.test(a) ? a : null;
-  }
-  if ('plate' in input) out.plate = input.plate === true;
-  return out;
-}
+// What kind of picture these bytes really are (`logoKind` in lib/mime.js, shared with the picture search and the website).
+export { logoKind };
 
 export function createBrand(dataDir) {
   const dir = path.join(dataDir, 'brand');

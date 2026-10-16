@@ -16,6 +16,17 @@
       <a class="btn" href="/host" data-t="edBack"></a>
     </header>
 
+    <!-- The website only (backup.js): the quizzes live in this browser, so save a copy now and then -->
+    <div id="backup" class="update-banner backup-banner" role="status" hidden>
+      <span class="update-icon backup-icon" aria-hidden="true">⬇</span>
+      <div class="update-text">
+        <b id="backup-title"></b>
+        <small id="backup-note"></small>
+      </div>
+      <button id="backup-export" class="btn btn-primary btn-small" type="button" data-t="backupNow"></button>
+      <button id="backup-close" class="btn btn-small btn-quiet update-close" type="button" data-t-aria-label="backupDismiss" data-t-title="backupDismiss">×</button>
+    </div>
+
     <div class="ed-layout">
       <aside class="ed-side">
         <h2><button id="ed-side-toggle" class="ed-side-toggle" type="button" data-t="edYourQuizzes"></button></h2>
@@ -35,7 +46,7 @@
           <ul class="ed-list"></ul>
         </details>
         <!-- Last in the column: every quiz the host made in one file -->
-        <a id="export-all" class="btn ed-export-all" href="/api/export" download data-t="edExportAll"></a>
+        <button id="export-all" class="btn ed-export-all" type="button" data-t="edExportAll"></button>
       </aside>
 
       <main id="ed-main" class="ed-main">

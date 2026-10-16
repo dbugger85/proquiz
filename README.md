@@ -300,6 +300,18 @@ ProQuiz remembers the choice. Next time, the internet address is made again when
 
 **Good to know:** the free Cloudflare service is meant for trying things out, so it has no uptime promise. If it stops working, the lobby says so, and during a game a small warning shows at the top of the host screen. Click **Try again** for a new address (the players elsewhere need the new address). Players can join from anywhere and in the room in the same game.
 
+## ProQuiz on the web
+
+ProQuiz also runs as a website, so nobody has to download anything: open it in a browser on the laptop, and everyone else types a six-letter **room code** on their phone (or scans the QR code). The TV page is opened with the same code. It works the same as the program on the laptop, with the same quizzes, the same two ways to play and the same editor. (The address is the owner's; it isn't public yet.)
+
+**Good to know:**
+- **Your quizzes stay in your browser.** There are no accounts: the quizzes you make, their pictures and clips, and your logo and colours are kept by the browser on the computer you host from, and the website keeps nothing about you. Open the editor in the same browser next time and they are there. Another computer, or another browser, starts empty.
+- **Make a backup now and then.** Use **Export all quizzes** in the editor (the same file as on the laptop, so it also opens in the laptop version and the other way round). ProQuiz reminds you when it has been a month, or when the browser won't promise to keep its storage. The logo and colours aren't in that file: in a new browser, choose them again.
+- **Safari** (iPhone, iPad, Mac) throws away a website's storage after **7 days** without a visit. If you host from Safari, export your quizzes after editing them, or use another browser on the laptop.
+- A picture or clip can be at most 8 MB, and a quiz's pictures and clips together at most 48 MB. Big photos are shrunk when you add them, so this rarely matters.
+- Everyone is "elsewhere" on the web, so the same tips apply as under [Playing with people elsewhere](#playing-with-people-elsewhere): a short delay, evened out by ProQuiz; a **PIN** if the room code might get around; players see the board on the TV page. Your own music files aren't available on the website (the built-in music is).
+- If the host's browser is closed, the room stays open for half an hour; the game is kept in your browser, so opening the host page again offers **Continue the last game?** just like on the laptop.
+
 ## If something goes wrong
 
 - **Phones can't connect.**
@@ -326,6 +338,7 @@ npm test         # unit and server tests
 npm run e2e      # all the browser tests (about 5 minutes): a host, a TV and phones in headless Chromium
 npm run e2e:quick  # one browser suite; also e2e:board, e2e:crazy, e2e:single, e2e:remote, e2e:brand, e2e:pictures, e2e:songs
 npm run build    # the zips in dist/ (needs Deno and zip)
+npm run web:dev  # the website version, here, on http://localhost:8787 (Cloudflare's wrangler); npm run test:web and npm run e2e:web test it
 ```
 
 See [CLAUDE.md](CLAUDE.md) for how it's built (with the detailed notes per area in [docs/dev/](docs/dev/)), [PLAN.md](PLAN.md) for the decisions, status and open items, and [docs/dev/history.md](docs/dev/history.md) for what was built when.
