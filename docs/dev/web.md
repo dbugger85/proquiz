@@ -87,12 +87,18 @@ npm run e2e:web      # test/e2e-web.mjs: the website in headless Chromium, scree
 
 ## Deploying
 
-Once on this machine: `npx wrangler login` (the owner's Cloudflare account; the browser opens). Then
+**Live at https://proquiz.dbugger85.workers.dev** (first deployed 2026-10-16; Worker `proquiz` on the owner's Cloudflare account).
+
+Once on this machine: `npx wrangler login` (the owner's Cloudflare account; the browser opens). When no browser opens (a command typed with `!` in Claude Code can't open one), run `npx wrangler login --browser=false` in the background: it prints the link and waits. The link must be opened **on this laptop**, because Cloudflare sends the browser back to `localhost:8976`. `npx wrangler whoami` shows the account. Then
 
 ```sh
 npm run web:deploy   # builds dist/web and runs `wrangler deploy`
 ```
 
 The first deploy creates the Worker `proquiz` at `https://proquiz.<account>.workers.dev` and runs the `v1` migration that makes `Room` a SQLite-backed Durable Object class (the kind the free plan allows; nothing is stored in it). `npx wrangler deploy --dry-run --outdir <dir>` bundles without logging in, to check that the Worker builds. There are no secrets and no variables to set; `[observability]` is off (no statistics, decision 10).
+
+**The address.** `proquiz` is the Worker's name (`wrangler.toml`); `dbugger85` is the account's workers.dev subdomain, set in the Cloudflare dashboard (Workers & Pages, "Account details" → Subdomain → Change; the menus move around). The owner changed it from `martin-prokosch` on 2026-10-17: the old address stopped working at once, and the new one answered about 2½ minutes later, once Cloudflare had issued its certificate (until then the browser gets a TLS handshake error). Nothing in ProQuiz needs to change for a new address, because the pages use the address they were opened from. It can be read with the API: `GET /accounts/<account id>/workers/subdomain` with wrangler's OAuth token (`~/.config/.wrangler/config/default.toml`; run `npx wrangler whoami` first, which refreshes it). An own domain is possible later (buy it at Cloudflare, or move its DNS there, then add it as a Custom Domain on the Worker).
+
+**Usage** is on the dashboard: Workers & Pages → proquiz → Metrics (Worker requests), and the Durable Object's requests and duration. After the first real game, compare with the free plan (Limits above; the open 20:1 question in web-plan.md §9).
 
 **Never deploy during a game.** A deploy restarts every room: the sockets are closed, the pages reconnect, the host gets a fresh lobby and the game comes back from the host's browser through `restore` (the host sees "Continue the last game?" and presses it; phones are put back in their teams), but the players wait a few seconds and the host has to press Continue. Deploy before or after, as the last step of a release (update-and-release.md). The deployed site serves the pages from the same `public/` as the laptop program, so a release with page changes needs a deploy for the website to match.

@@ -302,7 +302,7 @@ ProQuiz remembers the choice. Next time, the internet address is made again when
 
 ## ProQuiz on the web
 
-ProQuiz also runs as a website, so nobody has to download anything: open it in a browser on the laptop, and everyone else types a six-letter **room code** on their phone (or scans the QR code). The TV page is opened with the same code. It works the same as the program on the laptop, with the same quizzes, the same two ways to play and the same editor. (The address is the owner's; it isn't public yet.)
+ProQuiz also runs as a website, so nobody has to download anything: open it in a browser on the laptop, and everyone else types a six-letter **room code** on their phone (or scans the QR code). The TV page is opened with the same code. It works the same as the program on the laptop, with the same quizzes, the same two ways to play and the same editor. The address is **https://proquiz.dbugger85.workers.dev**.
 
 **Good to know:**
 - **Your quizzes stay in your browser.** There are no accounts: the quizzes you make, their pictures and clips, and your logo and colours are kept by the browser on the computer you host from, and the website keeps nothing about you. Open the editor in the same browser next time and they are there. Another computer, or another browser, starts empty.
