@@ -2,6 +2,8 @@
 
 A party quiz for the people in the room. A laptop runs the game, a TV shows it, and everyone plays on their own phone. ProQuiz has **two ways to play**: pick the one that suits your crowd.
 
+**Two ways to run it:** play straight in the browser at **[proquiz.dbugger85.workers.dev](https://proquiz.dbugger85.workers.dev)** (nothing to install, see [ProQuiz on the web](#proquiz-on-the-web)), or [download the program](#get-it) for your laptop (works without internet).
+
 | Board quiz | Quick quiz |
 |---|---|
 | ![ProQuiz: the TV shows the question with the team that buzzed first, and each team's phone says who was first](docs/screenshots/hero.jpg) | ![A Quick quiz question on the TV: "Which is the largest ocean on Earth?" with four coloured answer tiles, a countdown and how many have answered](docs/screenshots/quick-tv-question.jpg) |
@@ -79,6 +81,8 @@ A party quiz for the people in the room. A laptop runs the game, a TV shows it, 
 | Build your own avatar | |
 
 ## Get it
+
+**No download needed:** open **[proquiz.dbugger85.workers.dev](https://proquiz.dbugger85.workers.dev)** in a browser and host from there. The program below is for playing without internet, over the room's Wi-Fi.
 
 Download the zip for your computer from the [latest release](https://github.com/dbugger85/proquiz/releases/latest) and unzip it. There's nothing to install. Each zip has a "START HERE" note.
 
@@ -302,7 +306,7 @@ ProQuiz remembers the choice. Next time, the internet address is made again when
 
 ## ProQuiz on the web
 
-ProQuiz also runs as a website, so nobody has to download anything: open it in a browser on the laptop, and everyone else types a six-letter **room code** on their phone (or scans the QR code). The TV page is opened with the same code. It works the same as the program on the laptop, with the same quizzes, the same two ways to play and the same editor. The address is **https://proquiz.dbugger85.workers.dev**.
+ProQuiz also runs as a website, so nobody has to download anything: open it in a browser on the laptop, and everyone else types a six-letter **room code** on their phone (or scans the QR code). The TV page is opened with the same code. It works the same as the program on the laptop, with the same quizzes, the same two ways to play and the same editor. The address is **[proquiz.dbugger85.workers.dev](https://proquiz.dbugger85.workers.dev)**.
 
 **Good to know:**
 - **Your quizzes stay in your browser.** There are no accounts: the quizzes you make, their pictures and clips, and your logo and colours are kept by the browser on the computer you host from, and the website keeps nothing about you. Open the editor in the same browser next time and they are there. Another computer, or another browser, starts empty.
